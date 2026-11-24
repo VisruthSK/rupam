@@ -1,0 +1,4 @@
+(test (name elaboration) (modules elaboration) (libraries rupam))
+(test (name canonical) (modules canonical) (libraries rupam)
+ (deps ../examples/shop.rp))
+

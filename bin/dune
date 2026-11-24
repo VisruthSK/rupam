@@ -1,0 +1,1 @@
+(executable (name rupam_cli) (public_name rupam) (libraries rupam))

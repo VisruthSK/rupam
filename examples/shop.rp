@@ -1,0 +1,28 @@
+use contract "data-dict.yaml" as shop
+
+let add_margin(revenue, cost) = revenue - coalesce(cost, 0.0)
+let standardize(x) = (x - mean(x)) / sd(x)
+
+let clean(orders) =
+    orders
+    |> filter(revenue > 0.0)
+    |> derive(
+         margin = add_margin(revenue, cost),
+         z = standardize(margin),
+         unusual = abs(z) > 2.0
+       )
+    |> select(customer_id, region, margin, z, unusual)
+
+let orders = load(shop.orders)
+let cleaned = clean(orders)
+
+let regional =
+    cleaned
+    |> summarize(
+         transactions = count(),
+         total_margin = sum(margin),
+         by = region
+       )
+    |> arrange(desc(total_margin), region)
+
+save_parquet(regional, "regional.parquet")

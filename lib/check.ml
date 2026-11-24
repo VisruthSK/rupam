@@ -1,0 +1,47 @@
+open Syntax
+open Shape
+
+type binding = Value of Shape.expr | Function of string list * Syntax.expr * env
+and env = (string * binding) list
+
+let lookup name bindings =
+  match List.assoc_opt name bindings with
+  | Some value -> value
+  | None -> raise (Error ("Unknown name: " ^ name))
+
+let rec expression env columns source =
+  let check = expression env columns in
+  match source.form with
+  | Name (Column, name) -> lookup name columns
+  | Name (Bare, name) when List.mem_assoc name columns -> lookup name columns
+  | Name (_, name) ->
+      (match lookup name env with Value x -> x | Function _ -> raise (Error "Expected a value"))
+  | Binary (op, a, b) ->
+      let operator = match op with
+        | "*" -> Mul | "-" -> Sub | "/" -> Div | ">" -> Greater
+        | _ -> raise (Error ("Unsupported operator: " ^ op)) in
+      binary operator (check a) (check b)
+  | Call ({ form = Name (Bare, name); _ }, args) ->
+      let values = List.map (function None, x -> check x
+        | Some _, _ -> raise (Error "Expected positional argument")) args in
+      (match List.assoc_opt name env, values with
+       | Some (Function (params, body, closure)), _ ->
+           if List.length params <> List.length values then raise (Error "Wrong argument count");
+           let locals = List.map2 (fun p v -> p, Value v) params values in
+           expression (locals @ closure) [] body
+       | None, [x] when name = "mean" -> reduce Mean x
+       | None, [x] when name = "sd" -> reduce Sd x
+       | _ -> raise (Error ("Invalid call to " ^ name)))
+  | _ -> raise (Error "Unsupported value expression")
+
+let define env = function
+  | Let (name, Some params, body) -> (name, Function (params, body, env)) :: env
+  | Let (name, None, body) -> (name, Value (expression env [] body)) :: env
+  | _ -> raise (Error "Expected a let declaration")
+
+let derive env columns bindings =
+  List.fold_left (fun schema (label, source) ->
+    match label with
+    | None -> raise (Error "derive requires named columns")
+    | Some name when List.mem_assoc name schema -> raise (Error "Column exists. Use replace.")
+    | Some name -> schema @ [name, expression env schema source]) columns bindings
