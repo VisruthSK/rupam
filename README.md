@@ -93,7 +93,8 @@ validation steps, fidelity notes) and a source map back to the `.rp` file.
 - [Tables](docs/tables.md): contracts, the table verbs, missing values and how code is generated
 - [REPL](docs/repl.md): commands, completion and inspecting unfinished pipelines
 - [B2T2 datasheet](docs/b2t2.md): coverage of the Brown table-types benchmark
-- [Design brief](typed_polyglot_data_science_language_agent_brief.md): the full specification and its rationale
+- [Specification](docs/spec/README.md): the design rupam is built towards
+- [Roadmap](docs/roadmap.md): the order of work from here to the specification
 
 ## Development
 

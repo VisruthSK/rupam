@@ -110,7 +110,7 @@ error: 1:15: Non-exhaustive match. Missing case (true, true)
 It reasons about `Bool`, `Option`, tuples and your own variants, nested to any
 depth. Integers and strings have too many values to enumerate, so a match on
 them needs a final `_` or name, and the missing case is reported as `_`.
-[The brief](../typed_polyglot_data_science_language_agent_brief.md#410-pattern-matching-and-exhaustiveness)
+[The specification](spec/types.md#exhaustiveness)
 gives the algorithm.
 
 ## Operators
