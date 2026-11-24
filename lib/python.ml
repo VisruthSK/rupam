@@ -18,11 +18,12 @@ def rp_num(x):
     return rp_int(x) if type(x) is int else x
 |}
 
-let compile program =
+let compile ?(annotate=Source_map.plain) program =
   let serial = ref 0 in
   let fresh () = incr serial; "v" ^ string_of_int !serial in
   let error x msg = raise (Infer.Error (x.span, msg)) in
-  let rec emit env x =
+  let rec emit env x = annotate x.span (render env x)
+  and render env x =
     let expr = emit env in
     let apply f xs = f ^ "(" ^ String.concat ", " xs ^ ")" in
     let args xs = List.map (function None, a -> expr a | _ -> error x "Expected positional arguments") xs in
@@ -95,3 +96,4 @@ let compile program =
     | Import (n,_) -> failwith ("Module " ^ n ^ " requires a table backend")
   | Contract _ -> failwith "Contract lowering is unavailable") ([], [], []) program in
   String.concat "\n" (helpers :: List.rev lines) ^ "\n"
+

@@ -14,8 +14,7 @@ let physical path =
   | Unix.WEXITED 0 -> Yojson.Basic.from_string output |> Yojson.Basic.Util.to_assoc
   | _ -> failwith "Cannot read Parquet schema"
 
-let analyze ~directory declarations =
-  let rec dataset env scalars x = match x.form with
+let rec dataset env scalars x = match x.form with
     | Name (Bare,n) -> (match List.assoc_opt n env with Some (Dataset t) -> t | _ -> fail x ("Unknown table " ^ n))
     | Call ({form=Name (Bare,"load");_}, [None,{form=Field ({form=Name (Bare,d);_},n);_}]) ->
         let dict = match List.assoc_opt d env with Some (Dictionary d) -> d | _ -> fail x "Expected contract" in
@@ -55,15 +54,17 @@ let analyze ~directory declarations =
           join=Some (left,right,key,how)}
     | Binary ("|>",a,{form=Call ({form=Name (Bare,verb);_},args);_}) ->
         let t = dataset env scalars a in
-        (try {t with plan=Table.stage scalars t.plan verb args}
+        (try {t with plan=Table.stage ~span:x.span scalars t.plan verb args}
          with Shape.Error message -> fail x message)
     | Call ({form=Name (Bare,f);_},[None,arg]) ->
         (match List.assoc_opt f env with
          | Some (Function ([p],body,closure,captured)) -> dataset ((p,Dataset (dataset env scalars arg))::closure) captured body
          | _ -> fail x ("Unsupported table function " ^ f))
-    | _ -> fail x "Expected table expression" in
+    | _ -> fail x "Expected table expression"
+
+let extend ~directory env scalars declarations =
   let rec loop env scalars outputs = function
-    | [] -> env, List.rev outputs
+    | [] -> env, scalars, List.rev outputs
     | Import ("polars",alias)::ds -> loop env ((alias,Check.Module "polars")::scalars) outputs ds
     | Import (n,_)::_ -> failwith ("Unknown module " ^ n)
     | Contract (path,n)::ds ->
@@ -79,7 +80,10 @@ let analyze ~directory declarations =
     | Alias _::ds -> loop env scalars outputs ds
     | Type _::_ -> failwith "Table backend does not support variant declarations"
     | Evaluate x::_ -> fail x "Expected save_parquet" in
-  loop [] [] [] declarations
+  loop env scalars [] declarations
+
+let analyze ~directory declarations =
+  let env,_,outputs=extend ~directory [] [] declarations in env,outputs
 
 let compile ~directory ds = snd (analyze ~directory ds)
 
@@ -126,7 +130,12 @@ def rp_wider(data, ids, key, value, labels):
 def dictionary_json(command, path):
     result = subprocess.run(["data-dict", *command, str(path)], capture_output=True)
     if result.returncode:
-        raise ValueError(f"data-dict {command[0]} failed")
+        try:
+            report = json.loads(result.stdout)
+            codes = sorted({p["code"] for p in report.get("problems", []) if "code" in p})
+        except (ValueError, TypeError):
+            codes = []
+        raise ValueError(f"data-dict {command[0]} failed: " + ", ".join(codes))
     return json.loads(result.stdout)
 
 
@@ -201,19 +210,19 @@ let public_view d =
     let schema = List.filter (fun (n,_) -> not (List.mem n hidden)) d.plan.schema in
     if schema=[] then failwith "No unrestricted fields to display";
     { d with plan={d.plan with schema; steps=Table.Select (List.map fst schema)::d.plan.steps} }
-let rec python_table d =
+let rec python_table ?(annotate=Source_map.plain) d =
   let q = Polars.quoted in
   let base = match d.join with
     | None -> Printf.sprintf "validated_source(%s, %s, %s, %s)" (q d.dictionary.path)
         (q (Yojson.Basic.to_string d.dictionary.metadata)) (q d.table.name) (Yojson.Basic.to_string d.physical_types)
     | Some (l,r,k,h) -> Printf.sprintf "%s.join(%s, on=%s, how=%s, nulls_equal=False, coalesce=True).select([%s])"
-        (python_table l) (python_table r) (q k) (q h) (String.concat ", " (List.map q d.fields)) in
-  Printf.sprintf "(%s\n    %s\n)" base (Polars.lower ~fields:d.fields d.plan)
+        (python_table ~annotate l) (python_table ~annotate r) (q k) (q h) (String.concat ", " (List.map q d.fields)) in
+  Printf.sprintf "(%s\n    %s\n)" base (Polars.lower ~annotate ~fields:d.fields d.plan)
 
-let python ~directory declarations =
+let python ?(annotate=Source_map.plain) ~directory declarations =
   let emit (d,path) =
     let d = public_view d in
-    Printf.sprintf "%s.collect().write_parquet(%s)\n" (python_table d) (Polars.quoted path) in
+    Printf.sprintf "%s.collect().write_parquet(%s)\n" (python_table ~annotate d) (Polars.quoted path) in
   preamble ^ String.concat "\n" (List.map emit (compile ~directory declarations))
 let run_script ~command ~suffix script =
   let file, channel = Filename.open_temp_file "rupam-" suffix in
@@ -269,4 +278,7 @@ let validate d =
       "        raise ValueError('Validation incomplete')\n" in
     run_python script);
   print_endline "Validation passed. Materialization will validate its own snapshot."
+
+
+
 

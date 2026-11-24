@@ -1,4 +1,4 @@
-let write ~target ~source ~output ~code declarations =
+let write ~locations ~target ~source ~output ~code declarations =
   let extension = match target with "r" -> "R" | "python" -> "py" | _ -> invalid_arg "target" in
   if not (Filename.check_suffix output ("." ^ extension)) then
     failwith ("Expected ." ^ extension ^ " output file");
@@ -22,6 +22,10 @@ let write ~target ~source ~output ~code declarations =
   let maps = if not contracted then [] else List.map2 (fun line (start,finish) ->
     `Assoc ["generated_line",`Int line;"source",`String source;
       "start",point start;"end",point finish]) emitted outputs in
+  let maps=maps @ List.map (fun (entry : Source_map.location) ->
+    let start,finish=entry.source in
+    `Assoc ["generated_line",`Int entry.generated_line;"generated_column",`Int entry.generated_column;
+      "source",`String source;"start",point start;"end",point finish]) locations in
   let callback = List.exists (fun (_,s) -> contains s ").map_elements(") indexed in
   let nonportable = if List.exists (fun (_,s) -> contains s ".sqrt()") indexed then ["polars.sqrt"] else [] in
   let dependencies = match target,contracted with
@@ -38,4 +42,5 @@ let write ~target ~source ~output ~code declarations =
   print output code;
   json (output ^ ".map.json") (`Assoc ["mappings",`List maps]);
   json (output ^ ".manifest.json") manifest
+
 

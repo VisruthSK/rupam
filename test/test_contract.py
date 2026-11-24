@@ -121,8 +121,12 @@ save_parquet(result, "checked.parquet")
             self.assertEqual(pl.read_parquet(work / "checked.parquet")["x"].to_list(), [1, 2, 3, 4])
             manifest = json.loads((work / "checked.py.manifest.json").read_text())
             self.assertIn("fallback", manifest["fidelity"])
-            mapping = json.loads((work / "checked.py.map.json").read_text())["mappings"][0]
-            self.assertEqual(mapping["start"]["line"], 4)
+            mappings = json.loads((work / "checked.py.map.json").read_text())["mappings"]
+            self.assertEqual(mappings[0]["start"]["line"], 4)
+            generated = (work / "checked.py").read_text().splitlines()
+            self.assertTrue(any(m["start"]["line"] == 3 and
+                                ".map_elements(" in generated[m["generated_line"] - 1]
+                                for m in mappings[1:]))
 
     def test_target_capability_requires_import_and_appears_in_manifest(self):
         import json
@@ -238,3 +242,4 @@ save_parquet(t, "groups.parquet")
                 self.assertEqual(len(rows), 2)
                 self.assertCountEqual([("missing" if k is None else "nan" if math.isnan(k) else k, n)
                                        for k,n in rows], [("missing",2),("nan",2)])
+

@@ -10,11 +10,12 @@ rp_numeric <- function(x) if (inherits(x, "bigz")) rp_int(x) else x
 rp_variant <- function(tag, ...) structure(list(...), tag = tag)
 |}
 
-let compile ds =
+let compile ?(annotate=Source_map.plain) ds =
   let next = ref 0 in
   let fresh () = incr next; "v" ^ string_of_int !next in
   let q = Polars.quoted in
-  let rec emit env x =
+  let rec emit env x = annotate x.span (render env x)
+  and render env x =
     let exp = emit env in
     let call f args = "(" ^ f ^ ")(" ^ String.concat ", " args ^ ")" in
     let args xs = List.map (function None,v -> exp v | _ -> raise (Infer.Error (x.span,"Expected positional arguments"))) xs in
@@ -89,3 +90,4 @@ let compile ds =
     | Import (n,_) -> failwith ("Module " ^ n ^ " requires a table backend")
   | Contract _ -> failwith "Expected scalar program") ([],[],[]) ds in
   preamble ^ String.concat "\n" (List.rev lines) ^ "\n"
+

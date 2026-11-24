@@ -13,6 +13,7 @@ type step =
   | Select of string list
 
 type t = {
+  locations : (step * Syntax.span) list;
   context : int;
   schema : (string * expr) list;
   steps : step list;
@@ -23,7 +24,7 @@ type t = {
 let source context fields =
   let schema = List.mapi (fun id (name, primitive, nullable) ->
     name, input id { primitive; nullable; shape = Column context }) fields in
-  { context; schema; steps = []; ordered = false; next = List.length fields }
+  { locations=[];context; schema; steps = []; ordered = false; next = List.length fields }
 
 let names table = List.map fst table.schema
 
@@ -74,7 +75,7 @@ let grouping table groups =
     | _ -> raise (Error "Expected named grouping columns") in
   match groups with [] -> [] | [_,x] -> keys x | _ -> raise (Error "Repeated by argument")
 
-let stage env table verb arguments = match verb, arguments with
+let transform env table verb arguments = match verb, arguments with
   | ("pivot_longer" | "pivot_wider"), _ ->
       let p,fields=Pivot.parse table.schema verb arguments in
       let schema=List.mapi (fun i (n,t) -> n,input (table.next+i) t) fields in
@@ -142,6 +143,23 @@ let stage env table verb arguments = match verb, arguments with
         { table with schema; next = table.next + 1; steps = (if keys=[] then Bind (n,value) else Window (n,value,keys)) :: table.steps }
       ) table arguments
   | _ -> raise (Error ("Unsupported table operation: " ^ verb))
+
+let stage ?span env table verb arguments =
+  let result=transform env table verb arguments in
+  let location = function
+    | Bind (n,_) | Window (n,_,_) -> (match List.assoc_opt (Some n) arguments with
+      | Some x -> Some x.Syntax.span | None -> span)
+    | _ -> span in
+  let rec collect steps acc =
+    if steps==table.steps then acc else match steps with
+    | [] -> acc
+    | s::rest -> collect rest (match location s with Some p -> (s,p)::acc | None -> acc) in
+  {result with locations=collect result.steps result.locations}
+
+let render_step annotate table render step =
+  let text=render step in
+  match List.find_opt (fun (s,_) -> s==step) table.locations with
+  | Some (_,span) -> annotate span text | None -> text
 
 let execute plan ~rows inputs =
   let open Column_eval in
@@ -231,3 +249,4 @@ let rec pipeline env tables x = match x.Syntax.form with
   | Binary ("|>", base, { form = Call ({ form = Name (Bare, verb); _ }, args); _ }) ->
       stage env (pipeline env tables base) verb args
   | _ -> raise (Error "Expected a table pipeline")
+

@@ -1,7 +1,7 @@
 open Shape
 
 let q = Polars.quoted
-let lower ~fields plan =
+let lower ?(annotate=Source_map.plain) ~fields plan =
   let names = Array.make plan.Table.next "" in
   List.iteri (fun i n -> names.(i) <- n) fields;
   let next = ref (List.length fields) in
@@ -52,7 +52,7 @@ let lower ~fields plan =
           Option.fold ~none:"bit64::as.integer64(n())" ~some:emit x) values in
         List.iter bind (key_names @ List.map fst values);
         "summarise(" ^ String.concat ", " (args @ by) ^ ")" in
-  List.rev plan.steps |> List.map stage |> String.concat " |>\n  "
+  List.rev plan.steps |> List.map (Table.render_step annotate plan stage) |> String.concat " |>\n  "
 
 let preamble = {|library(dplyr)
 
@@ -125,19 +125,19 @@ rp_source <- function(path, expected, name, expected_types) {
 
 |}
 
-let rec table d =
+let rec table ?(annotate=Source_map.plain) d =
   let open Analysis_program in
   let base = match d.join with
     | None -> Printf.sprintf "rp_source(%s, %s, %s, %s)" (q d.dictionary.path)
         (q (Yojson.Basic.to_string d.dictionary.metadata)) (q d.table.name) (q (Yojson.Basic.to_string d.physical_types))
     | Some (l,r,k,h) -> Printf.sprintf "%s_join(%s, %s, by = %s, na_matches = \"never\")"
-        h (table l) (table r) (q k) in
-  match lower ~fields:d.fields d.plan with "" -> base | plan -> base ^ " |>\n  " ^ plan
+        h (table ~annotate l) (table ~annotate r) (q k) in
+  match lower ~annotate ~fields:d.fields d.plan with "" -> base | plan -> base ^ " |>\n  " ^ plan
 
-let compile ~directory declarations =
+let compile ?(annotate=Source_map.plain) ~directory declarations =
   let emit (d,path) =
     let d = Analysis_program.public_view d in
-    Printf.sprintf "%s |>\n  nanoparquet::write_parquet(%s)\n" (table d) (q path) in
+    Printf.sprintf "%s |>\n  nanoparquet::write_parquet(%s)\n" (table ~annotate d) (q path) in
   preamble ^ String.concat "\n" (List.map emit (Analysis_program.compile ~directory declarations))
 
 
@@ -147,3 +147,5 @@ let preview_page d ~offset ~limit =
     preamble (table d) (offset+1) limit limit in
   print_endline (if d.plan.ordered then "Ordered preview" else "Unordered preview");
   Worker.run "r" script
+
+

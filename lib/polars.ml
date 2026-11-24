@@ -3,7 +3,7 @@ open Shape
 let quoted s = Yojson.Basic.to_string (`String s)
 let col n = "pl.col(" ^ quoted n ^ ")"
 
-let lower ~fields table =
+let lower ?(annotate=Source_map.plain) ~fields table =
   let symbols = Array.make table.Table.next "" in
   List.iteri (fun i n -> symbols.(i) <- n) fields;
   let next = ref (List.length fields) in
@@ -96,4 +96,5 @@ let lower ~fields table =
         let value = emit x in
         symbols.(!next) <- name; incr next;
         ".with_columns(" ^ value ^ ".alias(" ^ quoted name ^ "))" in
-  List.rev table.steps |> List.map stage |> String.concat "\n    "
+  List.rev table.steps |> List.map (Table.render_step annotate table stage) |> String.concat "\n    "
+

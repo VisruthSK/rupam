@@ -1,31 +1,36 @@
 open Parser
 
 let parse lexbuf =
-  let previous = ref END and depth = ref 0 and pending = ref None in
-  let complete = function NAME _ | NUMBER _ | STRING _ | BOOL _ | RB | RC | RP -> true | _ -> false in
-  let rec next buf =
-    let token = match !pending with
-      | Some (t, pos) -> pending := None; buf.Lexing.lex_start_p <- pos; t
-      | None -> Lexer.token buf in
-    match token with
-    | END when !depth > 0 || not (complete !previous) -> next buf
+  let complete = function
+    | NAME _ | NUMBER _ | STRING _ | BOOL _ | RB | RC | RP | QUESTION -> true
+    | _ -> false in
+  let read () =
+    let t=Lexer.token lexbuf in
+    t,lexbuf.lex_start_p,lexbuf.lex_curr_p,Lexing.lexeme lexbuf=";" in
+  let pending=ref None and previous=ref END and depth=ref 0 in
+  let pop () = match !pending with
+    | None -> read () | Some token -> pending:=None; token in
+  let rec next _ =
+    let t,start,finish,semicolon=pop () in
+    let deliver t =
+      lexbuf.lex_start_p<-start; lexbuf.lex_curr_p<-finish; previous:=t; t in
+    match t with
+    | END when semicolon -> deliver END
+    | END when !depth>0 || not (complete !previous) -> next lexbuf
     | END ->
-        let rec look () = match Lexer.token buf with END -> look () | t -> t in
-        let t = look () in
-        pending := Some (t, buf.lex_start_p);
-        if t = PIPE || t = BAR || t = ELSE || t = THEN || t = IN then next buf else (previous := END; END)
-    | EOF when complete !previous -> previous := END; END
+        let rec look () = match read () with END,_,_,false -> look () | t -> t in
+        let (following,_,_,_) as token=look () in
+        pending:=Some token;
+        (match following with PIPE | BAR | ELSE | THEN | IN -> next lexbuf | _ -> deliver END)
+    | EOF when complete !previous -> deliver END
     | t ->
         (match t with LP | LB | LC -> incr depth | RP | RB | RC -> decr depth | _ -> ());
-        previous := t; t in
+        deliver t in
   Parser.program next lexbuf
 
-
-
 let valid_prefix source =
-  let buf = Lexing.from_string source in
-  let rec boundaries depth acc =
-    match Lexer.token buf with
+  let buf=Lexing.from_string source in
+  let rec boundaries depth acc = match Lexer.token buf with
     | EOF -> acc
     | LP | LB | LC -> boundaries (depth+1) acc
     | RP | RB | RC -> boundaries (max 0 (depth-1)) acc
@@ -33,6 +38,6 @@ let valid_prefix source =
     | _ -> boundaries depth acc
     | exception Failure _ -> acc in
   List.find_map (fun stop ->
-    let text = String.trim (String.sub source 0 stop) in
+    let text=String.trim (String.sub source 0 stop) in
     try match parse (Lexing.from_string text) with [] -> None | ds -> Some (text,ds)
     with Parser.Error | Failure _ -> None) (boundaries 0 [])

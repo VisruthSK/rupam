@@ -140,3 +140,13 @@ let () =
   assert (Table.execute p ~rows:1 [[|F 3.|];[|I 1L|]] = (1,["b",[|F 8.|]]));
   rejects (fun () -> plan "sales |> derive(b=revenue+id)");
   rejects (fun () -> plan "sales |> derive(b=revenue+9007199254740993)")
+
+let () =
+  let open Rupam in
+  let src="let a = 3\n\nlet b = if a > 1\nthen 2\nelse 3\nb" in
+  (match Frontend.parse (Lexing.from_string src) with
+   | [_;Syntax.Let (_,_,{span=(a,b);_});Syntax.Evaluate {span=(c,_);_}] ->
+       assert (a.pos_lnum=3 && b.pos_lnum=5 && c.pos_lnum=6)
+   | _ -> assert false);
+  match Frontend.parse (Lexing.from_string "let f(x)=x; f(1;2)") with
+  | exception Parser.Error -> () | _ -> failwith "semicolon inside call must fail"
