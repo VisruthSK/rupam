@@ -2,7 +2,7 @@
 name = "rupam-backend"
 version = "0.1.0"
 requires-python = ">=3.11"
-dependencies = ["data-dict-yaml", "polars>=1,<2"]
+dependencies = ["data-dict-yaml", "polars>=1,<2", "pyarrow>=20"]
 
 [tool.uv]
 package = false

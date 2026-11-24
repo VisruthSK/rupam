@@ -85,7 +85,7 @@ let write ~locations ~target ~source ~output ~code declarations =
   in
   let dependencies =
     match target, contracted with
-    | "python", true -> [ "polars"; "data-dict-yaml==0.0.3" ]
+    | "python", true -> [ "polars"; "pyarrow"; "data-dict-yaml==0.0.3" ]
     | "r", true ->
       [ "dplyr"; "tidyr"; "bit64"; "jsonlite"; "arrow"; "data-dict-yaml==0.0.3" ]
     | "r", false -> [ "gmp" ]

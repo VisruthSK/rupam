@@ -5,6 +5,9 @@ import tempfile
 from pathlib import Path
 
 import polars as pl
+import pyarrow as pa
+import pyarrow.csv as pacsv
+import pyarrow.parquet as pq
 
 
 
@@ -57,8 +60,8 @@ def validated_source(dictionary, expected, name, physical_types):
         if {k: str(v) for k, v in schema.items()} != physical_types:
             raise ValueError("Physical schema changed since compilation")
         fields = next(t["columns"] for t in model["tables"] if t["name"] == name)
-        frame = pl.read_parquet(paths[name], columns=[c["name"] for c in fields])
-        return frame.with_columns(pl.col(pl.Float64).fill_nan(None)).lazy()
+        table = pq.read_table(paths[name], columns=[c["name"] for c in fields])
+        return pl.from_arrow(table).with_columns(pl.col(pl.Float64).fill_nan(None)).lazy()
 
 
 def validate_contract(dictionary):
@@ -68,17 +71,24 @@ def validate_contract(dictionary):
             raise ValueError(f"Incomplete {level} validation")
 
 
+ARROW_TYPES = {"Int64": pa.int64(), "Float64": pa.float64(), "Boolean": pa.bool_(), "String": pa.string()}
+ARROW_KINDS = {"int64": "Int64", "double": "Float64", "bool": "Boolean", "string": "String", "large_string": "String"}
+
+
 def read_file(path, format, schema):
-    dtypes = {name: getattr(pl, kind) for name, kind in schema.items()}
     if format == "parquet":
-        frame = pl.read_parquet(path)
+        table = pq.read_table(path)
     else:
-        frame = pl.read_csv(
+        table = pacsv.read_csv(
             path,
-            separator="\t" if format == "tsv" else ",",
-            schema_overrides=dtypes,
-            null_values=[""],
+            parse_options=pacsv.ParseOptions(delimiter="	" if format == "tsv" else ","),
+            convert_options=pacsv.ConvertOptions(
+                column_types={name: ARROW_TYPES[kind] for name, kind in schema.items()},
+                null_values=[""],
+                strings_can_be_null=True,
+            ),
         )
-    if {k: str(v) for k, v in frame.schema.items()} != schema:
+    found = {field.name: ARROW_KINDS.get(str(field.type), str(field.type)) for field in table.schema}
+    if list(found) != list(schema) or found != schema:
         raise ValueError(f"{path} no longer matches the schema it was compiled against")
-    return frame.with_columns(pl.col(pl.Float64).fill_nan(None)).lazy()
+    return pl.from_arrow(table).with_columns(pl.col(pl.Float64).fill_nan(None)).lazy()
