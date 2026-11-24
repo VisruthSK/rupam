@@ -1,7 +1,7 @@
 {
 open Parser
 let keyword = function
-  | "let" -> LET | "fn" -> FN | "if" -> IF | "then" -> THEN | "else" -> ELSE
+  | "in" -> IN | "let" -> LET | "fn" -> FN | "if" -> IF | "then" -> THEN | "else" -> ELSE
   | "use" -> USE | "as" -> AS | "contract" -> CONTRACT
   | "and" -> AND | "or" -> OR | "not" -> NOT
   | ("true" | "false" | "None") as s -> BOOL s | s -> NAME s
@@ -14,9 +14,11 @@ rule token = parse
  | id as s { keyword s }
  | digit+ ('.' digit+)? (['e' 'E'] ['+' '-']? digit+)? as n { NUMBER n }
  | '"' (([^'"' '\\' '\n'] | '\\' [^'\n'])* as s) '"' { STRING (Scanf.unescaped s) }
+ | '[' { LB } | ']' { RB } | '{' { LC } | '}' { RC }
  | '(' { LP } | ')' { RP } | ',' { COMMA } | '.' { DOT } | ';' { END }
  | "==" { EQUAL } | "!=" { NE } | ">=" { GE } | "<=" { LE } | '=' { EQ }
  | '>' { GT } | '<' { LT } | "=>" { ARROW } | "|>" { PIPE }
  | '+' { PLUS } | '-' { MINUS } | '*' { TIMES } | '/' { DIV } | '%' { MOD }
  | ':' { COLON } | '$' { DOLLAR } | '^' { CARET }
  | eof { EOF } | _ as c { failwith (Printf.sprintf "Unexpected character %C" c) }
+

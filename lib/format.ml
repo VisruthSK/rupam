@@ -5,6 +5,10 @@ let comma f xs = String.concat ", " (List.map f xs)
 let rec expr x = match x.form with
   | Name (scope, name) ->
       (match scope with Bare -> "" | Column -> "$" | Lexical -> "^") ^ name
+  | Tuple xs -> "(" ^ comma expr xs ^ ")"
+  | List xs -> "[" ^ comma expr xs ^ "]"
+  | Record fields -> "{" ^ comma (fun (n,x) -> n ^ " = " ^ expr x) fields ^ "}"
+  | Local (n,x,y) -> "(let " ^ n ^ " = " ^ expr x ^ " in " ^ expr y ^ ")"
   | Literal text -> text
   | Field (record, name) -> expr record ^ "." ^ name
   | Call (callee, args) ->
@@ -23,3 +27,4 @@ let declaration = function
   | Evaluate x -> expr x
 
 let program ds = String.concat "\n" (List.map declaration ds)
+

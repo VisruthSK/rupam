@@ -40,3 +40,60 @@ let () =
   match run "9223372036854775807 + 1" with
   | exception Rupam.Eval.Error (_, "Int64 overflow") -> ()
   | _ -> failwith "expected Int64 overflow"
+
+let () =
+  let open Rupam in
+  let open Column_eval in
+  let source = "let margin(x, y) = x - coalesce(y, 0.0); derive(m=margin(revenue,cost), z=(m-mean(m))/sd(m))" in
+  let ty nullable = { primitive = Float64; nullable; shape = Column 1 } in
+  let columns = ["revenue", Shape.input 0 (ty false); "cost", Shape.input 1 (ty true)] in
+  match Frontend.parse (Lexing.from_string source) with
+  | [f; Syntax.Evaluate { form = Call (_, args); _ }] ->
+      let schema = Check.derive (Check.define [] f) columns args in
+      let input = function 0 -> Many [| F 3.; F 5.; F 9. |]
+        | 1 -> Many [| Missing; F 0.; F 2. |] | _ -> assert false in
+      let result = evaluate ~rows:3 ~input (List.assoc "z" schema) in
+      assert (result = Many [| F (-1.); F 0.; F 1. |]);
+      assert (aggregate Sum [| Missing |] = Missing);
+      assert (aggregate Sd [| F 3. |] = Missing)
+  | _ -> assert false
+
+let () =
+  let open Rupam in
+  let source = Table.source 1 ["id", Int64, false; "cost", Float64, true] in
+  let plan s = match Frontend.parse (Lexing.from_string s) with
+    | [Syntax.Evaluate x] -> Table.pipeline [] ["orders", source] x | _ -> assert false in
+  let open Column_eval in
+  let p = plan "orders |> derive(net = coalesce(cost, 0.0), tax = net * 0.5) |> filter(id > 1) |> select(net:tax)" in
+  assert (Table.execute p ~rows:3 [ [| I 1L; I 2L; I 3L |]; [| F 8.; Missing; F 4. |] ]
+    = (2, ["net", [| F 0.; F 4. |]; "tax", [| F 0.; F 2. |]]));
+  rejects (fun () -> plan "orders |> filter(cost > 0.0)");
+  rejects (fun () -> plan "orders |> derive(id = 2)");
+  rejects (fun () -> plan "orders |> select(typo)")
+
+let () =
+  let open Rupam in
+  let open Column_eval in
+  let s = Table.source 1 ["x", Float64, true] in
+  let plan code = match Frontend.parse (Lexing.from_string code) with
+    | [Syntax.Evaluate x] -> Table.pipeline [] ["t",s] x | _ -> assert false in
+  rejects (fun () -> plan "t |> take(1)");
+  let rows,_ = Table.execute (plan "t |> distinct(x)") ~rows:5
+    [[|Missing;F nan;Missing;F nan;F 3.|]] in
+  assert (rows=3);
+  assert (Table.execute (plan "t |> arrange(desc(x)) |> take(1)") ~rows:3
+    [[|F 1.;Missing;F 5.|]] = (1,["x",[|F 5.|]]))
+
+
+let () =
+  let open Rupam in
+  let ds = Frontend.parse (Lexing.from_string "let id(x)=x; let r={a=Some(3), b=[true,false]}; (r.a, id(r.b))") in
+  ignore (List.fold_left (fun env d -> fst (Infer.declaration env d)) [] ds);
+  let _,value = Eval.run [] ds in
+  assert (Option.map Eval.display value = Some "(Some(3), [true, false])")
+
+let () =
+  let open Rupam in
+  let ds = Frontend.parse (Lexing.from_string "let get(r)=r.x; (get({x=1}), get({y=2,x=true}))") in
+  ignore (List.fold_left (fun env d -> fst (Infer.declaration env d)) [] ds);
+  assert (Option.map Eval.display (snd (Eval.run [] ds)) = Some "(1, true)")

@@ -4,9 +4,10 @@ let at start finish form = { form; span = start, finish }
 %}
 %token LET USE CONTRACT AS FN IF THEN ELSE
 %token <string> NAME NUMBER STRING BOOL
+%token IN LB RB LC RC
 %token LP RP COMMA EQ DOT PIPE DOLLAR CARET ARROW END EOF
 %token PLUS MINUS TIMES DIV GT LT GE LE NE EQUAL AND OR NOT COLON MOD
-%right ELSE ARROW
+%right IN ELSE ARROW
 %left PIPE
 %left OR
 %left AND
@@ -30,7 +31,15 @@ names: NAME { [$1] } | names COMMA NAME { $3 :: $1 };
 args: /* empty */ { [] } | arguments { List.rev $1 } | arguments COMMA { List.rev $1 };
 arguments: arg { [$1] } | arguments COMMA arg { $3 :: $1 };
 arg: expr { None,$1 } | NAME EQ expr { Some $1,$3 };
-expr: NAME { at $startpos $endpos (Name (Bare,$1)) } | DOLLAR NAME { at $startpos $endpos (Name (Column,$2)) }
+values: expr { [$1] } | values COMMA expr { $3 :: $1 };
+fields: NAME EQ expr { [$1,$3] } | fields COMMA NAME EQ expr { ($3,$5) :: $1 };
+expr: LB RB { at $startpos $endpos (List []) }
+ | LB values RB { at $startpos $endpos (List (List.rev $2)) }
+ | LC RC { at $startpos $endpos (Record []) }
+ | LC fields RC { at $startpos $endpos (Record (List.rev $2)) }
+ | LP expr COMMA values RP { at $startpos $endpos (Tuple ($2 :: List.rev $4)) }
+ | LET NAME EQ expr IN expr { at $startpos $endpos (Local ($2,$4,$6)) }
+ | NAME { at $startpos $endpos (Name (Bare,$1)) } | DOLLAR NAME { at $startpos $endpos (Name (Column,$2)) }
  | CARET NAME { at $startpos $endpos (Name (Lexical,$2)) } | NUMBER { at $startpos $endpos (Literal $1) }
  | BOOL { at $startpos $endpos (Literal $1) } | STRING { at $startpos $endpos (Literal (Printf.sprintf "%S" $1)) }
  | LP expr RP { $2 } | expr DOT NAME { at $startpos $endpos (Field ($1,$3)) }
@@ -55,4 +64,5 @@ expr: NAME { at $startpos $endpos (Name (Bare,$1)) } | DOLLAR NAME { at $startpo
  | expr OR expr { at $startpos $endpos (Binary ("or",$1,$3)) }
  | expr COLON expr { at $startpos $endpos (Binary (":",$1,$3)) }
 ;
+
 

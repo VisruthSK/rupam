@@ -1,0 +1,24 @@
+$version: 0.1.0
+$learn_more: https://data-dict.tidyverse.org/
+name: shop
+tables:
+  - name: orders
+    source:
+      parquet: orders.parquet
+    columns:
+      - name: customer_id
+        type: number(id)
+        examples: [1, 2]
+        constraints: [required]
+      - name: region
+        type: string
+        examples: [North, South]
+        constraints: [required]
+      - name: revenue
+        type: number(quantity)
+        range: [0, 100]
+        constraints: [required]
+      - name: cost
+        type: number(quantity)
+        range: [0, 100]
+
