@@ -2,120 +2,125 @@
 
 ## Inference
 
-Every binding's type is inferred: Hindley–Milner with row polymorphism,
-built-in constraints, shapes and optional values. Annotations are allowed
-anywhere and are checked. A function generalises over everything it does not
-use, so
+Types are inferred by Hindley–Milner inference extended with row
+polymorphism, built-in constraints, shapes, optional values and sign
+refinements. Every binding generalises over what it does not use:
 
 ```text
-let station(note) = note.station
+let station(note) = note.station      # ({station: a, ..r}) -> a
 ```
-
-has type `({station: a, ..r}) -> a` and accepts any record or table row with a
-`station` field.
 
 ## Value types
 
 | Type | Values |
 | --- | --- |
 | `Bool` | `TRUE`, `FALSE` |
-| `Int64` | exact 64-bit integers |
-| `Float64` | finite IEEE doubles and ±infinity; never NaN |
+| `Int64` | 64-bit integers |
+| `Float64` | finite 64-bit floating-point numbers |
 | `String` | UTF-8 text |
-| `Date`, `Time`, `DateTime<Z>`, `Duration`, `Period` | see [Dates and times](#dates-and-times) |
-| `Regex` | compiled patterns in rupam's regex dialect |
+| `Date`, `Time`, `DateTime<Z>`, `Duration`, `Period` | [Dates and times](#dates-and-times) |
+| `Regex` | patterns in the regex dialect ([Standard library](stdlib.md#regex)) |
 | `T?` | a `T` or `None` |
 | `[T]` | vectors |
 | `(A, B)` | tuples |
 | `{a: A, b: B}` | records |
 | `A -> B` | functions |
-| `Table<{...}>` | tables (see [Tables](tables.md)) |
-| user types | aliases, newtypes, variants |
+| `Table<{...}>` | [tables](tables.md) |
 
-There is no null, NA or NaN. Missing data is `None` and nothing else.
+There is no null, NA, NaN or infinity.
 
-## Built-in constraints
+## Constraints
 
-Type variables can carry one of a fixed set of constraints, in the style of
-Elm. There are no user-defined type classes.
-
-| Constraint | Satisfied by |
+| Constraint | Types |
 | --- | --- |
-| `number` | `Int64`, `Float64`, numeric newtypes that derive it |
-| `comparable` | numbers, `String`, `Bool`, dates and times, enums (in declaration order), tuples and vectors of comparables |
-| `equatable` | everything except `Float64`, functions and types containing them |
-| `showable` | everything except functions |
+| `number` | `Int64`, `Float64`, newtypes deriving `number` |
+| `comparable` | numbers, `String`, `Bool`, dates and times, enums (declaration order), tuples and vectors of comparables |
+| `equatable` | all types except `Float64`, functions, and types containing them |
+| `showable` | all types except functions |
 
-`mean` works on any `number`; `==` works on strings, enums and records; `<`
-works on dates.
+There are no user-defined type classes.
 
-## Vectors, shapes and lifting
+## Shapes and lifting
 
-A vector `[T]` is the everyday collection. A column of a table is a vector
-tied to that table's rows. Every expression has a shape: a single value, a
-standalone vector, a column of one particular table, or a table.
+Every expression has a shape: a single value, a vector, a column of a
+particular table, or a table.
 
-Calling a function on vectors or columns lifts it:
-
-- A function whose body only uses single values is applied element by
-  element. `let square(x) = x * x` gives `square(3) == 9` and
-  `square(revenue)` is a column.
-- A function that calls a reduction (`mean`, `sd`, `sum`, ...) sees the whole
-  vector, or each group under `by =`. `let standardize(x) = (x - mean(x)) / sd(x)`
-  applied to a column standardises that column.
-- Single values broadcast to every element. Vectors never recycle: combining
-  vectors of different lengths is an error, reported statically when the
-  lengths are known and at run time otherwise.
-- Columns of two different tables cannot be combined. Relate them with a join.
-
-Lifting is decided by the types, recorded in the compiled program, and shown
-on hover. It never depends on what a target library happens to accept.
+- A function whose body uses only single values applies element-wise to
+  vectors and columns.
+- A function that applies a reduction to a parameter receives the whole
+  vector or column, or each group under `by =`.
+- Single values broadcast. Vectors of different lengths do not combine: the
+  error is static when lengths are known, otherwise at run time.
+- Columns of different tables do not combine.
+- The chosen lifting is part of the typed program and is shown on hover.
 
 ## Optional values
 
-`T?` holds a `T` or `None`. A plain `T` is accepted wherever a `T?` is
-expected, so `if (v > 0.0) log(v) else None` needs no `Some`. A `T?` is never
-accepted where a `T` is expected.
-
-Operations on a missing value produce a missing value: `None + 1`,
-`None == None`, `TRUE or None` and `f(None)` for an element-wise `f` are all
-`None`. Only three things turn a missing value into a present one: the
-missing-value policy at a decision point ([Missing values](missing.md)),
-`coalesce`, and `match`.
-
-`if` and `filter` need a `Bool`, so a `Bool?` condition is a type error until
-the missing case is handled.
+- `T?` is a `T` or `None`.
+- A `T` is accepted where a `T?` is expected. A `T?` is not accepted where a
+  `T` is expected.
+- Every operation with a `None` operand returns `None`, including `==`,
+  `and` and `or`.
+- `None` becomes a value only through the missing-value policy
+  ([Missing values](missing.md)), `coalesce`, or a pattern.
+- `if` and `filter` require `Bool`.
 
 ## Numbers
 
-- `Int64` is exact across its range in every dialect. Results outside the
-  range are unspecified. `prod` of integers returns `Float64`.
-- `Float64` follows IEEE 754 except that NaN does not exist. Dividing a
-  nonzero number by zero gives ±infinity. An operation with no defined result
-  (`0 / 0`, `Inf - Inf`, `0 * Inf`, `sqrt` or `log` of a negative number) is a
-  runtime error naming the expression and the first failing row. `ratio(a, b)`
-  returns `Float64?`, with `None` where `a / b` is undefined. NaN in an input
-  file is read as `None`.
-- `/` always returns `Float64`. `div(a, b)` is integer division and `%` is
-  modulo; both follow the sign of the divisor, as in R and Python.
-- There are no implicit conversions between `Int64` and `Float64` except for
-  literals that are exactly representable. `float(n)` and `int(x)` convert
-  explicitly; `int` needs a whole number.
-- `Float64` is not `equatable`. `==` on floats is a type error. `a ~= b` (also
-  written `a ≈ b`) is approximate equality: relative tolerance
-  `sqrt(eps)` (about 1.5e-8), switching to absolute difference when the
-  reference value is near zero, as R's `all.equal` does. A file that starts
-  with `use float_equality = approximate` gives `==` that meaning on floats.
-- `round(x, digits)` rounds half to even, the IEEE 754 default and what R and
-  Python do. `round(x, digits, ties = away)` rounds half away from zero. Every
-  dialect rounds identically.
-- Decimal arithmetic is deferred; see [Future](future.md).
+- `Int64` arithmetic is exact within range. Results outside the range are
+  unspecified.
+- `Float64` arithmetic is IEEE 754 on finite values. Results that overflow
+  are unspecified.
+- `/` returns `Float64`. `div(a, b)` is integer division. `%` is modulo with
+  the sign of the divisor.
+- No implicit conversion between `Int64` and `Float64` except exactly
+  representable literals. `float(n)` and `int(x)` convert; `int` requires a
+  whole number.
+- `==` is not defined on `Float64`. `a ~= b` (also `a ≈ b`) holds when
+  `|a - b| <= sqrt(eps) * |b|`, or `|a - b| <= sqrt(eps)` when `|b| < sqrt(eps)`.
+  In a file declaring `use float_equality = approximate`, `==` on `Float64`
+  means `~=`.
+- `round(x, digits)` rounds half to even. `round(x, digits, ties = away)`
+  rounds half away from zero.
+- `prod` of `Int64` returns `Float64`.
+
+### Sign refinements
+
+A numeric type may carry a sign refinement: `> 0`, `>= 0` or `!= 0`, written
+after the type (`Float64 > 0`). Refinements are inferred and have no run-time
+representation.
+
+Requirements:
+
+| Operation | Requires |
+| --- | --- |
+| `a / b`, `div(a, b)`, `a % b` | `b != 0` |
+| `sqrt(x)` | `x >= 0` |
+| `log(x)`, `log2(x)`, `log10(x)` | `x > 0` |
+| `x ^ y` with `y : Float64` | `x >= 0` |
+
+Sources:
+
+- literals, by value;
+- arithmetic on refined operands (sum of `>= 0` values is `>= 0`, and
+  `> 0` if one is `> 0`; products follow sign rules; `abs`, even powers,
+  `sqrt` give `>= 0`; `exp` gives `> 0`; `abs` of `!= 0` gives `> 0`);
+- `n()` is `> 0` within a group and `>= 0` over a table;
+- `filter(x > 0)`, `filter(x >= 0)` and `filter(x != 0)` refine `x` in later
+  stages; the same comparisons in `if` conditions and match guards refine `x`
+  in the guarded branch;
+- validated contract assertions;
+- `positive(x)`, `nonnegative(x)` and `nonzero(x)`, which return the refined
+  value or `None`;
+- `ratio(a, b)`, which is `a / b` when `b != 0` and `None` otherwise.
+
+An operation whose requirement is not established is a type error.
 
 ## Records and rows
 
-Records are immutable and structurally typed. Row types are open:
-`{revenue: Float64, ..r}` means "has `revenue`, and whatever else". Table rows
-are records, so every function over records is a function over tables.
+Records are immutable and structurally typed. A row type
+`{revenue: Float64, ..r}` contains `revenue` and any other fields. Table rows
+are records.
 
 ## Variants and enums
 
@@ -124,18 +129,13 @@ type Quality = | Absent | Invalid | Zero | Valid
 type Reading = | Measured(value: Float64) | Offline | Fault(reason: String)
 ```
 
-A variant with no fields everywhere is an enum. Enums order by declaration,
-which is how ordered categories work; there are no factors. Variants can be
-stored in columns: enums lower to the target's categorical type, variants with
-fields to struct columns.
-
-### Exhaustiveness
-
-The checker decides exhaustiveness with Maranget's usefulness algorithm over
-the pattern matrix (Maranget, *Warnings for pattern matching*, 2007).
-`Bool`, `T?`, tuples, vectors (by length) and declared variants have finite
-heads; numbers and strings do not, so a match on them needs a final catch-all.
-The error names one missing value, such as `Missing case Measured(None)`.
+- A variant whose constructors have no fields is an enum. Enums are ordered
+  by declaration.
+- Variants may be stored in columns.
+- Exhaustiveness is decided by Maranget's usefulness algorithm. `Bool`,
+  `T?`, tuples, vectors by length and declared variants have finite heads;
+  other types require a catch-all. A missing case is reported as a concrete
+  pattern.
 
 ## Newtypes
 
@@ -144,48 +144,38 @@ type PatientId = new Int64
 type Usd = new Float64 deriving (number, comparable)
 ```
 
-A newtype is a distinct type with the same representation as its base and no
-run-time cost. `PatientId(5)` wraps and `let PatientId(n) = id` unwraps. A
-newtype has none of its base type's operations unless it derives them:
-`PatientId` supports `==` (every newtype of an `equatable` type is
-`equatable`) but not `+`, so adding two ids is a type error, and a join of
-`PatientId` against `HospitalId` does not type-check.
+- A newtype is distinct from its base type and from other newtypes, with the
+  same representation.
+- `PatientId(5)` constructs; `let PatientId(n) = id` deconstructs.
+- A newtype is `equatable` if its base is. Other constraints require
+  `deriving`.
 
 ## Dates and times
 
 | Type | Meaning |
 | --- | --- |
-| `Date` | a calendar date |
-| `Time` | a wall-clock time of day |
-| `DateTime<Z>` | an instant, displayed in zone `Z` (`DateTime<"UTC">`) |
-| `Duration` | an exact length of time |
-| `Period` | a calendar amount: days, months, years |
+| `Date` | calendar date |
+| `Time` | wall-clock time of day |
+| `DateTime<Z>` | instant in time zone `Z` |
+| `Duration` | exact length of time |
+| `Period` | calendar amount in days, months and years |
 
-- Zones are part of the type. Comparing or combining date-times in different
-  zones is a type error until one is converted with `to_zone`.
-- There are no naive date-times. Reading one requires its zone, from the
-  contract, the inline schema or `assume_zone`.
-- `Date` and `DateTime` never compare directly.
-- `DateTime + Duration` is exact. `Date + Period` and `DateTime + Period` are
-  calendar arithmetic: adding months clamps to the end of the month, so
-  `d"2026-01-31" + months(1) == d"2026-02-28"`.
-- Building a date-time from a local wall-clock reading that falls in a
-  daylight-saving gap or overlap requires an explicit choice
-  (`nonexistent = shift_forward`, `ambiguous = earliest`).
+- Date-times in different zones do not combine or compare. `to_zone`
+  converts.
+- Every date-time has a zone. A value read without one requires a zone from
+  the contract, the inline schema or `assume_zone`.
+- `Date` and `DateTime` do not compare.
+- `DateTime + Duration` is exact. `+ Period` is calendar arithmetic; month
+  arithmetic clamps to the last day of the month.
+- Constructing a date-time from a wall-clock reading in a daylight-saving gap
+  or overlap requires `nonexistent =` and `ambiguous =`.
 
 ## Effects
 
-Functions are pure. Reading files, writing files, the clock and randomness are
-effects, allowed only at the top level of a program. A pure function is
-never run once per row through a callback.
+Functions are pure. Reading and writing files, the clock and randomness are
+effects and appear only at top level.
 
-## Immutability and shadowing
+## Bindings
 
-Nothing mutates. `let` is the only way to name a value, and a name never
-changes what it refers to; `let` is therefore also how constants are written.
-A later `let` with the same name shadows the earlier one:
-
-```text
-let orders = load(shop.orders)
-let orders = orders |> filter(revenue > 0.0)
-```
+Values are immutable. `let` binds a name; a later `let` with the same name
+shadows it.

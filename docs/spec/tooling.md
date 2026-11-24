@@ -1,86 +1,85 @@
 # Tooling
 
-## The REPL
+## REPL
 
-The REPL is an incremental compiler. Each input is parsed and checked
-locally, compiled to the project's dialect, and run in a persistent R or
-Python worker inside the project's environment. `rupam compile` emits the
-same compiled chunks in the same order, so a preview is the compiled program.
+The REPL is an incremental compiler. Each input is checked locally, compiled
+to the session dialect and run in a persistent worker in the project
+environment. `rupam compile` emits the same chunks in the same order.
 
-- The worker starts in the background when the REPL opens.
-- Types and schemas print immediately from the local checker; values follow
-  from the worker.
-- Each table binding lives in the worker as a variable (a lazy query in
-  Polars). A preview asks that variable for a bounded page, so it computes
-  only what the page needs.
-- Redefining a binding marks everything that depends on it as stale and
-  recomputes on demand.
-- Values print in rupam's format, identical in every dialect.
-- A runtime error in the worker points at the rupam source through the source
-  map.
-- An input that fails to parse or check leaves the session unchanged.
+- The worker starts when the REPL starts.
+- Types and schemas print from the checker; values print from the worker.
+- Each table binding is a variable in the worker. A preview reads a bounded
+  page of it.
+- Redefining a binding invalidates its dependents.
+- Values print in rupam format in every dialect.
+- Worker errors are reported at the rupam source span.
+- An input that fails to parse or check does not change the session.
+- An incomplete input waits for more lines; `:prefix` checks its longest
+  complete prefix and prints that schema.
 
-### Commands
-
-| Command | |
+| Command | Effect |
 | --- | --- |
-| `:type EXPR` | type of an expression, or schema of a table expression; runs nothing |
-| `:schema TABLE` | columns, types, keys, units and contract status |
-| `:preview TABLE` | the first rows |
-| `:view TABLE` | the full-screen viewer |
-| `:explain TABLE` | the plan, validation steps and adapters |
-| `:code TABLE` | the generated code for one table |
-| `:matches REGEX COLUMN` | a regex's matches against a column |
-| `:target DIALECT` | switch dialect for this session |
-| `:validate TABLE` | run contract validation now |
+| `:type EXPR` | type, or schema of a table expression; runs nothing |
+| `:schema TABLE` | columns, types, refinements, keys, units, contract status |
+| `:preview TABLE` | first rows |
+| `:view TABLE` | the viewer |
+| `:explain TABLE` | plan, validation steps, adapters |
+| `:code TABLE` | generated code |
+| `:target DIALECT` | session dialect |
+| `:validate TABLE` | contract validation |
 | `:bindings`, `:reload`, `:help`, `:quit` | |
 
-### Interface
+The prompt highlights syntax as it is typed, completes from a menu, edits
+multiple lines and keeps history. Completion offers columns with their types
+and units, enum values, and functions with signatures.
 
-The prompt follows radian: syntax highlighting as you type, a completion menu,
-multi-line editing and persistent history. Completion knows the current
-table's columns, their types and units, and enum values from the contract.
+Tables print with a type row (`<dbl>`, `<int>`, `<chr?>`), distinct styling
+for missing values, aligned significant figures, and a footer counting rows
+and columns not shown.
 
-Tables print like tibbles: a header row of types (`<dbl>`, `<int>`, `<chr?>`),
-missing values styled distinctly, numbers with significant-figure alignment,
-and a footer counting rows and columns not shown.
+## Viewer
 
-The viewer follows RStudio's `View()`: full-screen, scrolling in both
-directions, column types and descriptions in the header, sorting and filtering
-that compile to the same verbs, and restricted columns hidden. It and the
-prompt must work on Windows, macOS and Linux.
+`:view` opens a full-screen table explorer.
 
-### Unfinished input
-
-An incomplete input waits for more lines. `:prefix` checks the longest
-complete prefix of the unfinished input and shows its schema. Holes are
-reported with their expected type and are never given a value.
+- **Grid:** virtualised rows and columns over the worker; only visible pages
+  are materialised. Frozen key columns. Column widths fit content.
+- **Headers:** name, type, refinement, units, description, key marker.
+- **Column summaries:** missing count, distinct count, min, max, mean and a
+  histogram or top-values bar for every column, computed in the worker.
+- **Column detail:** frequency table, quantiles and distribution for one
+  column.
+- **Sort, filter and search:** multi-column sort; filters by value, range,
+  missingness or regex, with matches highlighted; global search.
+- **Pipeline:** every sort and filter is a rupam verb. The viewer shows the
+  resulting pipeline and inserts it at the REPL prompt.
+- **Transposed view:** one row per column with sample values.
+- **Navigation:** keyboard-first with arrow and vi bindings, plus mouse.
+- **Restricted columns** are not shown.
+- Runs in the terminal on Windows, macOS and Linux.
 
 ## Diagnostics
 
-Every error has a stable code, the source span, labels on related spans, and
-a suggested fix where one exists:
+A diagnostic has a stable name, a source span, related spans, and fixes
+phrased as analysis steps:
 
 ```text
-error[E0301]: `cost` may be missing, so this predicate can be unknown
-  --> visits.rp:12:12
-   |
-12 |   |> filter(cost > 0.0)
-   |             ^^^^ `cost` is Float64? (not required in data-dict.yaml)
-   |
-help: say what an unknown predicate means
-   |   |> filter(cost > 0.0, missing = skip)
+rates.rp:8:28  zero-divisor
+  `cases / population` is undefined where population is 0.
+  population: Float64, sign unknown (data-dict.yaml has no assertion on it)
+
+  Remove those rows first:     |> filter(population > 0)
+  Keep them as missing:        rate = ratio(cases, population)
 ```
 
-`rupam explain E0301` prints the longer explanation. Errors talk about
-columns, tables and missing values, never about unification variables.
-Unused pipeline results are warnings.
+- Diagnostics refer to columns, rows, tables, missing values and contracts.
+  They never show inference variables.
+- `rupam explain zero-divisor` prints the full explanation.
+- An unused table expression is a warning.
 
-## Editors
+## Editor support
 
-`rupam lsp` serves the Language Server Protocol: diagnostics as you type,
-hover with types, shapes and lifting, schema-aware completion, and
-go-to-definition.
+`rupam lsp` provides diagnostics, hover with types, shapes, refinements and
+lifting, schema-aware completion, and go-to-definition.
 
 ## Tests (experimental)
 
@@ -92,5 +91,4 @@ test "regional totals" {
 }
 ```
 
-`rupam test` runs every test block in every configured dialect, so a project's
-own tests show that the dialects agree on its data.
+`rupam test` runs every test in every dialect.

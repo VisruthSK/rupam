@@ -1,50 +1,49 @@
 # Standard library
 
-Every function here works on single values, vectors and columns according to
-the lifting rules in [Types](types.md), and lowers to native vectorised code
+All functions lift per [Types](types.md) and lower to native vectorised code
 in every dialect. Reductions take `missing =` when their input is optional.
 
 ## Reductions
 
 | Function | Result |
 | --- | --- |
-| `n()` | rows in the table or group |
+| `n()` | row count of the table or group |
 | `n_distinct(x)` | distinct values |
-| `sum(x)` | sum; `0` over nothing |
-| `prod(x)` | product, always `Float64` |
-| `mean(x)`, `median(x)` | optional over nothing |
-| `var(x)`, `sd(x)` | sample variance and standard deviation (divisor `n - 1`); optional under two values |
-| `min(x)`, `max(x)` | optional over nothing |
-| `quantile(x, p)` | linear interpolation (R type 7, NumPy `linear`); `method =` selects another |
+| `sum(x)` | sum; `0` over no values |
+| `prod(x)` | product, `Float64` |
+| `mean(x)`, `median(x)` | `None` over no values |
+| `var(x)`, `sd(x)` | sample statistics (divisor `n - 1`); `None` under two values |
+| `min(x)`, `max(x)` | `None` over no values |
+| `quantile(x, p)` | linear interpolation; `method =` selects another |
 | `mad(x)`, `iqr(x)` | robust spread |
 | `any(x)`, `all(x)` | over `Bool` |
 | `first(x)`, `last(x)` | ordered tables only |
 
-## Column transforms
+## Transforms
 
-Whole-vector functions that return a vector of the same length:
+Return a vector of the input's length. Under `by =` they apply per group.
 
 | Function | Result |
 | --- | --- |
 | `center(x)` | `x - mean(x)` |
 | `scale(x)` | `x / sd(x)` |
 | `standardize(x)` | `(x - mean(x)) / sd(x)`; `method = robust` uses median and MAD |
-| `rescale(x)` | `(x - min(x)) / (max(x) - min(x))`, into 0 to 1; `to = (a, b)` for another range |
-| `rank(x, ties = average)` | ranks; `ties` is `average`, `min`, `max` or `dense` |
-| `percent_rank(x)`, `ntile(x, n)` | relative position, buckets |
-| `cumsum(x)`, `cummean(x)`, `lag(x)`, `lead(x)` | need an ordered table or `order_by =` |
+| `rescale(x)` | `(x - min(x)) / (max(x) - min(x))`; `to = (a, b)` sets the range |
+| `rank(x, ties = average)` | `ties` is `average`, `min`, `max` or `dense` |
+| `percent_rank(x)`, `ntile(x, n)` | relative rank, bucket |
+| `cut(x, at = [...], into = (...))` | the enum value of the bin containing `x`; `n` breakpoints give `n + 1` bins |
+| `cumsum(x)`, `cummean(x)`, `lag(x)`, `lead(x)` | ordered input |
 
-Under `by =` each of these applies within each group.
+`scale`, `standardize` and `rescale` return `None` for every element when the
+divisor is zero or undefined.
 
-## Element-wise numbers
+## Numbers
 
 `abs`, `sign`, `sqrt`, `exp`, `log`, `log2`, `log10`, `floor`, `ceiling`,
 `trunc`, `round(x, digits, ties = even)`, `pmin(a, b)`, `pmax(a, b)`,
-`clamp(x, lo, hi)`, `float`, `int`, `ratio(a, b)`, `div(a, b)`.
-
-`min` and `max` always reduce; `pmin` and `pmax` are the element-wise
-versions. Mixing them up is a type error, since a reduction returns a single
-value where a vector is expected.
+`clamp(x, lo, hi)`, `float`, `int`, `div`, `ratio`, `positive`,
+`nonnegative`, `nonzero`. `min` and `max` reduce; `pmin` and `pmax` are
+element-wise.
 
 ## Missing values
 
@@ -53,26 +52,23 @@ value where a vector is expected.
 ## Strings
 
 `str_length`, `str_to_lower`, `str_to_upper`, `str_trim`, `str_pad`,
-`str_sub`, `str_starts`, `str_ends`, `str_detect(x, r"...")`,
-`str_extract`, `str_extract_all`, `str_replace`, `str_replace_all`,
-`str_split`. Concatenation is interpolation: `"{first} {last}"`.
+`str_sub`, `str_starts`, `str_ends`, `str_detect`, `str_extract`,
+`str_extract_all`, `str_replace`, `str_replace_all`, `str_split`.
+Concatenation is interpolation.
 
 ## Regex
 
-rupam has one small regex dialect that every target engine supports
-identically: literals, `.`, character classes and ranges, `\d \w \s` and
-their negations, anchors `^ $`, groups and alternation, non-capturing groups,
-named captures, and the quantifiers `* + ? {m,n}` with lazy variants.
-Backreferences and lookaround are not included, because the engines disagree
-on them. `r"..."` literals are parsed when the program is checked. The REPL
-can preview a pattern's matches against a column (see [Tooling](tooling.md)).
+Literal characters, `.`, character classes and ranges, `\d \w \s` and
+negations, `^ $`, groups, non-capturing groups, named groups, alternation,
+and `* + ? {m,n}` with lazy forms. No backreferences or lookaround. Patterns
+are validated during checking.
 
 ## Dates and times
 
-`today()` and `now()` are effects. `year`, `month`, `day`, `wday`, `yday`,
-`hour`, `minute`, `second`, `floor_date(x, unit)`, `to_zone(x, zone)`,
-`assume_zone(x, zone)`, `days`, `hours`, `minutes`, `seconds` (durations),
-`months`, `years` (periods), `between(x, lo, hi)`.
+`today()`, `now()` (effects), `year`, `month`, `day`, `wday`, `yday`, `hour`,
+`minute`, `second`, `floor_date(x, unit)`, `to_zone`, `assume_zone`,
+`days`, `hours`, `minutes`, `seconds` (durations), `months`, `years`
+(periods), `between(x, lo, hi)`.
 
 ## Vectors
 

@@ -1,126 +1,102 @@
 # Tables
 
-A table has named, typed columns in a fixed column order and no row order.
-Its type records the columns, which of them are keys, and whether its schema
-was validated or inferred:
-
-```text
-Table<{customer_id: CustomerId, region: String, revenue: Float64, cost: Float64?}>
-```
+A table has named, typed columns in a fixed order and unordered rows. Its
+type lists the columns, the keys, and whether the schema is validated or
+inferred.
 
 ## Verbs
 
-Verbs are ordinary typed functions from the standard library. Each has a
-schema transformer the checker applies statically; none is a separate
-language.
-
-| Verb | Meaning |
+| Verb | Result |
 | --- | --- |
-| `mutate(name = e, ...)` | add or replace columns in order; each binding sees the ones before it |
-| `filter(predicate)` | keep the rows where the predicate is `TRUE` |
-| `select(a, b, new = old)` | keep, reorder and rename columns; selectors below |
-| `rename(new = old)` | rename columns |
-| `arrange(a, desc(b))` | order rows; makes the table ordered |
-| `slice_head(n = 5)` | the first rows of an ordered table; an error on an unordered one |
-| `summarize(name = aggregate, ..., by = keys)` | one row per group with the keys and the aggregates; ungrouped gives one row |
+| `mutate(name = e, ...)` | adds or replaces columns in order; each binding sees earlier ones |
+| `filter(predicate)` | rows where the predicate is `TRUE` |
+| `select(a, b, new = old)` | the selected columns, in order, renamed as given |
+| `rename(new = old)` | the table with columns renamed |
+| `arrange(a, desc(b))` | the rows ordered; the result is an ordered table |
+| `slice_head(n = 5)` | the first rows of an ordered table |
+| `summarize(name = e, ..., by = keys)` | one row per group: keys, then summaries; one row when ungrouped |
 | `count(a, b)` | `summarize(n = n(), by = (a, b))` |
-| `distinct(a, b)` | one row per distinct key; other columns come from an unspecified row in each group |
-| `left_join(y, by = key)` and `inner_join`, `right_join`, `full_join`, `semi_join`, `anti_join` | joins; see below |
-| `pivot_longer(cols = (a, b), names_to = k, values_to = v)` | columns into key/value rows |
-| `pivot_wider(names_from = k, values_from = v, levels = [a, b])` | the reverse |
-| `validate(checks..., warn_above =, stop_above =)` | data checks with thresholds and a report; experimental |
+| `distinct(a, b)` | one row per distinct key |
+| `left_join`, `inner_join`, `right_join`, `full_join`, `semi_join`, `anti_join` | joins |
+| `pivot_longer(cols = (a, b), names_to = k, values_to = v)` | columns to key/value rows |
+| `pivot_wider(names_from = k, values_from = v, levels = [a, b])` | key/value rows to columns |
+| `validate(checks..., warn_above = r, stop_above = r)` | the table, after checking rows against thresholds; experimental |
 
-`mutate(..., by = site)` evaluates reductions per group and keeps every row,
-so `revenue / mean(revenue)` is relative to each site. `lag`, `lead` and
-cumulative functions need an ordered table or an explicit `order_by =`.
+- `mutate(..., by = keys)` evaluates reductions per group and keeps every row.
+- `lag`, `lead` and cumulative functions require an ordered table or
+  `order_by =`.
+- Every verb accepts `missing =`.
+- Grouping exists only as the `by =` argument of the verb that uses it.
+- `slice_head` on an unordered table is a type error.
+- In `distinct`, non-key columns come from an unspecified row of each group.
 
-Every verb takes `missing =` (see [Missing values](missing.md)).
+## Column names
 
-`group_by` does not exist. Grouping is always explicit at the verb that uses
-it, so no grouped state lingers between steps.
-
-## Names inside verbs
-
-Inside a verb's arguments a bare name is a column of the table flowing in.
-Outside verbs, names are ordinary bindings. When a name is both a column and
-an outer binding, using it bare is an error: write `$name` for the column or
-`^name` for the binding.
-
-Functions that take columns need no quoting. A parameter whose type is a
-column of the piped table makes bare names at the call site resolve as
-columns:
+- Inside a verb's arguments, a bare name is a column of the input table.
+- Outside verb arguments, a bare name is a binding.
+- A name that is both a column and a binding is an error inside a verb;
+  `$name` selects the column and `^name` the binding.
+- A function parameter whose type is a column of the piped table resolves
+  bare names at the call site as columns:
 
 ```text
-let mean_by(data, value, key) =
-  data |> summarize(average = mean(value), by = key)
+let mean_by(data, value, key) = data |> summarize(average = mean(value), by = key)
 
 sales |> mean_by(revenue, region)
 ```
 
-Calling `mean_by` with a value that is not a column of `sales` is a type
-error at the call site.
-
 ## Selectors
 
-`select` and the `cols =` arguments of other verbs accept names, ranges
-(`region:cost`), exclusions (`-cost`), `starts_with("q_")`, `ends_with`,
-`contains`, `matches(r"...")` and `where(is_number)`. Selectors resolve
-against the static schema; an unknown name is a compile error with
-suggestions.
+Names, ranges (`region:cost`), exclusions (`-cost`), `starts_with`,
+`ends_with`, `contains`, `matches(r"...")` and `where(is_number)`. Selectors
+resolve against the schema during checking.
 
 ## Keys and joins
 
-A table's type lists its keys. Keys come from a contract's `primary_key`,
-from `distinct(k)` and `summarize(by = k)` on their output, and from
-`assert_key(t, k)`, which checks at run time and records the key.
+Keys come from a contract's `primary_key`, from `distinct(k)` and
+`summarize(by = k)` on their outputs, and from `assert_key(t, k)`, which is
+checked at run time.
 
 ```text
 orders |> left_join(customers, by = customer_id)
 orders |> left_join(customers, by = (customer_id == id))
 ```
 
-- Joins never match on shared names implicitly; `by` is required.
-- Key types must match exactly, newtypes included.
-- If `by` is a key of the right-hand table, the join cannot multiply rows and
-  needs nothing more. Otherwise `relationship = one_to_many` (or
-  `many_to_one`, `many_to_many`) must be stated, and is checked at run time.
-- Columns of an unmatched side become optional.
-- A missing key never matches.
-- Two non-key columns with the same name are a compile error until renamed.
-- Joins produce unordered tables.
+- `by` is required.
+- Key types must be identical.
+- A join whose `by` is not a key of the right-hand table requires
+  `relationship = one_to_many | many_to_one | many_to_many`, checked at run
+  time.
+- Columns from an unmatched side become optional.
+- Non-key columns with the same name are a type error.
+- The result is unordered.
 
 ## Reshaping
 
-`pivot_longer` requires the gathered columns to share a type. `pivot_wider`
-requires `levels`, the output column names, because columns named after
-run-time values would make the schema unknowable. A value of `names_from`
-outside `levels` is a run-time error.
+- `pivot_longer` requires the selected columns to share a type.
+- `pivot_wider` requires `levels`. A `names_from` value outside `levels` is a
+  run-time error.
 
 ## Reading and writing
 
 ```text
 use contract "data-dict.yaml" as shop
 let orders = load(shop.orders)
-
 let visits = read_csv("visits.csv", schema = {id: PatientId, site: String, age: Int64?})
 let raw = read_parquet("raw.parquet")
-
 write_parquet(summary, "summary.parquet")
 write_csv(summary, "summary.csv")
 ```
 
-- `load` reads a contracted table with validated types ([Contracts](contracts.md)).
-- `read_csv` and `read_parquet` with `schema =` check the file against the
-  schema and fail when it differs.
-- Without `schema =`, the schema is inferred from the file through DuckDB and
-  the table's type is marked inferred. Inference never turns `T`/`F` into
-  booleans and treats only empty fields as missing. `rupam schema FILE` prints
-  the inferred schema as a `schema =` literal to paste in.
-- Strict mode rejects writing or compiling from inferred tables unless the
-  project allows it.
+- `load` reads a contracted table ([Contracts](contracts.md)).
+- `schema =` checks the file against the given schema.
+- Without `schema =` the schema is inferred and the table is marked inferred.
+  Inference reads only empty fields as missing and never reads `T` or `F` as
+  booleans.
+- Reading converts NaN in floating-point columns to `None` and rejects
+  infinite values.
+- Writing or compiling from an inferred table is a strict-mode error.
 
-## Row order
+## Order
 
-Only `arrange` creates order. `filter`, joins, `summarize`, `distinct` and
-pivots return unordered tables. Strings sort by byte order in every dialect;
-there is no locale collation. A preview of an unordered table says so.
+Only `arrange` produces an ordered table. Strings sort by byte order.

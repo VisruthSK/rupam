@@ -1,18 +1,16 @@
 # Future
 
-Accepted designs that are deliberately not built yet. Each one is specified
-far enough that the current design leaves room for it.
+All features below are deferred.
 
-## Models and graphics (deferred)
+## Models and graphics
 
-`~` already parses as a formula value and is rejected by the checker until a
-library gives it meaning. Model and graphics libraries elaborate formulas and
-aesthetics against a table's schema, the same way verbs resolve bare column
-names, so `lm(y ~ x + (1 | site), data = visits)` and
-`aes(x = revenue, colour = region)` need no new grammar. Each library adds
-typed nodes to the core, lowerings for each dialect and preview handlers.
+`~` builds formula values, which are type errors until a library interprets
+them. Model and graphics libraries resolve formulas and aesthetics against a
+table's schema as verbs resolve column names:
+`lm(y ~ x + (1 | site), data = visits)`, `aes(x = revenue, colour = region)`.
+Each library adds core nodes, dialect lowerings and preview handlers.
 
-## Typed foreign imports (deferred)
+## Foreign imports
 
 ```text
 import r "stats" {
@@ -20,38 +18,32 @@ import r "stats" {
 }
 ```
 
-The checker trusts the declaration; generated code checks the returned type at
-the boundary. Allowed only when `strict = false`, recorded in the manifest,
-and limited to the dialects whose language matches.
+Available with `strict = false`. The declaration is trusted; the returned
+value's type is checked at the boundary. Recorded in the manifest; restricts
+the program to dialects of that language.
 
-## Exporting rupam functions (deferred)
+## Package export
 
-`export let clean_orders(orders) = ...` and `rupam package r` would produce an
-R package (and a Python module) that callers use without rupam. Its entry
-points check the incoming data frame's columns, since those callers are not
-type-checked, and its documentation comes from the types.
+`export let f(...) = ...` and `rupam package r|python` produce an R package
+or Python module callable without rupam. Entry points check incoming columns.
+Documentation is generated from types.
 
-## Modules (deferred)
+## Modules
 
-`import helpers` loads `helpers.rp` from the project as a module.
+`import helpers` loads `helpers.rp` from the project.
 
-## Decimal numbers (deferred)
+## Decimal
 
-A `Decimal` type for money and other exact decimal quantities, so that
-`round(0.15, 1)` is `0.2`.
+A `Decimal` type for exact decimal arithmetic.
 
-## More dialects (deferred)
+## Dialects
 
-R with data.table, R with polars, and Julia with TidierData, each as a dialect
-module with its own lowering and capability table.
+`r-datatable`, `r-polars`, `julia-tidier`.
 
-## Environment setup (deferred)
+## Environment setup
 
-`rupam env` to create the uv or renv files a project uses. rupam already uses
-them when they exist.
+`rupam env` creates the uv or renv files of a project.
 
-## Recursion (deferred)
+## Recursion
 
-Recursive functions, compiled as ordinary target functions. They are the only
-construct that cannot be lowered to vectorised code, so they will need their
-own rule.
+Recursive functions, compiled as host functions without vectorisation.

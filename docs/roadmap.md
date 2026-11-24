@@ -14,8 +14,8 @@ improve ergonomics or performance are made freely.
    incremental parsing for recovery, and spans on every node.
 3. Types: vectors and shapes, lifting, rows, variants in columns, bare column
    references with ambiguity errors, built-in constraints, automatic optional
-   injection, the missing-value policy, no NaN, `ratio`, float equality,
-   IEEE rounding.
+   injection, the missing-value policy, sign refinements, finite `Float64`,
+   `ratio`, float equality, IEEE rounding.
 4. One typed core with the reference evaluator as test oracle; dialect
    modules that build host syntax trees; native lowering only; adapters;
    rupam-format display; release builds; R-dplyr and Python-polars on it.

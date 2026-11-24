@@ -1,59 +1,48 @@
 # Contracts
 
-rupam reads data contracts written in the upstream
-[data-dict](https://data-dict.tidyverse.org/) format, currently version
-0.1.0. rupam never adds its own keys to `data-dict.yaml` and does not
-reimplement data-dict's validator. It calls the data-dict CLI:
-`export-spec` for the resolved contract, `validate-meta` for physical types
-and `validate-data` for values, and reads their JSON reports.
+rupam reads [data-dict](https://data-dict.tidyverse.org/) contracts, version
+0.1.0, through the data-dict CLI: `export-spec` for the resolved contract,
+`validate-meta` and `validate-data` for validation reports. rupam adds no
+keys to `data-dict.yaml`.
 
 ```text
 use contract "data-dict.yaml" as shop
 let orders = load(shop.orders)
 ```
 
-## What the declarations mean
+## Declarations
 
-| data-dict | In rupam |
+| data-dict | rupam |
 | --- | --- |
-| `required` | the column is `T`; otherwise it is `T?` |
-| `primary_key` | a key of the table, so it is also required and unique |
-| `unique` | unique among present values; it does not make the column required |
-| `foreign_key`, relationships | typed join information, proven only by validation |
-| `values` (enumeration) | an enum type for the column |
-| `assert` | checked by data-dict during validation |
-| `display: restricted` | left out of previews, the viewer, diagnostics and written output |
-| `range`, `examples`, descriptions, units | documentation shown on hover; never enforced |
-| `number(id)`, `number(quantity)`, ... | the column's role; the physical type comes from the file |
+| `required` | column type `T`; otherwise `T?` |
+| `primary_key` | table key; required and unique |
+| `unique` | unique among present values |
+| `foreign_key`, relationships | join information, established by validation |
+| `values` | enum type for the column |
+| `assert` | checked during validation; comparisons with zero become sign refinements |
+| `display: restricted` | excluded from previews, the viewer, diagnostics and written output |
+| `range`, `examples`, descriptions, units | shown on hover; not enforced |
+| `number(...)` roles | documentation; the physical type comes from the file |
 
-A column with no declared type exists but cannot be used with a static type.
+A column without a declared type is not usable with a static type.
 
 ## Physical types
 
-The file's own schema, read through DuckDB, fixes `Int64` versus `Float64`
-and the time zone of date-times. A physical type rupam cannot represent
-exactly is a compile error for that column, not a silent conversion.
+The file's schema determines `Int64` versus `Float64` and date-time zones. A
+physical type without an exact rupam equivalent is a type error for that
+column.
 
 ## Validation
 
-Type checking needs only the contract and the file's schema. Values are
-validated before anything reads them: a preview, `run`, a written file, or the
-generated script.
-
-- The whole source is validated, before any `filter` or column selection
-  could hide a bad row.
-- Validation that is incomplete, skipped or unsupported counts as failed.
+- Checking needs only the contract and the file schema.
+- Values are validated before any preview, run, written file or generated
+  script reads them, over the whole source.
+- An incomplete, skipped or unsupported validation step is a failure.
 - A successful validation is cached against a hash of the contract and the
-  files, so an unchanged file is scanned once.
-- Generated scripts carry the same preflight unless the project turns it off
-  (see [Projects](projects.md)).
+  source files.
+- Generated scripts validate their contracted sources first.
 
 ## Definitions
 
-data-dict `definitions` (named filters, derived values and metrics) are
-imported as rupam functions when their expressions translate exactly into
-rupam. A definition data-dict grades as divergent or unsupported is not
-imported; using it is a compile error that names it.
-
-A program that type-checks is correct relative to its contract. Validation is
-what makes the contract true of the data.
+data-dict `definitions` whose expressions translate exactly are available as
+rupam functions. Other definitions are a type error when used.
