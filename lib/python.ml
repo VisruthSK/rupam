@@ -114,6 +114,7 @@ let compile ?(annotate = Source_map.plain) program =
     | Binary (((Add | Sub | Mul) as op), a, b) ->
       "rp_num(" ^ expr a ^ " " ^ binary_symbol op ^ " " ^ expr b ^ ")"
     | Binary (Div, a, b) -> apply "rp_div" [ expr a; expr b ]
+    | Binary (Power, a, b) -> "rp_num(" ^ expr a ^ " ** " ^ expr b ^ ")"
     | Unary (Negate, v) -> "rp_num(-" ^ expr v ^ ")"
     | Unary (Not, v) -> "(not " ^ expr v ^ ")"
     | Binary (op, a, b) when comparison op || op = And || op = Or ->

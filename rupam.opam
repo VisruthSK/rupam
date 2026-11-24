@@ -14,9 +14,7 @@ depends: [
   "uucp"
   "toml"
   "cmdliner" {>= "2.0"}
-  "lambda-term"
   "mosaic"
-  "lwt"
   "ocamlformat" {with-dev-setup & = "0.29.0"}
   "odoc" {with-doc}
 ]

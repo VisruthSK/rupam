@@ -61,19 +61,25 @@ and environment = (string * binding) list
 let fail x msg = raise (Infer.Error (x.span, msg))
 let readers = [ "read_csv"; "read_tsv"; "read_parquet" ]
 
-let rec reads x =
+let rec uses table x =
+  let any = List.exists (uses table) in
   match x.form with
+  | Name (_, n) -> table n
   | Call ({ form = Name (Bare, f); _ }, _) when List.mem f readers -> true
-  | Call (f, args) -> reads f || List.exists (fun (_, a) -> reads a) args
-  | Pipe (a, b) | Binary (_, a, b) | Range (a, b) | Local (_, a, b) -> reads a || reads b
-  | Formula (a, b) -> Option.fold ~none:false ~some:reads a || reads b
-  | If (a, b, c) -> reads a || reads b || reads c
-  | Match (a, branches) -> reads a || List.exists (fun (_, b) -> reads b) branches
-  | Tuple xs | List xs -> List.exists reads xs
-  | Record fs -> List.exists (fun (_, a) -> reads a) fs
-  | Field (a, _) | Unary (_, a) | Annotated (a, _) | Lambda (_, a) -> reads a
-  | Name _ | Literal _ -> false
+  | Call (f, args) -> uses table f || any (List.map snd args)
+  | Pipe (a, b) | Binary (_, a, b) | Range (a, b) -> any [ a; b ]
+  | Local (n, a, b) -> uses table a || uses (fun m -> m <> n && table m) b
+  | Formula (a, b) -> any (Option.to_list a @ [ b ])
+  | If (a, b, c) -> any [ a; b; c ]
+  | Match (a, branches) -> any (a :: List.map snd branches)
+  | Tuple xs | List xs -> any xs
+  | Record fs -> any (List.map snd fs)
+  | Field (a, _) | Unary (_, a) | Annotated (a, _) -> uses table a
+  | Lambda (ps, a) -> uses (fun m -> (not (List.mem m ps)) && table m) a
+  | Literal _ -> false
 ;;
+
+let reads = uses (fun _ -> false)
 
 let tabular =
   List.exists (function

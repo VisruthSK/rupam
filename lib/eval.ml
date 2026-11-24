@@ -142,6 +142,12 @@ let rec expression env source =
        | Add, Float a, Float b -> Float (a +. b)
        | Sub, Float a, Float b -> Float (a -. b)
        | Mul, Float a, Float b -> Float (a *. b)
+       | Power, Float a, Float b -> Float (Float.pow a b)
+       | Power, Int a, Int b when b >= 0L ->
+         let rec go acc n =
+           if n = 0L then acc else go (Integer.mul acc a) (Int64.pred n)
+         in
+         Int (go 1L b)
        | Div, Float a, Float b -> Float (a /. b)
        | Less, Int a, Int b -> Bool (a < b)
        | Less, Float a, Float b -> Bool (a < b)

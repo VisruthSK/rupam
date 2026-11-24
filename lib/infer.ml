@@ -383,7 +383,7 @@ let rec expression env level source =
     equal t (check b);
     (match op with
      | op when comparison op -> Bool
-     | Add | Sub | Mul -> t
+     | Add | Sub | Mul | Power -> t
      | Div ->
        equal t Float;
        Float

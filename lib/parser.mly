@@ -26,6 +26,7 @@ let result_annotation t body = match t with None -> body | Some a -> {body with 
 %left PLUS MINUS
 %left TIMES DIV MOD
 %nonassoc UNARY
+%right CARET
 %left LP DOT
 %start program
 %type <Syntax.declaration list> program
@@ -93,6 +94,7 @@ expr: MATCH expr LC branches RC { at $startpos $endpos (Match ($2,List.rev $4)) 
  | expr TIMES expr { at $startpos $endpos (Binary (Mul,$1,$3)) }
  | expr DIV expr { at $startpos $endpos (Binary (Div,$1,$3)) }
  | expr MOD expr { at $startpos $endpos (Binary (Mod,$1,$3)) }
+ | expr CARET expr { at $startpos $endpos (Binary (Power,$1,$3)) }
  | expr GT expr { at $startpos $endpos (Binary (Greater,$1,$3)) }
  | expr LT expr { at $startpos $endpos (Binary (Less,$1,$3)) }
  | expr GE expr { at $startpos $endpos (Binary (Greater_equal,$1,$3)) }

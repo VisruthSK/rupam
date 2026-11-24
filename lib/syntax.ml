@@ -22,6 +22,7 @@ type binary =
   | Mul
   | Div
   | Mod
+  | Power
   | Less
   | Greater
   | Less_equal
@@ -98,6 +99,7 @@ let binary_symbol = function
   | Mul -> "*"
   | Div -> "/"
   | Mod -> "%"
+  | Power -> "^"
   | Less -> "<"
   | Greater -> ">"
   | Less_equal -> "<="
@@ -110,5 +112,5 @@ let binary_symbol = function
 
 let comparison = function
   | Less | Greater | Less_equal | Greater_equal | Equal | Not_equal -> true
-  | Add | Sub | Mul | Div | Mod | And | Or -> false
+  | Add | Sub | Mul | Div | Mod | Power | And | Or -> false
 ;;

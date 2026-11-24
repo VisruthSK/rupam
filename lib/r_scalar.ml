@@ -78,7 +78,7 @@ let compile ?(annotate = Source_map.plain) ds =
       in
       let v = "(" ^ exp a ^ " " ^ symbol ^ " " ^ exp b ^ ")" in
       (match op with
-       | Add | Sub | Mul -> "rp_numeric(" ^ v ^ ")"
+       | Add | Sub | Mul | Power -> "rp_numeric(" ^ v ^ ")"
        | Not_equal -> "(isTRUE(" ^ v ^ ") || is.na(" ^ v ^ "))"
        | op when comparison op -> "isTRUE(" ^ v ^ ")"
        | _ -> v)

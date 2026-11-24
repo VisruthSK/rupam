@@ -175,8 +175,8 @@ let evaluate model source =
   else if Repl.incomplete entry
   then { model with input = Editor.empty; pending = source :: model.pending }, Cmd.none
   else (
-    Line.remember model.session.editor entry;
     let history = entry :: model.history in
+    Line.save_history history;
     let next, output =
       capture (fun () ->
         match Repl.parse entry with
@@ -251,7 +251,7 @@ let subscriptions model =
 ;;
 
 let start ~project ?path () =
-  match Repl.open_session ~project ?path (Line.persistent ()) with
+  match Repl.open_session ~project ?path () with
   | None -> ()
   | Some session ->
     let config = Matrix.config ~mode:`Primary ~mouse:`Off () in
@@ -262,7 +262,7 @@ let start ~project ?path () =
             ( { session
               ; input = Editor.empty
               ; pending = []
-              ; history = []
+              ; history = Line.load_history ()
               ; recalled = None
               ; suggestions = []
               }

@@ -3,7 +3,6 @@ open Rupam
 type view =
   | Schema
   | Preview
-  | Inspect
   | Explain
   | Contract
   | Validate
@@ -13,7 +12,6 @@ type command =
   | Help
   | Reload
   | Bindings
-  | Clear
   | Target of Project.dialect option
   | Type of string
   | View of view * string
@@ -23,7 +21,6 @@ type command =
 let views =
   [ "schema", Schema
   ; "preview", Preview
-  ; "inspect", Inspect
   ; "explain", Explain
   ; "contract", Contract
   ; "validate", Validate
@@ -32,19 +29,16 @@ let views =
 
 let help =
   [ ":type EXPR", "inferred type, without running anything"
-  ; ":schema TABLE", "fields, types and nullability"
+  ; ":schema [TABLE]", "columns and types; every table when no name is given"
   ; ":preview TABLE", "first rows, after contract validation"
-  ; ":inspect TABLE", "page through rows and columns"
-  ; ":explain TABLE", "relational plan and lowering notes"
-  ; ":contract TABLE", "contract source and validation status"
+  ; ":explain TABLE", "plan from source to result"
+  ; ":contract TABLE", "where a table's rows come from"
   ; ":validate TABLE", "run data-dict validation now"
   ; ":code [DIALECT] TABLE", "generated code for a table"
-  ; ":target DIALECT", "r-dplyr or python-polars, used by :preview and :inspect"
+  ; ":target [DIALECT]", "show or set the dialect: r-dplyr or python-polars"
   ; ":bindings", "everything defined in this session"
-  ; ":prefix", "inside an unfinished input: check the complete part"
   ; ":reload", "re-read the loaded file"
-  ; ":clear", "clear the screen"
-  ; ":quit", "leave (or Ctrl-D)"
+  ; ":quit", "leave (or Ctrl+D)"
   ]
 ;;
 
@@ -82,10 +76,10 @@ let parse line =
     | "help" | "h" -> Ok Help
     | "reload" -> Ok Reload
     | "bindings" -> Ok Bindings
-    | "clear" -> Ok Clear
     | "target" when rest = "" -> Ok (Target None)
     | "target" -> Result.map (fun d -> Target (Some d)) (dialect rest)
     | "type" | "t" -> needs "an expression" (fun x -> Type x)
+    | "schema" when rest = "" -> Ok (View (Schema, ""))
     | "code" ->
       let first, after =
         match String.index_opt rest ' ' with
@@ -102,11 +96,7 @@ let parse line =
        | None -> Error ("Unknown command " ^ verb ^ ". Type :help for the list.")))
 ;;
 
-let styled fd code text =
-  if Unix.isatty fd then "\027[" ^ code ^ "m" ^ text ^ "\027[0m" else text
-;;
-
-let report message = prerr_endline (styled Unix.stderr "1;31" "error" ^ ": " ^ message)
+let report message = prerr_endline ("error: " ^ message)
 
 let position (p : Lexing.position) =
   Printf.sprintf
@@ -141,21 +131,6 @@ let execute (types, values) ds =
   types, values
 ;;
 
-let echo (types, values) ds =
-  List.fold_left
-    (fun (types, values) d ->
-       let types, t = Infer.declaration types d in
-       let values, result = Eval.run values [ d ] in
-       let typ = styled Unix.stdout "36" (Infer.display t) in
-       (match d, result with
-        | Syntax.Let (name, _, _), _ -> Printf.printf "%s : %s\n" name typ
-        | Evaluate _, Some v -> Printf.printf "%s : %s\n" (Eval.display v) typ
-        | _ -> ());
-       types, values)
-    (types, values)
-    ds
-;;
-
 type session =
   { scalar : Infer.env * (string * Eval.value) list
   ; history : Syntax.declaration list
@@ -163,7 +138,6 @@ type session =
   ; lexical : Check.env
   ; directory : string
   ; project : Project.t
-  ; editor : Line.t
   ; source_path : string option
   }
 
@@ -174,27 +148,96 @@ let empty =
   ; lexical = []
   ; directory = "."
   ; project = Project.standalone
-  ; editor = Line.ephemeral
   ; source_path = None
   }
 ;;
 
-let submit state ds =
-  let history = state.history @ ds in
-  if contracted history
-  then (
-    let inputs = if contracted state.history then ds else history in
-    let tables, lexical, _ =
-      Analysis_program.extend
-        ~strict:state.project.strict
-        ~directory:state.directory
-        state.tables
-        state.lexical
-        inputs
-    in
-    { state with history; tables; lexical })
-  else { state with scalar = echo state.scalar ds; history }
+let dataset state x =
+  Analysis_program.dataset ~directory:state.directory state.tables state.lexical x
 ;;
+
+let preview state d =
+  let dialect = Project.require_dialect state.project in
+  let runtime = Runtime.resolve state.project (Runtime.of_dialect dialect) in
+  let d = Analysis_program.public_view d in
+  match dialect with
+  | R_dplyr -> Tidyverse.preview_page ~runtime d ~offset:0 ~limit:20
+  | Python_polars -> Analysis_program.preview_page ~runtime d ~offset:0 ~limit:20
+;;
+
+let echo ?(announce = true) state d =
+  let types, values = state.scalar in
+  let types, t = Infer.declaration types d in
+  let values, result = Eval.run values [ d ] in
+  (match d, result with
+   | _ when not announce -> ()
+   | Syntax.Let (name, _, _), _ -> Printf.printf "%s : %s\n" name (Infer.display t)
+   | Evaluate _, Some v -> Printf.printf "%s : %s\n" (Eval.display v) (Infer.display t)
+   | _ -> ());
+  { state with scalar = types, values }
+;;
+
+let extend state ds =
+  let tables, lexical, _ =
+    Analysis_program.extend
+      ~strict:state.project.strict
+      ~directory:state.directory
+      state.tables
+      state.lexical
+      ds
+  in
+  { state with tables; lexical }
+;;
+
+let tabular state =
+  let table name =
+    match List.assoc_opt name state.tables with
+    | Some (Analysis_program.Dataset _ | Dictionary _) -> true
+    | Some (Function _) | None -> false
+  in
+  function
+  | Syntax.Contract _ | Import _ -> true
+  | Let (_, None, x) | Evaluate x -> Analysis_program.uses table x
+  | Let (_, Some _, _) | Alias _ | Type _ -> false
+;;
+
+let writes = function
+  | Syntax.Evaluate { form = Call ({ form = Name (Bare, "write_parquet"); _ }, _); _ } ->
+    true
+  | _ -> false
+;;
+
+let observe state name =
+  match List.assoc_opt name state.tables with
+  | Some (Analysis_program.Dictionary contract) ->
+    Contract.describe contract;
+    true
+  | Some (Function (params, _, _, _)) ->
+    Printf.printf "%s : fn(%s)\n" name (String.concat ", " params);
+    true
+  | Some (Dataset _) | None -> false
+;;
+
+let declare ~announce state d =
+  let state = { state with history = state.history @ [ d ] } in
+  match d with
+  | Syntax.Evaluate { form = Name (Bare, name); _ } when observe state name -> state
+  | Syntax.Let (name, Some params, _) ->
+    let state = extend state [ d ] in
+    (match echo ~announce state d with
+     | state -> state
+     | exception Infer.Error _ ->
+       if announce then Printf.printf "%s : fn(%s)\n" name (String.concat ", " params);
+       state)
+  | Evaluate x when tabular state d && not (writes d) ->
+    preview state (dataset state x);
+    state
+  | d when tabular state d -> extend state [ d ]
+  | Let (_, None, { form = Literal _; _ }) -> echo ~announce (extend state [ d ]) d
+  | d -> echo ~announce state d
+;;
+
+let submit ?(announce = true) state ds = List.fold_left (declare ~announce) state ds
 
 let names state =
   List.map fst state.tables @ List.map fst (fst state.scalar).values
@@ -218,89 +261,29 @@ let complete state line =
   start, List.filter (fun c -> String.starts_with ~prefix:word c && c <> word) candidates
 ;;
 
-let read state prompt = Line.read state.editor ~complete:(complete state) prompt
-
-let show_prefix state source =
-  match Frontend.valid_prefix source with
-  | None -> print_endline "No complete prefix yet"
-  | Some (text, ds) ->
-    print_endline (styled Unix.stdout "2" text);
-    ignore
-      (diagnostic (Lexing.from_string text) (fun () ->
-         if contracted (state.history @ ds)
-         then (
-           let bindings, _ =
-             Analysis_program.analyze
-               ~strict:state.project.strict
-               ~directory:state.directory
-               (state.history @ ds)
-           in
-           match List.rev ds with
-           | Syntax.Let (n, _, _) :: _ ->
-             (match List.assoc_opt n bindings with
-              | Some (Dataset d) -> Analysis_program.schema d
-              | _ -> ())
-           | _ -> ())
-         else ignore (Infer.program (fst state.scalar) ds)))
-;;
-
-let rec continue state source =
+let evaluate state source =
   let buf = Lexing.from_string source in
-  match Frontend.parse buf with
-  | ds -> Result.value (diagnostic buf (fun () -> submit state ds)) ~default:state
-  | exception Parser.Error when Lexing.lexeme buf = "" ->
-    (match read state "  ... " with
-     | None | Some "" -> state
-     | Some ":prefix" ->
-       show_prefix state source;
-       continue state source
-     | Some more ->
-       Line.remember state.editor more;
-       continue state (source ^ "\n" ^ more))
-  | exception (Parser.Error | Failure _) ->
-    ignore (diagnostic buf (fun () -> Frontend.parse (Lexing.from_string source)));
-    state
+  Result.value
+    (diagnostic buf (fun () -> submit state (Frontend.parse buf)))
+    ~default:state
 ;;
 
 let table state source =
   match Frontend.parse (Lexing.from_string source) with
-  | [ Syntax.Evaluate x ] ->
-    Analysis_program.dataset ~directory:state.directory state.tables state.lexical x
+  | [ Syntax.Evaluate x ] -> dataset state x
   | _ -> failwith "Expected a table expression"
 ;;
 
-let page_size = 20
-let page_width = 8
-
-let browse state view d =
-  let page =
-    let dialect = Project.require_dialect state.project in
-    let runtime = Runtime.resolve state.project (Runtime.of_dialect dialect) in
-    match dialect with
-    | R_dplyr -> Tidyverse.preview_page ~runtime
-    | Python_polars -> Analysis_program.preview_page ~runtime
-  in
-  let d = Analysis_program.public_view d in
-  let fields = Table.names d.plan in
-  let rec show offset column =
-    let ns = List.filteri (fun i _ -> i >= column && i < column + page_width) fields in
-    let schema = List.map (fun n -> n, List.assoc n d.plan.schema) ns in
-    page
-      { d with plan = { d.plan with schema; steps = Select ns :: d.plan.steps } }
-      ~offset
-      ~limit:page_size;
-    match view with
-    | Inspect ->
-      (match read state "[n]ext [p]rev [l]eft [h] right [q]uit > " with
-       | Some "n" -> show (offset + page_size) column
-       | Some "p" -> show (max 0 (offset - page_size)) column
-       | Some "l" ->
-         show offset (min (max 0 (List.length fields - page_width)) (column + page_width))
-       | Some "h" -> show offset (max 0 (column - page_width))
-       | _ -> ())
-    | _ -> ()
-  in
-  show 0 0
+let schemas state =
+  List.iter
+    (fun (name, binding) ->
+       match binding with
+       | Analysis_program.Dataset d ->
+         print_endline name;
+         Analysis_program.schema d
+       | Dictionary contract -> Contract.describe contract
+       | Function _ -> ())
+    (List.rev state.tables)
 ;;
 
 let reload state =
@@ -311,6 +294,7 @@ let reload state =
       In_channel.with_open_text p (fun ch -> Frontend.parse (Lexing.from_channel ch))
   in
   submit
+    ~announce:false
     { state with history = []; tables = []; lexical = []; scalar = Infer.empty, [] }
     history
 ;;
@@ -319,9 +303,6 @@ let run state = function
   | Quit -> None
   | Help ->
     List.iter (fun (usage, text) -> Printf.printf "  %-24s %s\n" usage text) help;
-    Some state
-  | Clear ->
-    Line.clear ();
     Some state
   | Target None ->
     print_endline
@@ -347,26 +328,20 @@ let run state = function
             | Analysis_program.Dataset _ -> "Table"
             | Dictionary _ -> "Contract"
             | Function _ -> "function"))
-      state.tables;
+      (List.rev state.tables);
     List.iter
       (fun (name, (_, t)) -> Printf.printf "%s : %s\n" name (Infer.display t))
-      (fst state.scalar).values;
+      (List.rev (fst state.scalar).values);
     Some state
   | Type source ->
     let buf = Lexing.from_string source in
     ignore
       (diagnostic buf (fun () ->
          match Frontend.parse buf with
+         | [ (Syntax.Evaluate x as d) ] when tabular state d ->
+           Analysis_program.schema (dataset state x)
          | [ Syntax.Evaluate x ] ->
-           (match Infer.expression (fst state.scalar) 1 x with
-            | t -> print_endline (Infer.display t)
-            | exception Infer.Error _ when contracted state.history ->
-              Analysis_program.schema
-                (Analysis_program.dataset
-                   ~directory:state.directory
-                   state.tables
-                   state.lexical
-                   x))
+           print_endline (Infer.display (Infer.expression (fst state.scalar) 1 x))
          | _ -> failwith "Expected one expression"));
     Some state
   | Code (chosen, source) ->
@@ -379,6 +354,15 @@ let run state = function
             with
             | Project.R_dplyr -> R_syntax.render (Tidyverse.table d)
             | Python_polars -> Python_syntax.render (Analysis_program.python_table d))));
+    Some state
+  | View (Schema, "") ->
+    schemas state;
+    Some state
+  | View (Schema, name) when List.mem_assoc name state.tables ->
+    (match List.assoc name state.tables with
+     | Analysis_program.Dictionary contract -> Contract.describe contract
+     | Dataset d -> Analysis_program.schema d
+     | Function _ -> report (name ^ " is a function, not a table"));
     Some state
   | View (view, source) ->
     ignore
@@ -398,26 +382,14 @@ let run state = function
              ~runtime:(Runtime.resolve state.project Runtime.Python)
              d
          | Explain -> Analysis_program.explain d
-         | Preview | Inspect -> browse state view d));
+         | Preview -> preview state d));
     Some state
   | Source "" -> Some state
-  | Source line -> Some (continue state line)
+  | Source source -> Some (evaluate state source)
 ;;
 
-let rec loop state =
-  match read state "rupam> " with
-  | None -> ()
-  | Some line ->
-    if String.trim line <> "" then Line.remember state.editor line;
-    (match parse line with
-     | Error message ->
-       report message;
-       loop state
-     | Ok command -> Option.iter loop (run state command))
-;;
-
-let open_session ~project ?path editor =
-  let session = { empty with project; editor } in
+let open_session ~project ?path () =
+  let session = { empty with project } in
   match path with
   | None -> Some session
   | Some path ->
@@ -425,6 +397,7 @@ let open_session ~project ?path editor =
     Lexing.set_filename buf path;
     diagnostic buf (fun () ->
       submit
+        ~announce:false
         { session with directory = Filename.dirname path; source_path = Some path }
         (Frontend.parse buf))
     |> Result.to_option
@@ -438,7 +411,25 @@ let incomplete source =
   | exception Failure _ -> false
 ;;
 
+let rec loop state pending =
+  match In_channel.input_line stdin with
+  | None -> ()
+  | Some line ->
+    let entry = if pending = "" then line else pending ^ "\n" ^ line in
+    if (not (String.starts_with ~prefix:":" (String.trim entry))) && incomplete entry
+    then loop state entry
+    else (
+      match parse entry with
+      | Error message ->
+        report message;
+        loop state ""
+      | Ok command ->
+        let next = run state command in
+        flush stdout;
+        Option.iter (fun state -> loop state "") next)
+;;
+
 let start ~project ?path () =
   Sys.catch_break true;
-  Option.iter loop (open_session ~project ?path (Line.persistent ()))
+  Option.iter (fun state -> loop state "") (open_session ~project ?path ())
 ;;

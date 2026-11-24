@@ -1,10 +1,3 @@
-open Lwt.Syntax
-
-type t =
-  { history : LTerm_history.t
-  ; file : string option
-  }
-
 let interactive = lazy (Unix.isatty Unix.stdin && Unix.isatty Unix.stdout)
 
 let state_directory () =
@@ -14,6 +7,10 @@ let state_directory () =
   | _ -> Filename.concat (Filename.concat (Sys.getenv "HOME") ".local") "state"
 ;;
 
+let history_file () =
+  Filename.concat (Filename.concat (state_directory ()) "rupam") "history"
+;;
+
 let rec ensure_directory path =
   if not (Sys.file_exists path)
   then (
@@ -21,77 +18,17 @@ let rec ensure_directory path =
     Sys.mkdir path 0o755)
 ;;
 
-let ephemeral = { history = LTerm_history.create []; file = None }
-
-let bind_editing_keys () =
-  let key control code = { LTerm_key.control; meta = false; shift = false; code } in
-  let kill action = [ LTerm_read_line.Edit (LTerm_edit.Zed action) ] in
-  LTerm_read_line.bind [ key true LTerm_key.Delete ] (kill Zed_edit.Kill_next_word);
-  LTerm_read_line.bind [ key true LTerm_key.Backspace ] (kill Zed_edit.Kill_prev_word);
-  LTerm_read_line.bind
-    [ key true (LTerm_key.Char (Uchar.of_char 'h')) ]
-    (kill Zed_edit.Kill_prev_word)
+let load_history () =
+  match In_channel.with_open_text (history_file ()) In_channel.input_lines with
+  | lines -> List.rev_map Scanf.unescaped lines
+  | exception Sys_error _ -> []
 ;;
 
-let persistent () =
-  if not (Lazy.force interactive)
-  then ephemeral
-  else (
-    let file = Filename.concat (Filename.concat (state_directory ()) "rupam") "history" in
-    let history = LTerm_history.create ~max_entries:1000 [] in
-    ensure_directory (Filename.dirname file);
-    bind_editing_keys ();
-    Lwt_main.run (LTerm_history.load history file);
-    { history; file = Some file })
-;;
-
-class reader term history prompt complete =
-  object (self)
-    inherit LTerm_read_line.read_line ~history ()
-    inherit [Zed_string.t] LTerm_read_line.term term
-    method! show_box = false
-
-    method! completion =
-      let before = Zed_string.to_utf8 (Zed_rope.to_string self#input_prev) in
-      let start, words = complete before in
-      self#set_completion
-        (Zed_utf8.length (String.sub before 0 start))
-        (List.map (fun w -> Zed_string.of_utf8 w, Zed_string.of_utf8 "") words)
-
-    initializer
-      self#set_prompt
-        (React.S.const (LTerm_text.eval [ B_fg LTerm_style.cyan; S prompt; E_fg ]))
-  end
-
-let read t ?(complete = fun _ -> 0, []) prompt =
-  flush stdout;
-  flush stderr;
-  if not (Lazy.force interactive)
-  then In_channel.input_line stdin
-  else
-    Lwt_main.run
-      (let* term = Lazy.force LTerm.stdout in
-       Lwt.catch
-         (fun () ->
-            let+ line =
-              (new reader term (LTerm_history.contents t.history) prompt complete)#run
-            in
-            Some (Zed_string.to_utf8 line))
-         (function
-           | Sys.Break -> Lwt.return (Some "")
-           | LTerm_read_line.Interrupt -> Lwt.return None
-           | exn -> Lwt.fail exn))
-;;
-
-let remember t line =
-  LTerm_history.add t.history (Zed_string.of_utf8 line);
-  Option.iter (fun file -> Lwt_main.run (LTerm_history.save t.history file)) t.file
-;;
-
-let clear () =
-  if Lazy.force interactive
-  then
-    Lwt_main.run
-      (let* term = Lazy.force LTerm.stdout in
-       LTerm.clear_screen term)
+let save_history entries =
+  let file = history_file () in
+  ensure_directory (Filename.dirname file);
+  Out_channel.with_open_text file (fun ch ->
+    List.iter
+      (fun entry -> output_string ch (String.escaped entry ^ "\n"))
+      (List.rev (List.filteri (fun i _ -> i < 1000) entries)))
 ;;
