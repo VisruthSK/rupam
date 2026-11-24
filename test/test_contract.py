@@ -8,6 +8,7 @@ from pathlib import Path
 import polars as pl
 
 ROOT = Path(__file__).resolve().parents[1]
+DIALECT = {"r": "r-dplyr", "python": "python-polars"}
 
 
 class ContractIntegration(unittest.TestCase):
@@ -20,7 +21,7 @@ class ContractIntegration(unittest.TestCase):
             compiler = ROOT / "_build/default/bin/rupam_cli.exe"
             script = work / "shop.py"
             script.write_bytes(subprocess.check_output(
-                [compiler, "compile", "python", "shop.rp"], cwd=work))
+                [compiler, "compile", "--target", "python-polars", "shop.rp"], cwd=work))
             subprocess.run(["python", script], cwd=work, check=True)
             output = work / "regional.parquet"
             result = pl.read_parquet(output)
@@ -29,7 +30,7 @@ class ContractIntegration(unittest.TestCase):
             output.unlink()
             r_script = work / "shop.R"
             r_script.write_bytes(subprocess.check_output(
-                [compiler, "compile", "r", "shop.rp"], cwd=work))
+                [compiler, "compile", "--target", "r-dplyr", "shop.rp"], cwd=work))
             subprocess.run(["Rscript", r_script], cwd=work, check=True)
             r_output = pl.read_parquet(output)
             self.assertEqual(r_output.schema, result.schema)
@@ -63,13 +64,13 @@ save_parquet(joined, "joined.parquet")
                 with self.subTest(target=target):
                     script = work / ("join." + target)
                     script.write_bytes(subprocess.check_output(
-                        [compiler, "compile", target, program], cwd=work))
+                        [compiler, "compile", "--target", DIALECT[target], program], cwd=work))
                     subprocess.run([runner, script], cwd=work, check=True)
                     result = pl.read_parquet(work / "joined.parquet")
                     self.assertEqual(result["region"].to_list(), [None, "South", "North", "South"])
                     (work / "joined.parquet").unlink()
             program.write_text(program.read_text().replace("select(cost, region)", "select(cost, customer_id)"))
-            error = subprocess.run([compiler, "compile", "python", program], cwd=work, capture_output=True)
+            error = subprocess.run([compiler, "compile", "--target", "python-polars", program], cwd=work, capture_output=True)
             self.assertNotEqual(error.returncode, 0)
             self.assertIn(b"collision", error.stderr)
 
@@ -81,7 +82,7 @@ save_parquet(joined, "joined.parquet")
             (work / "data-dict.yaml").write_text(dictionary.replace(
                 "- name: cost", "- name: cost\n        display: restricted"))
             (work / "private.rp").write_text("""use contract "data-dict.yaml" as shop
-let orders = load(shop.orders) |> derive(discount = cost * 0.5)
+let orders = load(shop.orders) |> mutate(discount = cost * 0.5)
 save_parquet(orders, "result.parquet")
 """)
             compiler = ROOT / "_build/default/bin/rupam_cli.exe"
@@ -89,7 +90,7 @@ save_parquet(orders, "result.parquet")
                 with self.subTest(target=target):
                     script = work / ("private." + target)
                     script.write_bytes(subprocess.check_output(
-                        [compiler, "compile", target, "private.rp"], cwd=work))
+                        [compiler, "compile", "--target", DIALECT[target], "private.rp"], cwd=work))
                     subprocess.run([runner, script], cwd=work, check=True)
                     result = pl.read_parquet(work / "result.parquet")
                     self.assertEqual(result.columns, ["customer_id", "region", "revenue"])
@@ -97,8 +98,8 @@ save_parquet(orders, "result.parquet")
 
     def test_repl_previews_in_both_persistent_workers(self):
         compiler = ROOT / "_build/default/bin/rupam_cli.exe"
-        commands = ":schema regional\n:preview regional\n:backend r\n:preview regional\n:preview regional\n:quit\n"
-        completed = subprocess.run([compiler, "repl", ROOT / "examples/shop.rp"],
+        commands = ":schema regional\n:preview regional\n:target r-dplyr\n:preview regional\n:preview regional\n:quit\n"
+        completed = subprocess.run([compiler, "repl", "--target", "python-polars", ROOT / "examples/shop.rp"],
                                    input=commands, text=True, capture_output=True, check=True)
         self.assertEqual(completed.stdout.count("North"), 3, completed.stderr)
         self.assertIn("total_margin : Float64?", completed.stdout)
@@ -112,11 +113,11 @@ save_parquet(orders, "result.parquet")
                 shutil.copy(ROOT / "examples" / name, work)
             (work / "checked.rp").write_text("""use contract "data-dict.yaml" as shop
 let orders = load(shop.orders)
-let result = orders |> derive(x = if customer_id > 0 then customer_id else customer_id + 9223372036854775807) |> select(x)
+let result = orders |> mutate(x = if customer_id > 0 then customer_id else customer_id + 9223372036854775807) |> select(x)
 save_parquet(result, "checked.parquet")
 """)
             compiler = ROOT / "_build/default/bin/rupam_cli.exe"
-            subprocess.run([compiler, "compile", "python", "checked.rp", "-o", "checked.py"], cwd=work, check=True)
+            subprocess.run([compiler, "compile", "--target", "python-polars", "checked.rp", "-o", "checked.py"], cwd=work, check=True)
             subprocess.run(["python", "checked.py"], cwd=work, check=True)
             self.assertEqual(pl.read_parquet(work / "checked.parquet")["x"].to_list(), [1, 2, 3, 4])
             manifest = json.loads((work / "checked.py.manifest.json").read_text())
@@ -137,21 +138,24 @@ save_parquet(result, "checked.parquet")
                 shutil.copy(ROOT / "examples" / name, work)
             source = work / "sqrt.rp"
             body = """use contract "data-dict.yaml" as shop
-let t = load(shop.orders) |> derive(root = polars.sqrt(revenue)) |> select(root)
+let t = load(shop.orders) |> mutate(root = polars.sqrt(revenue)) |> select(root)
 save_parquet(t, "sqrt.parquet")
 """
             compiler = ROOT / "_build/default/bin/rupam_cli.exe"
             source.write_text(body)
-            denied = subprocess.run([compiler, "compile", "python", source], cwd=work, capture_output=True)
+            denied = subprocess.run([compiler, "compile", "--target", "python-polars", source], cwd=work, capture_output=True)
             self.assertNotEqual(denied.returncode, 0)
             self.assertIn(b"import polars", denied.stderr)
             source.write_text("import polars\n" + body)
-            subprocess.run([compiler, "compile", "python", source, "-o", "sqrt.py"], cwd=work, check=True)
+            strict = subprocess.run([compiler, "compile", "--target", "python-polars", source], cwd=work, capture_output=True)
+            self.assertNotEqual(strict.returncode, 0)
+            self.assertIn(b"strict", strict.stderr)
+            subprocess.run([compiler, "compile", "--no-strict", "--target", "python-polars", source, "-o", "sqrt.py"], cwd=work, check=True)
             subprocess.run(["python", "sqrt.py"], cwd=work, check=True)
             self.assertEqual(pl.read_parquet(work / "sqrt.parquet")["root"][2], 3.)
             manifest = json.loads((work / "sqrt.py.manifest.json").read_text())
             self.assertEqual(manifest["nonportable"], ["polars.sqrt"])
-            denied = subprocess.run([compiler, "compile", "r", source], cwd=work, capture_output=True)
+            denied = subprocess.run([compiler, "compile", "--no-strict", "--target", "r-dplyr", source], cwd=work, capture_output=True)
             self.assertNotEqual(denied.returncode, 0)
             self.assertIn(b"polars.sqrt", denied.stderr)
 
@@ -166,7 +170,7 @@ get(Just(9007199254740993))
             compiler = ROOT / "_build/default/bin/rupam_cli.exe"
             for target,runner in [("r","Rscript"),("python","python")]:
                 script = work / ("variant." + target)
-                script.write_bytes(subprocess.check_output([compiler,"compile",target,source]))
+                script.write_bytes(subprocess.check_output([compiler,"compile","--target",DIALECT[target],source]))
                 self.assertIn(b"9007199254740993",subprocess.check_output([runner,script]))
 
     def test_editor_diagnostics_and_completion(self):
@@ -205,7 +209,7 @@ get(Just(9007199254740993))
                 shutil.copy(ROOT / "examples" / name, work)
             source = work / "pivot.rp"
             source.write_text("""use contract "data-dict.yaml" as shop
-let t = load(shop.orders) |> derive(center = revenue - mean(revenue), by = region)
+let t = load(shop.orders) |> mutate(center = revenue - mean(revenue), by = region)
 let tall = t |> select(customer_id, revenue, center) |> pivot_longer(cols = (revenue, center), names_to = metric, values_to = reading)
 let wide = tall |> pivot_wider(names_from = metric, values_from = reading, levels = [revenue, center]) |> rename(center = centered) |> arrange(customer_id)
 save_parquet(wide, "result.parquet")
@@ -213,7 +217,7 @@ save_parquet(wide, "result.parquet")
             compiler = ROOT / "_build/default/bin/rupam_cli.exe"
             for target,runner in [("python","python"),("r","Rscript")]:
                 script=work / ("pivot." + target)
-                script.write_bytes(subprocess.check_output([compiler,"compile",target,source],cwd=work))
+                script.write_bytes(subprocess.check_output([compiler,"compile","--target",DIALECT[target],source],cwd=work))
                 subprocess.run([runner,script],cwd=work,check=True)
                 result=pl.read_parquet(work / "result.parquet")
                 self.assertEqual(result.rows(),[(1,3.,-3.),(2,5.,2.5),(3,9.,3.),(4,0.,-2.5)])
@@ -236,7 +240,7 @@ save_parquet(t, "groups.parquet")
             compiler = ROOT / "_build/default/bin/rupam_cli.exe"
             for target, runner in [("r", "Rscript"), ("python", "python")]:
                 script = work / ("groups." + target)
-                script.write_bytes(subprocess.check_output([compiler,"compile",target,source],cwd=work))
+                script.write_bytes(subprocess.check_output([compiler,"compile","--target",DIALECT[target],source],cwd=work))
                 subprocess.run([runner, script],cwd=work,check=True)
                 rows = pl.read_parquet(work / "groups.parquet").rows()
                 self.assertEqual(len(rows), 2)

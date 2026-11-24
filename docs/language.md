@@ -124,9 +124,10 @@ but has no typing rule yet.
 ## Running programs
 
 ```sh
-rupam run examples/field-notes.rp
+rupam run --target python-polars examples/field-notes.rp
 ```
 
-A program without a contract runs on the reference evaluator and prints its
-last value. `rupam compile r` or `compile python` turns it into a standalone
-script instead. Programs with a contract are covered in [tables.md](tables.md).
+`rupam run` compiles the program for the target dialect and runs the
+generated script, which prints the last value. `rupam compile` writes that
+script instead. The REPL type-checks and evaluates definitions as you type
+them. Programs with a contract are covered in [tables.md](tables.md).

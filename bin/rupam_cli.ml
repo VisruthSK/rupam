@@ -9,74 +9,122 @@ let with_program path action =
   | Error () -> Cmd.Exit.some_error
 ;;
 
-let run path =
-  with_program path (fun ds ->
-    if Repl.contracted ds
-    then
-      Analysis_program.run_python
-        (Analysis_program.python ~directory:(Filename.dirname path) ds)
-    else ignore (Repl.execute Repl.empty.scalar ds))
+let settings directory target strict =
+  let project = Project.load directory in
+  { project with
+    dialect = (if Option.is_some target then target else project.dialect)
+  ; strict = project.strict && strict
+  }
 ;;
 
-let fmt path = with_program path (fun ds -> print_endline (Format.program ds))
+let guarded action =
+  match action () with
+  | code -> code
+  | exception Failure message ->
+    Repl.report message;
+    Cmd.Exit.some_error
+;;
 
-let compile (target : Repl.backend) path output =
+let targeted directory target strict action =
+  guarded (fun () ->
+    let project = settings directory target strict in
+    ignore (Project.require_dialect project);
+    action project)
+;;
+
+let generate (project : Project.t) ?(annotate = Source_map.plain) path ds =
+  let directory = Filename.dirname path
+  and strict = project.strict in
+  match Project.require_dialect project, Repl.contracted ds with
+  | R_dplyr, true -> Tidyverse.compile ~annotate ~strict ~directory ds
+  | R_dplyr, false -> R_scalar.compile ~annotate ds
+  | Python_polars, true -> Analysis_program.python ~annotate ~strict ~directory ds
+  | Python_polars, false -> Python.compile ~annotate ds
+;;
+
+let run target strict path =
+  targeted (Filename.dirname path) target strict
+  @@ fun project ->
   with_program path (fun ds ->
-    let directory = Filename.dirname path in
-    let mapping = Source_map.create () in
-    let annotate =
-      match output with
-      | None -> Source_map.plain
-      | Some _ -> Source_map.mark mapping
-    in
-    let code =
-      match target, Repl.contracted ds with
-      | R, true -> Tidyverse.compile ~annotate ~directory ds
-      | R, false -> R_scalar.compile ~annotate ds
-      | Python, true -> Analysis_program.python ~annotate ~directory ds
-      | Python, false -> Python.compile ~annotate ds
-    in
+    let language = Runtime.of_dialect (Project.require_dialect project) in
+    Runtime.run (Runtime.resolve project language) language (generate project path ds))
+;;
+
+let compile target strict path output =
+  targeted (Filename.dirname path) target strict
+  @@ fun project ->
+  with_program path (fun ds ->
     match output with
-    | None -> print_string code
+    | None -> print_string (generate project path ds)
     | Some output ->
+      let mapping = Source_map.create () in
+      let code = generate project ~annotate:(Source_map.mark mapping) path ds in
       let code, locations = Source_map.finish mapping code in
       let target =
-        match target with
-        | R -> "r"
-        | Python -> "python"
+        match Project.require_dialect project with
+        | R_dplyr -> "r"
+        | Python_polars -> "python"
       in
       Artifact.write ~locations ~target ~source:path ~output ~code ds)
 ;;
 
+let fmt path = with_program path (fun ds -> print_endline (Format.program ds))
 let program = Arg.(required & pos 0 (some file) None & info [] ~docv:"FILE.rp")
 
 let target =
   Arg.(
-    required
-    & pos 0 (some (enum Repl.backends)) None
-    & info [] ~docv:"TARGET" ~doc:"$(b,r) or $(b,python).")
+    value
+    & opt (some (enum Project.dialects)) None
+    & info
+        [ "t"; "target" ]
+        ~docv:"DIALECT"
+        ~doc:
+          "Target dialect: $(b,r-dplyr) or $(b,python-polars). Overrides [target] \
+           dialect in rupam.toml.")
+;;
+
+let strict =
+  Term.(
+    const not
+    $ Arg.(
+        value
+        & flag
+        & info
+            [ "no-strict" ]
+            ~doc:"Allow target-specific code, overriding [check] strict in rupam.toml."))
 ;;
 
 let command name doc term = Cmd.v (Cmd.info name ~doc) term
 
+let repl target strict path =
+  let directory = Option.fold ~none:(Sys.getcwd ()) ~some:Filename.dirname path in
+  guarded (fun () ->
+    Repl.start ~project:(settings directory target strict) ?path ();
+    Cmd.Exit.ok)
+;;
+
 let commands =
-  [ command "run" "Check and run a program." Term.(const run $ program)
+  [ command
+      "run"
+      "Compile a program for the target dialect and run the generated script."
+      Term.(const run $ target $ strict $ program)
   ; command
       "repl"
       "Start the REPL, optionally loading a program."
       Term.(
-        const (fun path ->
-          Repl.start ?path ();
-          Cmd.Exit.ok)
+        const repl
+        $ target
+        $ strict
         $ Arg.(value & pos 0 (some file) None & info [] ~docv:"FILE.rp"))
   ; command "fmt" "Print a program in canonical form." Term.(const fmt $ program)
   ; command
       "compile"
-      "Compile a program to a standalone R or Python script."
+      "Compile a program to a standalone script for the target dialect."
       Term.(
         const compile
         $ target
-        $ Arg.(required & pos 1 (some file) None & info [] ~docv:"FILE.rp")
+        $ strict
+        $ program
         $ Arg.(
             value
             & opt (some string) None
@@ -104,13 +152,7 @@ let commands =
 ;;
 
 let () =
-  let default =
-    Term.(
-      const (fun () ->
-        Repl.start ();
-        Cmd.Exit.ok)
-      $ const ())
-  in
+  let default = Term.(const repl $ target $ strict $ const None) in
   let info = Cmd.info "rupam" ~doc:"A typed language for interactive data analysis." in
   exit (Cmd.eval' (Cmd.group ~default info commands))
 ;;

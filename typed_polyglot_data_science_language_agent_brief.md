@@ -71,7 +71,7 @@ No general statistical model fitting, plotting grammar, SQL backend, distributed
 
 ### 1.5 Success measures
 
-- An analyst can load a contracted table, inspect types, derive columns, group/summarize, and preview without writing a type annotation or manually constructing expression objects.
+- An analyst can load a contracted table, inspect types, add columns, group/summarize, and preview without writing a type annotation or manually constructing expression objects.
 - Missing columns, incompatible types and unsupported null handling are rejected before execution, with source-span diagnostics and suggestions.
 - The same checked transformation generates executable R and Python whose outputs satisfy shared semantic tests.
 - The REPL can display the type, schema, contract status, plan, native translation and a rich paginated preview of any valid bound table or intermediate stage.
@@ -92,7 +92,7 @@ let standardize(x) = (x - mean(x)) / sd(x)
 let clean(orders) =
     orders
     |> filter(revenue > 0.0)
-    |> derive(
+    |> mutate(
          margin = add_margin(revenue, cost),
          z = standardize(margin),
          unusual = abs(z) > 2.0
@@ -116,7 +116,7 @@ save_parquet(regional, "regional.parquet")
 
 Assume the contract declares `revenue: Float64` required, `cost: Float64?` optional, and `customer_id`/`region` required. `standardize` is a whole-column function; `add_margin` can be applied to scalar values or lifted over columns; `abs` is elementwise. `z` is nullable because `mean` and `sd` may be undefined on empty/insufficient observations. The comparison used for `unusual` therefore also yields a nullable Boolean. The final table retains that optional Boolean unless the analyst handles its missing values explicitly. The source must never silently convert missing values to zero.
 
-These are ordinary functions. `derive` binds named expressions in sequence. `unusual` sees the `z` defined immediately before it. The compiler must lower this correctly even when Polars requires multiple `with_columns` stages.
+These are ordinary functions. `mutate` binds named expressions in sequence. `unusual` sees the `z` defined immediately before it. The compiler must lower this correctly even when Polars requires multiple `with_columns` stages.
 
 ### 2.2 Surface language principles
 
@@ -126,8 +126,8 @@ These are ordinary functions. `derive` binds named expressions in sequence. `unu
 - `==` tests equality; `=` binds/assigns in declarations and named arguments. Expressions are immutable.
 - Use `if condition then yes else no` and `match expression { pattern => value, ... }` for ML-style control flow.
 - Names, types, modules and function definitions are first-class programming concepts, not a series of table macros.
-- `derive`, `filter`, `select`, `summarize` and `join` are typed standard-library forms elaborated with column scopes, not five separate embedded languages.
-- `derive` is the only name for add-derived-column behavior. Do not introduce `mutate` as a second synonymous operation. Column replacement is a distinct `replace` operation.
+- `mutate`, `filter`, `select`, `summarize` and `join` are typed standard-library forms elaborated with column scopes, not five separate embedded languages.
+- `mutate` adds or replaces columns, as in dplyr. There is no `derive` or `replace` synonym. The static schema already shows when a binding replaces an existing column, and any type change it causes surfaces at later uses.
 
 ### 2.3 Column scope and captures
 
@@ -139,7 +139,7 @@ let revenue = 999.0
 
 let high = sales
   |> filter(revenue > ^threshold)       # revenue is column; threshold is captured
-  |> derive(
+  |> mutate(
        ratio = $revenue / ^revenue      # explicit column and outer variable
      )
 ```
@@ -149,13 +149,13 @@ For stability, the compiler must record the resolved symbol ID, not re-resolve n
 ### 2.4 Sequential assignments
 
 ```text
-sales |> derive(
+sales |> mutate(
   net = revenue - coalesce(cost, 0.0),
   rate = net / revenue
 )
 ```
 
-This is an ordered sequence of column bindings, not a simultaneously evaluated record literal. `derive` MUST reject redefining an existing column name; `replace` MUST require an existing name and replace it sequentially. The compiler's typed IR must represent each binding as a separate step (later optimization may fuse steps when safe).
+This is an ordered sequence of column bindings, not a simultaneously evaluated record literal. A binding to a new name appends a column. A binding to an existing name replaces that column in place and keeps its schema position. Each binding sees the ones before it. The compiler's typed IR must represent each binding as a separate step (later optimization may fuse steps when safe).
 
 ### 2.5 Names, ranges and selectors
 
@@ -254,7 +254,7 @@ statement_end    = newline_at_top_level | ";" | end_of_file ;
 
 `~` builds a formula value: two-sided `y ~ x + z` or one-sided `~ group`. The checker does not evaluate either side as ordinary expressions. A model or graphics library elaborates a formula against a table schema, exactly as verbs elaborate their column arguments, so `lm(y ~ x)` and `aes(x = revenue)` need no further grammar. Until such a library is loaded, any use of a formula is a type error that says formulas are reserved.
 
-The grammar does **not** define the meaning of `select`, `derive`, `plot`, `model`, or other libraries. Column-scope insertion, selector interpretation and typed aggregate contexts happen during elaboration, based on standard-library signatures. Syntax recovery may insert hole nodes beyond this complete-program grammar.
+The grammar does **not** define the meaning of `select`, `mutate`, `plot`, `model`, or other libraries. Column-scope insertion, selector interpretation and typed aggregate contexts happen during elaboration, based on standard-library signatures. Syntax recovery may insert hole nodes beyond this complete-program grammar.
 
 ### 3.3 Operator precedence and evaluation
 
@@ -295,7 +295,7 @@ The type system has immutable records, algebraic data types, pattern matching, t
 A reusable transformation should infer only the fields it needs and preserve unrelated fields:
 
 ```text
-let add_net(df) = df |> derive(net = revenue - cost)
+let add_net(df) = df |> mutate(net = revenue - cost)
 ```
 
 Conceptual signature, with `net` absent from the input row:
@@ -322,7 +322,7 @@ For every operation, provide a documented schema transformer in the typed standa
 - A plain `A` may be injected as `Some(A)` when an expected `Option<A>` argument makes that conversion unambiguous. There is no implicit conversion from `Option<A>` to `A`.
 - `coalesce`, `is_some`, `is_none`, and `match` allow explicit handling. The compiler must never auto-fill missing numeric values with zero.
 
-For Boolean filtering, **v0.1 chooses strictness:** `filter` requires a nonnullable Boolean predicate. `filter(is_some(value) and coalesce(value > 0, false))` is valid; `filter(value > 0)` is rejected if `value` is nullable and produces `Option<Bool>`. A future `filter(..., missing = drop)` convenience is possible but may not silently change this default.
+For Boolean filtering, **rupam requires the analyst to say what an unknown predicate means.** A nonnullable predicate needs nothing more. An optional predicate needs `missing = drop` (unknown rows are removed, as dplyr does silently) or `missing = keep`. `filter(value > 0)` on a nullable `value` without `missing =` is a static error that names the nullable input, explains why the predicate can be unknown, and shows both spellings of the fix. `coalesce(value > 0, false)` remains equivalent to `missing = drop`.
 
 ### 4.4 Expression shapes and context
 
@@ -342,7 +342,7 @@ A whole-column function can be inferred naturally:
 let standardize(x) = (x - mean(x)) / sd(x)
 ```
 
-Here `mean` and `sd` require a column, so `x` is inferred as a columnar input. `mean` and `sd` are reductions with scalar, potentially missing results. Their results broadcast to the row context in subtraction/division. In `derive(..., by = region)`, they are evaluated within each region's group. Outside grouping, they cover the whole table.
+Here `mean` and `sd` require a column, so `x` is inferred as a columnar input. `mean` and `sd` are reductions with scalar, potentially missing results. Their results broadcast to the row context in subtraction/division. In `mutate(..., by = region)`, they are evaluated within each region's group. Outside grouping, they cover the whole table.
 
 A scalar function remains a scalar function:
 
@@ -397,7 +397,7 @@ A reference evaluator on small in-memory tables defines the expected answers. Gu
 
 Track key constraints as table refinements with provenance: declared, metadata-checked, value-validated, inferred by safe transformation, or unknown. A validated `primary_key` is nonnullable and unique; a validated `unique` field is unique among present values but may still be nullable according to data-dict's rules. Composite keys are essential.
 
-`filter` preserves previously established uniqueness constraints. `derive` preserves keys unless it replaces relevant columns. `summarize(..., by = (a, b))` establishes uniqueness of its grouping key tuple, subject to the null/grouping policy. A join can multiply rows depending on cardinality; preserve uniqueness only when the join's verified cardinality proves it. This is an analysis aid, not permission to assume unvalidated external constraints.
+`filter` preserves previously established uniqueness constraints. `mutate` preserves keys unless it replaces relevant columns. `summarize(..., by = (a, b))` establishes uniqueness of its grouping key tuple, subject to the null/grouping policy. A join can multiply rows depending on cardinality; preserve uniqueness only when the join's verified cardinality proves it. This is an analysis aid, not permission to assume unvalidated external constraints.
 
 ### 4.8 Dynamic schema boundary
 
@@ -546,10 +546,9 @@ The table API is intentionally small. Each operation has a typed input/output sc
 
 | Operation | Normative meaning |
 |---|---|
-| `filter(predicate)` | Retain rows whose **nonnullable** Boolean predicate is true; no ordering promise. |
+| `filter(predicate, missing = ...)` | Retain rows whose Boolean predicate is true; no ordering promise. An optional predicate requires `missing = drop` or `missing = keep`, otherwise it is a static error. |
 | `select(selector, ...)` | Retain/reorder/rename named fields, resolved against schema. |
-| `derive(name = expr, ...)` | Add new columns in **source order**; new fields may reference earlier fields; reject collisions. |
-| `replace(name = expr, ...)` | Explicit sequential replacement of existing named fields; reject absent fields. |
+| `mutate(name = expr, ...)` | Add or replace columns in **source order**; later bindings see earlier ones. |
 | `summarize(name = aggregate, ..., by = selector_or_tuple)` | Return one row per group, with only grouping keys and aggregations. Ungrouped summary returns a single row even for an empty input. |
 | `arrange(key, desc(key), ...)` | Construct an explicitly ordered view; ties unspecified unless keys resolve them. |
 | `join(other, on = ..., how = ...)` | Combine tables on explicit keys/relationships, checking key types, collision policy, nullability and cardinality. |
@@ -558,9 +557,9 @@ The table API is intentionally small. Each operation has a typed input/output sc
 | `pivot_wider` | Statically typed only with enumerated output fields; otherwise dynamic schema boundary. |
 | `rename(old = new)` | Rename existing columns without changing their values. |
 
-`group_by` may exist as a higher-order helper later, but persistent grouped-table state is **not** part of v0.1. `summarize(..., by = region)` and `derive(..., by = region)` explicitly define aggregate partitioning. This avoids inheriting incompatible backend grouping lifetimes.
+`group_by` may exist as a higher-order helper later, but persistent grouped-table state is **not** part of v0.1. `summarize(..., by = region)` and `mutate(..., by = region)` explicitly define aggregate partitioning. This avoids inheriting incompatible backend grouping lifetimes.
 
-A `derive(..., by = region)` expression may combine a row value and an aggregate over its group, such as `relative = revenue / mean(revenue)`. The compiler must lower that as a partitioned/window-like expression or a semantics-preserving join back to the original rows.
+A `mutate(..., by = region)` expression may combine a row value and an aggregate over its group, such as `relative = revenue / mean(revenue)`. The compiler must lower that as a partitioned/window-like expression or a semantics-preserving join back to the original rows.
 
 ### 6.2 Joins
 
@@ -637,7 +636,7 @@ Native R does not offer the same exact 64-bit integer arithmetic as the source l
 
 Generate clean `polars` LazyFrame pipelines and native `Expr` operations where possible. Polars UDF/callback APIs are a **fallback**, not the default lowering of all functions. They require declared return types and purity, and may be invoked on batches. Whole-column functions (e.g. `standardize`) must not be naively sent to a batch callback if batch boundaries would change their meaning; use an aggregate/window expression or materialize a whole column at an explicit boundary.
 
-Polars' conditional expressions may evaluate both branches: unsafe branches must be guarded or lowered through a semantics-preserving fallback. Sequential `derive` bindings may require successive `with_columns` calls. Report materialization boundaries and callback warnings in `:explain` and build diagnostics.
+Polars' conditional expressions may evaluate both branches: unsafe branches must be guarded or lowered through a semantics-preserving fallback. Sequential `mutate` bindings may require successive `with_columns` calls. Report materialization boundaries and callback warnings in `:explain` and build diagnostics.
 
 ### 7.5 Generated script contract
 
@@ -721,12 +720,12 @@ Partial code is an expected editing state, not a catastrophic compiler error. Re
 ```text
 orders
   |> filter(revenue > 0)
-  |> derive(
+  |> mutate(
        margin = revenue - cost,
        z = standardize(
 ```
 
-The parser should recover an AST containing a hole for the missing argument/expression. The checker retains the schema of the complete `filter` stage and, when possible, the type of the completed `margin` binding. It may display constraints on the `z` hole. It must not execute the unfinished `derive` or pretend the hole has a value. The user may preview the complete filter prefix and inspect any valid bound data from earlier revisions.
+The parser should recover an AST containing a hole for the missing argument/expression. The checker retains the schema of the complete `filter` stage and, when possible, the type of the completed `margin` binding. It may display constraints on the `z` hole. It must not execute the unfinished `mutate` or pretend the hole has a value. The user may preview the complete filter prefix and inspect any valid bound data from earlier revisions.
 
 The initial implementation does **not** need the full theoretical semantics of Hazel's maximally live incomplete programs. A principled conservative recovery model is sufficient if it preserves useful completions and valid-prefix execution, never fabricates data, and labels uncertainty accurately. Improve to richer live typed-hole evaluation later.
 
@@ -760,7 +759,25 @@ ds contract validate data-dict.yaml
 
 `check` parses, resolves, type-checks and prepares contracts without reading full data (except metadata as permitted). `run` executes the checked script through the selected backend and enforces validation. `build` emits code, source map, manifest, and any compatibility helpers, without silently executing data. `explain` reports the typed plan, fidelity and potential fallbacks. `fmt` is deterministic.
 
-Use a minimal project manifest to pin the language/compiler, backend versions and source files. This project manifest is **not** a replacement for the data-dict YAML contract. Ordinary scripts remain runnable without a project manifest in simple local scenarios.
+A project is a directory with a `rupam.toml`. It is **not** a replacement for the data-dict YAML contract.
+
+```toml
+[project]
+name = "clinic"
+rupam = "0.1"
+
+[target]
+dialect = "r-dplyr"        # what :preview, run and compile use by default
+
+[check]
+strict = true              # the default; false permits target-specific code
+```
+
+**REQUIRED.** There is no built-in default dialect. The REPL, `run` and `compile` take the dialect from `--target`, else from `rupam.toml`, else they stop with a message that shows both ways to set it. Type checking, `:type`, `:schema` and `:explain` never need a dialect.
+
+**REQUIRED.** Strict mode is the default. A strict program may contain only portable rupam: no foreign imports, no target capabilities such as `polars.sqrt`, nothing whose meaning depends on the dialect. Consequently a strict program previewed under one dialect and compiled to another must produce the same results, up to the documented floating-point summation tolerance, or fail to compile for a dialect that cannot reproduce it. `strict = false` (or `--no-strict`) permits typed foreign imports and target capabilities, records each one in the manifest, and makes the program compile only for dialects that provide them.
+
+Ordinary scripts remain checkable and formattable without a `rupam.toml`.
 
 Source extension, CLI name and exact manifest filename may change once in an early documented ADR. Surface syntax and semantics should not drift based on tool naming preferences.
 
@@ -846,15 +863,15 @@ The agent must turn the following into executable fixtures. Expected behavior is
 | ID | Source or scenario | Required outcome |
 |---|---|---|
 | T01 | `let square(x) = x*x; square(3)` | Scalar `Int64` result `9`, subject to checked arithmetic. |
-| T02 | `derive(s = square(revenue))` | Automatically lifted numeric column; type inferred. |
-| T03 | `derive(s = square(nullable_cost))` | `s` is nullable; missing values remain missing. |
-| T04 | `derive(s = coalesce(nullable_cost, 0.0))` | `s` is nonnullable; explicit zero replacement. |
-| T05 | `derive(a = revenue + 1, b = a * 2)` | Sequential binding; `b` uses the new `a`; native backends agree. |
-| T06 | `derive(revenue = revenue + 1)` | Error: existing field; suggest `replace`. |
+| T02 | `mutate(s = square(revenue))` | Automatically lifted numeric column; type inferred. |
+| T03 | `mutate(s = square(nullable_cost))` | `s` is nullable; missing values remain missing. |
+| T04 | `mutate(s = coalesce(nullable_cost, 0.0))` | `s` is nonnullable; explicit zero replacement. |
+| T05 | `mutate(a = revenue + 1, b = a * 2)` | Sequential binding; `b` uses the new `a`; native backends agree. |
+| T06 | `mutate(revenue = revenue + 1)` | Replaces `revenue` in place, keeping its position; later stages see the new values. |
 | T07 | `filter(nullable_cost > 0)` | Static error: nullable predicate; do not silently drop missing. |
 | T08 | `select(region:cost)` | Select named inclusive schema range; no row-order implication. |
 | T09 | `select(missing_column)` | Static unknown-column diagnostic with suggestions. |
-| T10 | `let revenue = 3; derive(a = revenue, b = ^revenue, c = $revenue)` | `a,c` refer to column; `b` to lexical value, with resolved-symbol diagnostics. |
+| T10 | `let revenue = 3; mutate(a = revenue, b = ^revenue, c = $revenue)` | `a,c` refer to column; `b` to lexical value, with resolved-symbol diagnostics. |
 | T11 | `let normalize(x) = (x - mean(x))/sd(x)` applied to a column | Whole-column/aggregate semantics; result typed nullable where appropriate. |
 | T12 | `f(col_a, col_b)` from different unrelated table contexts | Static provenance/alignment error unless explicitly joined. |
 | T13 | `sum(x)` on empty/all-null group | Returns `None`; R and Polars must not substitute `0`. |
@@ -868,7 +885,7 @@ The agent must turn the following into executable fixtures. Expected behavior is
 | T21 | Contract with `range: [0, 100]`, observed value 101 | No failure solely for exceeding representative range; an explicit assertion is needed. |
 | T22 | Source changed after successful validation | Validation proof invalidated; no stale verification badge. |
 | T23 | Restricted column in a contracted source | Hidden from default preview/value completion/export and errors containing samples. |
-| T24 | A partial `derive(..., z = fn(` expression | Parser recovery; valid prefix and earlier bindings remain inspectable; incomplete stage not executed. |
+| T24 | A partial `mutate(..., z = fn(` expression | Parser recovery; valid prefix and earlier bindings remain inspectable; incomplete stage not executed. |
 | T25 | Pure function unsupported as native Polars expression | Correct callback/materialization fallback plus warning; no semantic drift. |
 | T26 | Conditional branch that would throw if evaluated when not selected | Backend implementation must not execute the unselected branch for affected row. |
 | T27 | Target-specific function used without opt-in | Compile failure naming capability and target. |
@@ -894,11 +911,11 @@ The following order keeps the language interactive from early prototypes without
 
 Deliver: parser and formatter for the canonical samples; a type checker supporting primitive values, functions, records, optional values, named table rows and at least basic row polymorphism; an explicit elaboration pass for scalar-to-column lifting and whole-column reducers; a small reference evaluator; diagnostics with source spans. Include failing tests and the beginning of B2T2 coverage.
 
-**Gate:** `standardize(revenue)` and `square(revenue)` are both inferred and elaborated in a principled way; `derive` outputs a correct schema, and `filter` rejects a nullable predicate. If type inference relies on special-case pattern matching for these exact sample functions, M0 fails.
+**Gate:** `standardize(revenue)` and `square(revenue)` are both inferred and elaborated in a principled way; `mutate` outputs a correct schema, and `filter` rejects a nullable predicate. If type inference relies on special-case pattern matching for these exact sample functions, M0 fails.
 
 ### M1: contracted R vertical slice and usable REPL
 
-Deliver: `use contract`, upstream data-dict `export-spec` and validation integration, a persistent R session, source-to-tidyverse lowering for `filter`, `select`, `derive`, `replace`, `summarize`, `arrange`, `count`, `sum`, `mean`, and basic `join`; terminal `:type`, `:schema`, `:preview`, `:validate`, `:code r`, `:explain`; full contract preflight before materialization; portable script output; simple but functional table inspector.
+Deliver: `use contract`, upstream data-dict `export-spec` and validation integration, a persistent R session, source-to-tidyverse lowering for `filter`, `select`, `mutate`, `summarize`, `arrange`, `count`, `sum`, `mean`, and basic `join`; terminal `:type`, `:schema`, `:preview`, `:validate`, `:code r`, `:explain`; full contract preflight before materialization; portable script output; simple but functional table inspector.
 
 **Gate:** an analyst can load a Parquet source through a real data-dict file, write and revise a typed pipeline in the REPL, preview it, and generate and execute the same R script without manually rewriting any transformation. Invalid sources fail before exposure of contract-dependent results.
 
@@ -912,7 +929,7 @@ Deliver: Python/Polars lowering, persistent worker, dual-backend code generation
 
 Deliver: recovery-capable incomplete programs, typed holes, valid-prefix evaluation, revisioned bindings and stale-state handling, schema-driven completion, useful nullability/join diagnostics, fast incremental feedback, rich independent TUI/table inspector, cancellation and bounded preview caching. Add an LSP interface for editors after terminal usability is established.
 
-**Gate:** while editing a broken `derive`, the user can inspect the valid prefix and previously computed outputs, see type constraints around the hole, and continue without restarting the session. Source/contract changes invalidate exactly the affected proof/cache state.
+**Gate:** while editing a broken `mutate`, the user can inspect the valid prefix and previously computed outputs, see type constraints around the hole, and continue without restarting the session. Source/contract changes invalidate exactly the affected proof/cache state.
 
 ### M4: broaden core table semantics, harden conformance
 
@@ -933,7 +950,7 @@ Aim for sub-200 ms incremental type/schema feedback for typical interactive edit
 1. **No implicit row order.** `arrange`/explicit ordered windows are the only routes to order-sensitive semantics.
 2. **No positional dataframe access.** Names and named ranges only.
 3. **One call syntax.** `f(a, b, name = c)` everywhere; no bespoke dplyr-like parser for individual verbs.
-4. **`derive` means sequential additions.** Existing-name replacement uses `replace`.
+4. **`mutate` follows dplyr.** It adds or replaces columns in source order, with no second synonym.
 5. **Column scope is explicit and stable.** Bare names in value position prefer fields; `^` is lexical, `$` is column, with collision diagnostics.
 6. **Strict Option types.** Null is not NaN and missing values are not automatically filled.
 7. **Automatic lifting exists.** It is a type/shape elaboration pass, not a target-specific runtime trick. Ordinary `List<T>` uses `map`.

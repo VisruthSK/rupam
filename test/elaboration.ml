@@ -25,13 +25,13 @@ let () =
   let open Rupam in
   let source =
     "let square(x) = x*x; let normalize(y) = (y-mean(y))/sd(y); \
-     derive(a=square(revenue), b=normalize(a))"
+     mutate(a=square(revenue), b=normalize(a))"
   in
   match Frontend.parse (Lexing.from_string source) with
   | [ f; g; Syntax.Evaluate { form = Call (_, args); _ } ] ->
     let env = Check.define (Check.define [] f) g in
     let revenue = input 0 { primitive = Float64; nullable = false; shape = Column 1 } in
-    let schema = Check.derive env [ "revenue", revenue ] args in
+    let schema = Check.mutate env [ "revenue", revenue ] args in
     assert ((List.assoc "a" schema).typ = revenue.typ);
     assert (List.assoc "b" schema).typ.nullable
   | _ -> failwith "unexpected program"
@@ -54,7 +54,7 @@ let () =
   let open Rupam in
   let open Column_eval in
   let source =
-    "let margin(x, y) = x - coalesce(y, 0.0); derive(m=margin(revenue,cost), \
+    "let margin(x, y) = x - coalesce(y, 0.0); mutate(m=margin(revenue,cost), \
      z=(m-mean(m))/sd(m))"
   in
   let ty nullable = { primitive = Float64; nullable; shape = Column 1 } in
@@ -63,7 +63,7 @@ let () =
   in
   match Frontend.parse (Lexing.from_string source) with
   | [ f; Syntax.Evaluate { form = Call (_, args); _ } ] ->
-    let schema = Check.derive (Check.define [] f) columns args in
+    let schema = Check.mutate (Check.define [] f) columns args in
     let input = function
       | 0 -> Many [| F 3.; F 5.; F 9. |]
       | 1 -> Many [| Missing; F 0.; F 2. |]
@@ -87,14 +87,14 @@ let () =
   let open Column_eval in
   let p =
     plan
-      "orders |> derive(net = coalesce(cost, 0.0), tax = net * 0.5) |> filter(id > 1) |> \
+      "orders |> mutate(net = coalesce(cost, 0.0), tax = net * 0.5) |> filter(id > 1) |> \
        select(net:tax)"
   in
   assert (
     Table.execute p ~rows:3 [ [| I 1L; I 2L; I 3L |]; [| F 8.; Missing; F 4. |] ]
     = (2, [ "net", [| F 0.; F 4. |]; "tax", [| F 0.; F 2. |] ]));
   rejects (fun () -> plan "orders |> filter(cost > 0.0)");
-  rejects (fun () -> plan "orders |> derive(id = 2)");
+  ignore (plan "orders |> mutate(id = id + 1)");
   rejects (fun () -> plan "orders |> select(typo)")
 ;;
 
@@ -169,7 +169,7 @@ let () =
 
 let () =
   let open Rupam in
-  let incomplete = "let t = sales |> filter(revenue > 0.0) |> derive(z = fn(" in
+  let incomplete = "let t = sales |> filter(revenue > 0.0) |> mutate(z = fn(" in
   match Frontend.valid_prefix incomplete with
   | Some (text, [ Syntax.Let ("t", None, _) ]) ->
     assert (text = "let t = sales |> filter(revenue > 0.0)")
@@ -197,10 +197,10 @@ let () =
     | [ Syntax.Evaluate e ] -> Table.pipeline [] [ "sales", sales ] e
     | _ -> assert false
   in
-  let p = plan "sales |> derive(a=revenue+1,b=a*2) |> select(b)" in
+  let p = plan "sales |> mutate(a=revenue+1,b=a*2) |> select(b)" in
   assert (Table.execute p ~rows:1 [ [| F 3. |]; [| I 1L |] ] = (1, [ "b", [| F 8. |] ]));
-  rejects (fun () -> plan "sales |> derive(b=revenue+id)");
-  rejects (fun () -> plan "sales |> derive(b=revenue+9007199254740993)")
+  rejects (fun () -> plan "sales |> mutate(b=revenue+id)");
+  rejects (fun () -> plan "sales |> mutate(b=revenue+9007199254740993)")
 ;;
 
 let () =

@@ -214,7 +214,7 @@ let rec table ?(annotate = Source_map.plain) d =
   | plan -> base ^ " |>\n  " ^ plan
 ;;
 
-let compile ?(annotate = Source_map.plain) ~directory declarations =
+let compile ?(annotate = Source_map.plain) ?strict ~directory declarations =
   let emit (d, path) =
     let d = Analysis_program.public_view d in
     Printf.sprintf
@@ -223,10 +223,12 @@ let compile ?(annotate = Source_map.plain) ~directory declarations =
       (q path)
   in
   preamble
-  ^ String.concat "\n" (List.map emit (Analysis_program.compile ~directory declarations))
+  ^ String.concat
+      "\n"
+      (List.map emit (Analysis_program.compile ?strict ~directory declarations))
 ;;
 
-let preview_page d ~offset ~limit =
+let preview_page ~runtime d ~offset ~limit =
   let d = Analysis_program.public_view d in
   let script =
     Printf.sprintf
@@ -238,5 +240,5 @@ let preview_page d ~offset ~limit =
       limit
   in
   print_endline (if d.plan.ordered then "Ordered preview" else "Unordered preview");
-  Worker.run "r" script
+  Worker.run runtime Runtime.R script
 ;;

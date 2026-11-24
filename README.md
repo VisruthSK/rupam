@@ -13,7 +13,7 @@ let standardize(x) = (x - mean(x)) / sd(x)
 let regional =
   load(shop.orders)
   |> filter(revenue > 0.0)
-  |> derive(margin = revenue - coalesce(cost, 0.0), z = standardize(margin))
+  |> mutate(margin = revenue - coalesce(cost, 0.0), z = standardize(margin))
   |> summarize(transactions = count(), total = sum(margin), by = region)
   |> arrange(desc(total), region)
 
@@ -34,11 +34,10 @@ on x86-64 and ARM, and for Windows on x86-64. The binary is self-contained:
 it embeds [DuckDB](https://duckdb.org) 2.0, which rupam uses to read Parquet,
 CSV and TSV files.
 
-Running generated scripts, or previewing through `:backend r` or
-`:backend python`, needs that language installed, plus the data-dict CLI for
-contract validation. For Python, `uv sync` in this repository installs
-`polars` and `data-dict`. For R, install `dplyr`, `tidyr`, `bit64`, `gmp`,
-`jsonlite` and `nanoparquet`.
+Previews and `rupam run` execute the generated script, so they need the target
+language installed, plus the data-dict CLI for contract validation. The
+`python-polars` dialect needs `polars` and `data-dict`. The `r-dplyr` dialect
+needs `dplyr`, `tidyr`, `bit64`, `gmp`, `jsonlite` and `nanoparquet`.
 
 ### From source
 
@@ -50,20 +49,43 @@ opam install . --deps-only --with-test --with-dev-setup
 opam pin add rupam .
 ```
 
+## Projects
+
+A project is a directory with a `rupam.toml`:
+
+```toml
+[target]
+dialect = "r-dplyr"       # or "python-polars"
+
+[check]
+strict = true             # the default; false allows target-specific code
+```
+
+There is no default dialect. Commands that execute or compile take it from
+`--target` or from `rupam.toml`. Previews run the same script that
+`rupam compile` writes, so what you see in the REPL is what the script
+produces. In strict mode a program is portable, and every dialect must give
+the same result or refuse to compile.
+
+If the project directory holds a `pyproject.toml` or `uv.lock`, Python runs
+through `uv run`. If it holds a `renv.lock`, R loads that renv library first.
+Previews and runs then use exactly the packages the project pins.
+
 ## Use
 
 ```sh
-rupam                                # empty REPL
-rupam repl examples/shop.rp          # REPL with a program loaded
-uv run rupam run examples/shop.rp    # check, validate and execute
-rupam compile r examples/shop.rp     # print a standalone R script
-rupam compile python examples/shop.rp -o shop.py
+rupam                                    # empty REPL
+rupam repl examples/shop.rp              # REPL with a program loaded
+rupam run examples/shop.rp               # compile, validate and execute
+rupam compile examples/shop.rp           # print the standalone script
+rupam compile examples/shop.rp -o shop.R # script plus manifest and source map
 rupam fmt examples/shop.rp
 ```
 
-`compile -o` also writes a JSON manifest (dependencies, validation steps,
-fidelity notes) and a source map back to the `.rp` file. `rupam --help`
-lists every command.
+Each of these takes `--target r-dplyr` or `--target python-polars` when there
+is no `rupam.toml`. `compile -o` also writes a JSON manifest (dependencies,
+validation steps, fidelity notes) and a source map back to the `.rp` file.
+`rupam --help` lists every command.
 
 ## Documentation
 

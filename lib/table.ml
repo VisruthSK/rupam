@@ -253,7 +253,7 @@ let transform env table verb arguments =
     let predicate = Check.expression env table.schema x in
     Shape.filter table.context predicate;
     { table with ordered = false; steps = Filter predicate :: table.steps }
-  | ("derive" | "replace"), _ ->
+  | "mutate", _ ->
     let by, arguments = List.partition (fun (n, _) -> n = Some "by") arguments in
     let keys = grouping table by in
     List.fold_left
@@ -264,9 +264,6 @@ let transform env table verb arguments =
            | None -> raise (Error "Expected named binding")
          in
          let exists = List.mem_assoc n table.schema in
-         if exists && verb = "derive"
-         then raise (Error ("Column " ^ n ^ " exists. Use replace."));
-         if (not exists) && verb = "replace" then raise (Error ("Unknown column " ^ n));
          let value =
            broadcast (Column table.context) (Check.expression env table.schema x)
          in

@@ -30,8 +30,8 @@ abandons the current line, Ctrl-D leaves, and Ctrl-L clears the screen.
 | `:explain TABLE` | the plan, including validation and any callback fallbacks |
 | `:contract TABLE` | which contract and table a value comes from |
 | `:validate TABLE` | runs data-dict validation now |
-| `:code r TABLE`, `:code python TABLE` | the generated script for one table |
-| `:backend r`, `:backend python` | the engine behind `:preview` and `:inspect` |
+| `:code DIALECT TABLE` | the generated script for one table |
+| `:target r-dplyr`, `:target python-polars` | the dialect behind `:preview` and `:inspect`; starts from `rupam.toml` or `--target` |
 | `:bindings` | everything defined so far |
 | `:reload` | re-reads the file you started with |
 | `:help` | this list |
@@ -48,7 +48,7 @@ so far and prints its schema, so you can see what the next stage will receive
 before you finish writing it:
 
 ```text
-rupam> let t = orders |> filter(revenue > 0.0) |> derive(z = standardize(
+rupam> let t = orders |> filter(revenue > 0.0) |> mutate(z = standardize(
   ... :prefix
 let t = orders |> filter(revenue > 0.0)
 customer_id : Int64

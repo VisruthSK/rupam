@@ -1,9 +1,5 @@
 open Rupam
 
-type backend =
-  | R
-  | Python
-
 type view =
   | Schema
   | Preview
@@ -18,10 +14,10 @@ type command =
   | Reload
   | Bindings
   | Clear
-  | Use of backend
+  | Target of Project.dialect
   | Type of string
   | View of view * string
-  | Code of backend * string
+  | Code of Project.dialect * string
   | Source of string
 
 let views =
@@ -34,8 +30,6 @@ let views =
   ]
 ;;
 
-let backends = [ "r", R; "python", Python ]
-
 let help =
   [ ":type EXPR", "inferred type, without running anything"
   ; ":schema TABLE", "fields, types and nullability"
@@ -44,8 +38,8 @@ let help =
   ; ":explain TABLE", "relational plan and lowering notes"
   ; ":contract TABLE", "contract source and validation status"
   ; ":validate TABLE", "run data-dict validation now"
-  ; ":code r|python TABLE", "generated script for a table"
-  ; ":backend r|python", "engine used by :preview and :inspect"
+  ; ":code DIALECT TABLE", "generated script for a table"
+  ; ":target DIALECT", "r-dplyr or python-polars, used by :preview and :inspect"
   ; ":bindings", "everything defined in this session"
   ; ":prefix", "inside an unfinished input: check the complete part"
   ; ":reload", "re-read the loaded file"
@@ -66,10 +60,16 @@ let parse line =
       String.sub line 0 i, String.trim (String.sub line i (String.length line - i))
     | None -> line, ""
   in
-  let backend name =
-    match List.assoc_opt name backends with
-    | Some b -> Ok b
-    | None -> Error ("Unknown backend " ^ name ^ ". Expected r or python.")
+  let dialect name =
+    match List.assoc_opt name Project.dialects with
+    | Some d -> Ok d
+    | None ->
+      Error
+        ("Unknown dialect "
+         ^ name
+         ^ ". Expected "
+         ^ String.concat " or " (List.map fst Project.dialects)
+         ^ ".")
   in
   let needs what k =
     if rest = "" then Error (verb ^ " expects " ^ what) else Ok (k rest)
@@ -83,15 +83,15 @@ let parse line =
     | "reload" -> Ok Reload
     | "bindings" -> Ok Bindings
     | "clear" -> Ok Clear
-    | "backend" -> Result.map (fun b -> Use b) (backend rest)
+    | "target" -> Result.map (fun d -> Target d) (dialect rest)
     | "type" | "t" -> needs "an expression" (fun x -> Type x)
     | "code" ->
       (match String.index_opt rest ' ' with
        | Some i ->
          Result.map
            (fun b -> Code (b, String.trim (String.sub rest i (String.length rest - i))))
-           (backend (String.sub rest 0 i))
-       | None -> Error ":code expects a backend and a table")
+           (dialect (String.sub rest 0 i))
+       | None -> Error ":code expects a dialect and a table")
     | name ->
       (match List.assoc_opt name views with
        | Some v -> needs "a table" (fun x -> View (v, x))
@@ -162,7 +162,7 @@ type session =
   ; tables : Analysis_program.environment
   ; lexical : Check.env
   ; directory : string
-  ; backend : backend
+  ; project : Project.t
   ; source_path : string option
   }
 
@@ -172,7 +172,7 @@ let empty =
   ; tables = []
   ; lexical = []
   ; directory = "."
-  ; backend = Python
+  ; project = Project.standalone
   ; source_path = None
   }
 ;;
@@ -183,7 +183,12 @@ let submit state ds =
   then (
     let inputs = if contracted state.history then ds else history in
     let tables, lexical, _ =
-      Analysis_program.extend ~directory:state.directory state.tables state.lexical inputs
+      Analysis_program.extend
+        ~strict:state.project.strict
+        ~directory:state.directory
+        state.tables
+        state.lexical
+        inputs
     in
     { state with history; tables; lexical })
   else { state with scalar = echo state.scalar ds; history }
@@ -256,7 +261,10 @@ let show_prefix state source =
          if contracted (state.history @ ds)
          then (
            let bindings, _ =
-             Analysis_program.analyze ~directory:state.directory (state.history @ ds)
+             Analysis_program.analyze
+               ~strict:state.project.strict
+               ~directory:state.directory
+               (state.history @ ds)
            in
            match List.rev ds with
            | Syntax.Let (n, _, _) :: _ ->
@@ -296,9 +304,11 @@ let page_width = 8
 
 let browse state view d =
   let page =
-    match state.backend with
-    | R -> Tidyverse.preview_page
-    | Python -> Analysis_program.preview_page
+    let dialect = Project.require_dialect state.project in
+    let runtime = Runtime.resolve state.project (Runtime.of_dialect dialect) in
+    match dialect with
+    | R_dplyr -> Tidyverse.preview_page ~runtime
+    | Python_polars -> Analysis_program.preview_page ~runtime
   in
   let d = Analysis_program.public_view d in
   let fields = Table.names d.plan in
@@ -343,7 +353,8 @@ let run state = function
   | Clear ->
     LNoise.clear_screen ();
     Some state
-  | Use backend -> Some { state with backend }
+  | Target dialect ->
+    Some { state with project = { state.project with dialect = Some dialect } }
   | Reload ->
     Some
       (Result.value
@@ -377,14 +388,14 @@ let run state = function
                 (Analysis_program.dataset state.tables state.lexical x))
          | _ -> failwith "Expected one expression"));
     Some state
-  | Code (backend, source) ->
+  | Code (dialect, source) ->
     ignore
       (diagnostic (Lexing.from_string source) (fun () ->
          let d = table state source in
          print_endline
-           (match backend with
-            | R -> Tidyverse.table d
-            | Python -> Analysis_program.python_table d)));
+           (match dialect with
+            | Project.R_dplyr -> Tidyverse.table d
+            | Python_polars -> Analysis_program.python_table d)));
     Some state
   | View (view, source) ->
     ignore
@@ -394,7 +405,10 @@ let run state = function
          | Schema -> Analysis_program.schema d
          | Contract ->
            Printf.printf "%s (%s), values pending\n" d.dictionary.path d.table.name
-         | Validate -> Analysis_program.validate d
+         | Validate ->
+           Analysis_program.validate
+             ~runtime:(Runtime.resolve state.project Runtime.Python)
+             d
          | Explain -> Analysis_program.explain d
          | Preview | Inspect -> browse state view d));
     Some state
@@ -415,7 +429,7 @@ let rec loop state =
      | Ok command -> Option.iter loop (run state command))
 ;;
 
-let start ?path () =
+let start ~project ?path () =
   Sys.catch_break true;
   LNoise.catch_break true;
   LNoise.set_multiline true;
@@ -431,7 +445,7 @@ let start ?path () =
   ignore (LNoise.history_load ~filename:history_file);
   let state =
     match path with
-    | None -> Some empty
+    | None -> Some { empty with project }
     | Some path ->
       let buf =
         Lexing.from_string (In_channel.with_open_text path In_channel.input_all)
@@ -439,7 +453,11 @@ let start ?path () =
       Lexing.set_filename buf path;
       diagnostic buf (fun () ->
         submit
-          { empty with directory = Filename.dirname path; source_path = Some path }
+          { empty with
+            project
+          ; directory = Filename.dirname path
+          ; source_path = Some path
+          }
           (Frontend.parse buf))
       |> Result.to_option
   in

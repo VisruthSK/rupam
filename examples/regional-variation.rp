@@ -2,9 +2,9 @@ use contract "data-dict.yaml" as shop
 
 let orders = load(shop.orders)
 let margins = orders
-  |> derive(margin = revenue - coalesce(cost, 0.0))
-  |> derive(regional_mean = mean(margin), by = region)
-  |> derive(deviation = margin - regional_mean)
+  |> mutate(margin = revenue - coalesce(cost, 0.0))
+  |> mutate(regional_mean = mean(margin), by = region)
+  |> mutate(deviation = margin - regional_mean)
 
 let measurements = margins
   |> select(customer_id, region, margin, deviation)

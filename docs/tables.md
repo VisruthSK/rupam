@@ -30,8 +30,7 @@ left out of previews and generated output.
 | --- | --- |
 | `filter(pred)` | keeps rows where `pred` is `true`; `pred` must be a non-optional `Bool` |
 | `select(a, b)` | keeps and orders columns; also `a:c`, `-a`, `starts_with("x_")`, `where(is_numeric)` |
-| `derive(x = e, y = e2)` | adds columns in order; `y` can use `x`; existing names are an error |
-| `replace(x = e)` | overwrites existing columns; unknown names are an error |
+| `mutate(x = e, y = e2)` | adds or replaces columns in order; `y` can use the new `x` |
 | `rename(old = new)` | renames columns |
 | `summarize(n = count(), s = sum(x), by = k)` | one row per group with the keys and the summaries |
 | `arrange(k, desc(v))` | an explicitly ordered view |
@@ -42,11 +41,11 @@ left out of previews and generated output.
 | `pivot_wider(names_from = k, values_from = v, levels = [a, b])` | the reverse; the output columns must be listed |
 | `save_parquet(t, "out.parquet")` | writes the result |
 
-`derive(..., by = region)` evaluates aggregates per group but keeps every row,
+`mutate(..., by = region)` evaluates aggregates per group but keeps every row,
 which is how you compute a value relative to its group:
 
 ```text
-orders |> derive(relative = revenue / mean(revenue), by = region)
+orders |> mutate(relative = revenue / mean(revenue), by = region)
 ```
 
 `pivot_wider` needs `levels` because a column named after a runtime value
@@ -60,7 +59,7 @@ and to an ordinary binding otherwise. `$name` always means the column and
 
 ```text
 let revenue = 999.0
-orders |> derive(ratio = $revenue / ^revenue)
+orders |> mutate(ratio = $revenue / ^revenue)
 ```
 
 ## Functions over columns
@@ -72,7 +71,7 @@ works out how each call is used:
 let square(x) = x * x
 let standardize(x) = (x - mean(x)) / sd(x)
 
-orders |> derive(a = square(revenue), z = standardize(revenue))
+orders |> mutate(a = square(revenue), z = standardize(revenue))
 ```
 
 `square` is scalar, so it is applied row by row. `standardize` calls the
@@ -98,8 +97,7 @@ string, and rupam never fills it in for you.
 
 ## Generated code
 
-`rupam compile r` emits dplyr; `rupam compile python` emits a Polars lazy
-query. Both reproduce the semantics above, not their library's defaults: R's
+The `r-dplyr` dialect emits dplyr; `python-polars` emits a Polars lazy query. Both reproduce the semantics above, not their library's defaults: R's
 `sum` of nothing is 0 and Polars evaluates both arms of `when/then`, so the
 generated code guards those cases. When a construct has no faithful native
 form (checked `Int64` arithmetic in Polars, for example) the Python target

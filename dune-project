@@ -14,6 +14,7 @@
   menhir
   yojson
   uucp
+  toml
   (cmdliner (>= 2.0))
   linenoise
   (ocamlformat (and :with-dev-setup (= 0.29.0)))))

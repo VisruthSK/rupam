@@ -45,12 +45,11 @@ repeat {
 |}
 ;;
 
-let start backend =
+let start (runtime : Runtime.t) language =
   let argv =
-    match backend with
-    | "python" -> [| "python"; "-u"; "-c"; python |]
-    | "r" -> [| "Rscript"; "--vanilla"; "-e"; r |]
-    | _ -> invalid_arg "Unknown worker backend"
+    match language with
+    | Runtime.Python -> Array.append runtime.command [| "-u"; "-c"; python |]
+    | R -> Array.append runtime.command [| "-e"; runtime.prelude ^ r |]
   in
   let input, requests = Unix.pipe ~cloexec:true () in
   let replies, output = Unix.pipe ~cloexec:true () in
@@ -80,13 +79,14 @@ let stop w =
 let active = Hashtbl.create 2
 let () = at_exit (fun () -> Hashtbl.iter (fun _ w -> stop w) active)
 
-let run backend script =
+let run runtime language script =
+  let key = runtime, language in
   let w =
-    match Hashtbl.find_opt active backend with
+    match Hashtbl.find_opt active key with
     | Some w -> w
     | None ->
-      let w = start backend in
-      Hashtbl.add active backend w;
+      let w = start runtime language in
+      Hashtbl.add active key w;
       w
   in
   w.revision <- w.revision + 1;
@@ -100,7 +100,7 @@ let run backend script =
       Yojson.Basic.from_string (input_line w.replies)
     with
     | exn ->
-      Hashtbl.remove active backend;
+      Hashtbl.remove active key;
       stop w;
       raise exn
   in

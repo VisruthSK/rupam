@@ -192,9 +192,13 @@ let rec dataset env scalars x =
   | _ -> fail x "Expected table expression"
 ;;
 
-let extend ~directory env scalars declarations =
+let extend ?(strict = true) ~directory env scalars declarations =
   let rec loop env scalars outputs = function
     | [] -> env, scalars, List.rev outputs
+    | Import ("polars", _) :: _ when strict ->
+      failwith
+        "import polars is target-specific. Set strict = false under [check] in \
+         rupam.toml, or pass --no-strict"
     | Import ("polars", alias) :: ds ->
       loop env ((alias, Check.Module "polars") :: scalars) outputs ds
     | Import (n, _) :: _ -> failwith ("Unknown module " ^ n)
@@ -228,12 +232,12 @@ let extend ~directory env scalars declarations =
   loop env scalars [] declarations
 ;;
 
-let analyze ~directory declarations =
-  let env, _, outputs = extend ~directory [] [] declarations in
+let analyze ?strict ~directory declarations =
+  let env, _, outputs = extend ?strict ~directory [] [] declarations in
   env, outputs
 ;;
 
-let compile ~directory ds = snd (analyze ~directory ds)
+let compile ?strict ~directory ds = snd (analyze ?strict ~directory ds)
 
 let preamble =
   {|import json
@@ -413,7 +417,7 @@ let rec python_table ?(annotate = Source_map.plain) d =
   Printf.sprintf "(%s\n    %s\n)" base (Polars.lower ~annotate ~fields:d.fields d.plan)
 ;;
 
-let python ?(annotate = Source_map.plain) ~directory declarations =
+let python ?(annotate = Source_map.plain) ?strict ~directory declarations =
   let emit (d, path) =
     let d = public_view d in
     Printf.sprintf
@@ -421,31 +425,8 @@ let python ?(annotate = Source_map.plain) ~directory declarations =
       (python_table ~annotate d)
       (Polars.quoted path)
   in
-  preamble ^ String.concat "\n" (List.map emit (compile ~directory declarations))
+  preamble ^ String.concat "\n" (List.map emit (compile ?strict ~directory declarations))
 ;;
-
-let run_script ~command ~suffix script =
-  let file, channel = Filename.open_temp_file "rupam-" suffix in
-  Fun.protect
-    ~finally:(fun () -> Sys.remove file)
-    (fun () ->
-       Fun.protect
-         ~finally:(fun () -> close_out_noerr channel)
-         (fun () -> output_string channel script);
-       let pid =
-         Unix.create_process
-           command
-           [| command; file |]
-           Unix.stdin
-           Unix.stdout
-           Unix.stderr
-       in
-       match snd (Unix.waitpid [] pid) with
-       | Unix.WEXITED 0 -> ()
-       | _ -> failwith (command ^ " execution failed"))
-;;
-
-let run_python = run_script ~command:"python" ~suffix:".py"
 
 let bound env name =
   match List.assoc_opt name env with
@@ -468,7 +449,7 @@ let schema d =
   print_endline "Contract valid; values pending"
 ;;
 
-let preview_page d ~offset ~limit =
+let preview_page ~runtime d ~offset ~limit =
   let d = public_view d in
   let script =
     preamble
@@ -477,10 +458,8 @@ let preview_page d ~offset ~limit =
     ^ Printf.sprintf ".slice(%d, %d).collect())" offset limit
   in
   print_endline (if d.plan.ordered then "Ordered preview" else "Unordered preview");
-  Worker.run "python" script
+  Worker.run runtime Runtime.Python script
 ;;
-
-let preview d = preview_page d ~offset:0 ~limit:20
 
 let explain d =
   print_endline "Validate a private snapshot before materialization (full source scan)";
@@ -509,7 +488,7 @@ let explain d =
   visit d
 ;;
 
-let validate d =
+let validate ~runtime d =
   let rec sources d =
     match d.join with
     | None -> [ d.dictionary.path ]
@@ -527,6 +506,6 @@ let validate d =
          report['steps']):\n"
       ^ "        raise ValueError('Validation incomplete')\n"
     in
-    run_python script);
+    Runtime.run runtime Runtime.Python script);
   print_endline "Validation passed. Materialization will validate its own snapshot."
 ;;

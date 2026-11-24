@@ -106,13 +106,16 @@ let define env = function
   | _ -> raise (Error "Expected a let declaration")
 ;;
 
-let derive env columns bindings =
+let mutate env columns bindings =
   List.fold_left
     (fun schema (label, source) ->
        match label with
-       | None -> raise (Error "derive requires named columns")
+       | None -> raise (Error "mutate requires named columns")
        | Some name when List.mem_assoc name schema ->
-         raise (Error "Column exists. Use replace.")
+         List.map
+           (fun ((n, _) as field) ->
+              if n = name then n, expression env schema source else field)
+           schema
        | Some name -> schema @ [ name, expression env schema source ])
     columns
     bindings
