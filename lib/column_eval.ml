@@ -48,7 +48,23 @@ let evaluate ~rows ~input expression =
     | Broadcast (_, e) ->
         (match eval e with One v -> Many (Array.make rows v) | Many _ -> raise (Error "Expected scalar"))
     | Binary (op, a, b) -> combine (arithmetic op) (eval a) (eval b)
+    | Choose (c,t,f) ->
+        let branch = function B true -> t | B false -> f | _ -> raise (Error "Expected Bool") in
+        (match eval c with One v -> eval (branch v)
+         | Many vs ->
+             let rec row i x = match x.node with
+               | Broadcast (_,v) -> (match eval v with One v -> v | _ -> assert false)
+               | Input id -> (match input id with Many xs -> xs.(i) | One v -> v)
+               | Binary (op,a,b) -> arithmetic op (row i a) (row i b)
+               | Coalesce (a,b) -> (match row i a with Missing -> row i b | v -> v)
+               | Choose (c,t,f) -> (match row i c with B true -> row i t | B false -> row i f | _ -> assert false)
+               | Polars_sqrt a -> (match row i a with Missing -> Missing | F f -> F (sqrt f) | _ -> assert false)
+               | Abs a -> (match row i a with Missing -> Missing | F v -> F (Float.abs v)
+                   | I v -> I (if v<0L then Integer.sub 0L v else v) | _ -> assert false)
+               | Reduce _ | Constant _ -> (match eval x with One v -> v | _ -> assert false) in
+             Many (Array.mapi (fun i v -> row i (branch v)) vs))
     | Coalesce (a, b) -> combine (fun x y -> if x = Missing then y else x) (eval a) (eval b)
+    | Polars_sqrt e -> map (function Missing -> Missing | F f -> F (sqrt f) | _ -> assert false) (eval e)
     | Abs e -> map (function
         | Missing -> Missing | F x -> F (Float.abs x)
         | I x -> I (if x < 0L then Integer.sub 0L x else x)
@@ -56,4 +72,3 @@ let evaluate ~rows ~input expression =
     | Reduce (r, e) -> (match eval e with Many vs -> One (aggregate r vs)
         | One _ -> raise (Error "Expected column")) in
   eval expression
-

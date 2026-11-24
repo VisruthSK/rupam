@@ -12,7 +12,9 @@ let lower ~fields plan =
     | Constant (`Int i) -> "bit64::as.integer64(" ^ q (Int64.to_string i) ^ ")"
     | Constant (`Float f) -> Printf.sprintf "%.17g" f
     | Constant (`Bool b) -> if b then "TRUE" else "FALSE"
+    | Choose (c,t,f) -> "dplyr::if_else(" ^ emit c ^ ", " ^ emit t ^ ", " ^ emit f ^ ")"
     | Coalesce (a,b) -> "rp_coalesce(" ^ emit a ^ ", " ^ emit b ^ ")"
+    | Polars_sqrt _ -> raise (Error "R target cannot execute the Python capability polars.sqrt")
     | Abs a when a.typ.primitive = Float64 -> "abs(" ^ emit a ^ ")"
     | Abs _ -> raise (Error "R Int64 abs requires checked overflow")
     | Binary (op,a,b) ->
@@ -24,8 +26,20 @@ let lower ~fields plan =
         let f = match r with Mean -> "mean" | Sd -> "sd" | Sum -> "sum" in
         "rp_fold(" ^ emit a ^ ", " ^ f ^ ")" in
   let stage = function
+    | Table.Pivot p ->
+        let ids=List.map fst p.ids in
+        let ls xs="c(" ^ String.concat ", " (List.map q xs) ^ ")" in
+        List.iter bind (ids @ (if p.wider then p.labels else [p.key;p.value]));
+        if p.wider then Printf.sprintf "rp_wider(%s, %s, %s, %s)" (ls ids) (q p.key) (q p.value) (ls p.labels)
+        else Printf.sprintf "tidyr::pivot_longer(all_of(%s), names_to = %s, values_to = %s)" (ls p.labels) (q p.key) (q p.value)
+    | Table.Rename changes ->
+        let pair (a,b,i) = names.(i) <- b; q b ^ " = " ^ q a in
+        "rename(" ^ String.concat ", " (List.map pair changes) ^ ")"
+    | Window (n,x,keys) ->
+        let v = emit x in bind n;
+        "mutate(" ^ q n ^ " := " ^ v ^ ", .by = all_of(c(" ^ String.concat ", " (List.map (fun (k,_) -> q k) keys) ^ ")))"
     | Table.Take n -> Printf.sprintf "slice_head(n = %d)" n
-    | Distinct _ -> "distinct()"
+    | Distinct keys -> "distinct(" ^ String.concat ", " (List.map emit keys) ^ ", .keep_all = TRUE)"
     | Filter x -> "filter(" ^ emit x ^ ")"
     | Select ns -> "select(all_of(c(" ^ String.concat ", " (List.map q ns) ^ ")))"
     | Bind (n,x) -> let v = emit x in bind n; "mutate(" ^ q n ^ " := " ^ v ^ ")"
@@ -42,6 +56,13 @@ let lower ~fields plan =
 
 let preamble = {|library(dplyr)
 
+rp_wider <- function(data, ids, key, value, labels) {
+  if (!all(data[[key]] %in% labels)) stop("Unexpected pivot key")
+  if (anyDuplicated(data[c(ids, key)])) stop("Duplicate pivot cell")
+  data[[key]] <- factor(data[[key]], levels = labels)
+  tidyr::pivot_wider(data, id_cols = all_of(ids), names_from = all_of(key),
+                     values_from = all_of(value), names_expand = TRUE)
+}
 rp_missing <- function(x) is.na(x) & !is.nan(x)
 rp_coalesce <- function(x, y) {
   n <- max(length(x), length(y))
@@ -64,7 +85,7 @@ rp_report <- function(args, path) {
   if (!is.null(attr(output, "status"))) stop("data-dict validation failed")
   jsonlite::fromJSON(paste(output, collapse = "\n"), simplifyVector = FALSE)
 }
-rp_source <- function(path, expected, name) {
+rp_source <- function(path, expected, name, expected_types) {
   root <- tempfile()
   dir.create(root)
   on.exit(unlink(root, recursive = TRUE))
@@ -83,20 +104,46 @@ rp_source <- function(path, expected, name) {
   }
   for (level in c("validate-meta", "validate-data")) {
     report <- rp_report(c(level, "--json"), snapshot)
-    stopifnot(identical(report$status, "ok"), all(vapply(report$steps, function(s) identical(s$outcome, "pass"), logical(1))))
+    stopifnot(identical(report$run$tool$version, "0.0.3"), identical(report$status, "ok"), all(vapply(report$steps, function(s) identical(s$outcome, "pass"), logical(1))))
   }
-  nanoparquet::read_parquet(sources[[name]])
+  fields <- Filter(function(t) identical(t$name, name), model$tables)[[1]]$columns
+  file <- sources[[name]]
+  footer <- nanoparquet::read_parquet_schema(file)
+  footer <- footer[!is.na(footer$r_col), ]
+  types <- c(Int64 = "INT64", Float64 = "DOUBLE", String = "BYTE_ARRAY", Boolean = "BOOLEAN")
+  expected_types <- unlist(jsonlite::fromJSON(expected_types), use.names = TRUE)
+  stopifnot(identical(footer$name, names(expected_types)),
+            identical(footer$type, unname(types[expected_types])))
+  data <- nanoparquet::read_parquet(file, options = nanoparquet::parquet_options(read_int64_type = "double"))
+  for (column in names(expected_types)[expected_types == "Int64"]) {
+    x <- data[[column]]
+    if (any(abs(x) >= 2^53, na.rm = TRUE)) stop("Int64 source exceeds exact nanoparquet conversion range")
+    data[[column]] <- bit64::as.integer64(x)
+  }
+  data[vapply(fields, function(c) c$name, character(1))]
 }
 
 |}
 
+let rec table d =
+  let open Analysis_program in
+  let base = match d.join with
+    | None -> Printf.sprintf "rp_source(%s, %s, %s, %s)" (q d.dictionary.path)
+        (q (Yojson.Basic.to_string d.dictionary.metadata)) (q d.table.name) (q (Yojson.Basic.to_string d.physical_types))
+    | Some (l,r,k,h) -> Printf.sprintf "%s_join(%s, %s, by = %s, na_matches = \"never\")"
+        h (table l) (table r) (q k) in
+  match lower ~fields:d.fields d.plan with "" -> base | plan -> base ^ " |>\n  " ^ plan
+
 let compile ~directory declarations =
   let emit (d,path) =
-    let open Analysis_program in
-    if List.exists (fun (c : Contract.column) -> c.restricted) d.table.columns then
-      failwith "Export of restricted data requires authorization";
-    let pipeline = lower ~fields:d.fields d.plan in
-    Printf.sprintf "rp_source(%s, %s, %s) |>\n  %snanoparquet::write_parquet(%s)\n"
-      (q d.dictionary.path) (q (Yojson.Basic.to_string d.dictionary.metadata)) (q d.table.name)
-      (if pipeline="" then "" else pipeline ^ " |>\n  ") (q path) in
+    let d = Analysis_program.public_view d in
+    Printf.sprintf "%s |>\n  nanoparquet::write_parquet(%s)\n" (table d) (q path) in
   preamble ^ String.concat "\n" (List.map emit (Analysis_program.compile ~directory declarations))
+
+
+let preview_page d ~offset ~limit =
+  let d = Analysis_program.public_view d in
+  let script = Printf.sprintf "%s\nprint(as_tibble(%s) |> slice(seq.int(%d, length.out = %d)), n = %d)\n"
+    preamble (table d) (offset+1) limit limit in
+  print_endline (if d.plan.ordered then "Ordered preview" else "Unordered preview");
+  Worker.run "r" script

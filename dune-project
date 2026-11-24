@@ -5,5 +5,4 @@
 (package
  (name rupam)
  (synopsis "A typed language for interactive data analysis")
- (depends (ocaml (>= 5.1)) menhir yojson))
-
+ (depends (ocaml (>= 5.1)) menhir yojson uucp))

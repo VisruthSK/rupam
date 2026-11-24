@@ -97,3 +97,46 @@ let () =
   let ds = Frontend.parse (Lexing.from_string "let get(r)=r.x; (get({x=1}), get({y=2,x=true}))") in
   ignore (List.fold_left (fun env d -> fst (Infer.declaration env d)) [] ds);
   assert (Option.map Eval.display (snd (Eval.run [] ds)) = Some "(1, true)")
+
+let () =
+  let open Rupam in
+  let src = "type Maybe<a> = | Empty | Just(value: a); let get(x)=match x { Empty => 0, Just(n) => n }; let answer: Int64=get(Just(42)); answer" in
+  let ds = Frontend.parse (Lexing.from_string src) in
+  ignore (List.fold_left (fun env d -> fst (Infer.declaration env d)) [] ds);
+  assert (Option.map Eval.display (snd (Eval.run [] ds)) = Some "42")
+
+let () =
+  let open Rupam in
+  let infer s =
+    Frontend.parse (Lexing.from_string s)
+    |> List.fold_left (fun env d -> fst (Infer.declaration env d)) [] in
+  ignore (infer "let décaler(δ: Float64): Float64 = δ + 1.0; décaler(3.0)");
+  (match infer "let bad(x: Int64): String=x" with
+   | exception Infer.Error _ -> () | _ -> failwith "inconsistent annotations");
+  let code = "let `price per unit` = 3; `price per unit`" in
+  let pretty = Format.program (Frontend.parse (Lexing.from_string code)) in
+  ignore (infer pretty)
+
+let () =
+  let open Rupam in
+  let incomplete = "let t = sales |> filter(revenue > 0.0) |> derive(z = fn(" in
+  match Frontend.valid_prefix incomplete with
+  | Some (text,[Syntax.Let ("t",None,_)]) -> assert (text = "let t = sales |> filter(revenue > 0.0)")
+  | _ -> failwith "Expected inspectable complete pipeline prefix"
+
+let () =
+  let open Rupam in
+  let ds = Frontend.parse (Lexing.from_string "type Pair<a> = {x: a, y: a}; let f(p: Pair<Int64>)=match p { {x,y} => x+y }; f({x=2,y=3})") in
+  ignore (List.fold_left (fun env d -> fst (Infer.declaration env d)) [] ds);
+  assert (Option.map Eval.display (snd (Eval.run [] ds)) = Some "5")
+
+let () =
+  let open Rupam in
+  let open Column_eval in
+  let sales=Table.source 1 ["revenue",Float64,false;"id",Int64,false] in
+  let plan src = match Frontend.parse (Lexing.from_string src) with
+    | [Syntax.Evaluate e] -> Table.pipeline [] ["sales",sales] e | _ -> assert false in
+  let p=plan "sales |> derive(a=revenue+1,b=a*2) |> select(b)" in
+  assert (Table.execute p ~rows:1 [[|F 3.|];[|I 1L|]] = (1,["b",[|F 8.|]]));
+  rejects (fun () -> plan "sales |> derive(b=revenue+id)");
+  rejects (fun () -> plan "sales |> derive(b=revenue+9007199254740993)")

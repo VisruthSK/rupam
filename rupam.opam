@@ -6,6 +6,7 @@ depends: [
   "ocaml" {>= "5.1"}
   "menhir"
   "yojson"
+  "uucp"
   "odoc" {with-doc}
 ]
 build: [

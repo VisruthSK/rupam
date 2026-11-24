@@ -9,4 +9,3 @@ let () =
     let format buf = Rupam.Format.program (Rupam.Frontend.parse buf) in
     let once = format (Lexing.from_channel ch) in
     assert (format (Lexing.from_string once) = once))
-

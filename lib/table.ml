@@ -6,6 +6,9 @@ type step =
   | Take of int
   | Distinct of expr list
   | Filter of expr
+  | Window of string * expr * (string * expr) list
+  | Pivot of Pivot.t
+  | Rename of (string * string * int) list
   | Bind of string * expr
   | Select of string list
 
@@ -40,23 +43,61 @@ let select table arguments =
       | [] -> raise (Error "Range ends before its start")
       | n :: rest -> if n = last then [n] else n :: through rest in
     from fields in
-  let selected = List.concat_map (function
+  let expand = function
+    | None, {Syntax.form=Call ({form=Name (Bare,"starts_with");_},[None,{form=Literal s;_}]);_} ->
+        let prefix = Yojson.Basic.from_string s |> Yojson.Basic.Util.to_string in
+        List.filter (String.starts_with ~prefix) fields
+    | None, {Syntax.form=Call ({form=Name (Bare,"where");_},[None,{form=Name (Bare,"is_numeric");_}]);_} ->
+        List.filter (fun n -> match (List.assoc n table.schema).typ.primitive with Int64 | Float64 -> true | _ -> false) fields
     | None, { Syntax.form = Binary (":", a, b); _ } -> range (resolve a) (resolve b)
-    | None, x -> [resolve x]
-    | _ -> raise (Error "select expects unnamed selectors")) arguments in
+    | Some _, x | None, x -> [resolve x]
+    in
+  let excluded, included = List.partition (function None,{Syntax.form=Unary ("-",_);_} -> true | _ -> false) arguments in
+  let removed = List.map (function None,{Syntax.form=Unary ("-",x);_} -> resolve x | _ -> assert false) excluded in
+  let selected = (if included=[] && removed<>[] then fields else List.concat_map expand included)
+    |> List.filter (fun n -> not (List.mem n removed)) in
   if List.length selected <> List.length (List.sort_uniq String.compare selected) then
     raise (Error "Duplicate selected column");
-  { table with schema = List.map (fun n -> n, List.assoc n table.schema) selected;
-    steps = Select selected :: table.steps }
+  let aliases = List.filter_map (function Some dst,x -> Some (resolve x,dst) | _ -> None) included in
+  let changes = List.filter_map (fun n -> match List.assoc_opt n aliases with
+    | None -> None | Some dst -> (match (List.assoc n table.schema).node with
+      | Input i -> Some (n,dst,i) | _ -> assert false)) selected in
+  let schema=List.map (fun n -> Option.value ~default:n (List.assoc_opt n aliases),List.assoc n table.schema) selected in
+  if List.length schema <> List.length (List.sort_uniq compare (List.map fst schema)) then raise (Error "Duplicate projection label");
+  let steps=Select selected::table.steps in
+  {table with schema;steps=(if changes=[] then steps else Rename changes::steps)}
+
+let grouping table groups =
+  let rec keys x = match x.Syntax.form with
+    | Name ((Bare | Column),n) -> [n,Check.lookup n table.schema]
+    | Tuple xs -> List.concat_map keys xs
+    | _ -> raise (Error "Expected named grouping columns") in
+  match groups with [] -> [] | [_,x] -> keys x | _ -> raise (Error "Repeated by argument")
 
 let stage env table verb arguments = match verb, arguments with
+  | ("pivot_longer" | "pivot_wider"), _ ->
+      let p,fields=Pivot.parse table.schema verb arguments in
+      let schema=List.mapi (fun i (n,t) -> n,input (table.next+i) t) fields in
+      {table with schema;next=table.next+List.length fields;ordered=false;steps=Pivot p::table.steps}
+  | "rename", _ ->
+      let mapping = List.map (function
+        | Some a,{Syntax.form=Name (Bare,b);_} ->
+            let x = Check.lookup a table.schema in
+            (match x.node with Input i -> a,b,i | _ -> assert false)
+        | _ -> raise (Error "Expected rename(old = new)")) arguments in
+      let changes = List.map (fun (a,b,_) -> a,b) mapping in
+      let schema = List.map (fun (n,v) -> Option.value ~default:n (List.assoc_opt n changes),v) table.schema in
+      let ns = List.map fst schema and old = List.map fst changes in
+      if List.length ns <> List.length (List.sort_uniq compare ns) || List.length old <> List.length (List.sort_uniq compare old)
+      then raise (Error "Duplicate rename field");
+      {table with schema;steps=Rename mapping :: table.steps}
   | "take", [None,{Syntax.form=Literal n;_}] ->
       if not table.ordered then raise (Error "take requires arrange with explicit ordering keys");
       let count = match int_of_string_opt n with Some i when i >= 0 -> i | _ -> raise (Error "Invalid take count") in
       {table with steps=Take count :: table.steps}
   | "distinct", _ ->
       let projected = if arguments=[] then table else select table arguments in
-      {projected with steps=Distinct (List.map snd projected.schema)::projected.steps; ordered=false}
+      {table with steps=Distinct (List.map snd projected.schema)::table.steps; ordered=false}
   | "arrange", [] -> raise (Error "arrange requires at least one ordering key")
   | "arrange", _ ->
       let key = function
@@ -67,9 +108,7 @@ let stage env table verb arguments = match verb, arguments with
       { table with ordered=true; steps = Arrange (List.map key arguments) :: table.steps }
   | "summarize", _ ->
       let groups, values = List.partition (fun (label, _) -> label = Some "by") arguments in
-      let keys = List.map (function
-        | _, {Syntax.form = Name ((Bare | Column), n); _} -> n, Check.lookup n table.schema
-        | _ -> raise (Error "Expected named grouping column")) groups in
+      let keys = grouping table groups in
       let measures = List.map (function
         | Some n, {Syntax.form = Call ({form = Name (Bare, "count"); _}, []); _} -> n,None
         | Some n, x ->
@@ -87,8 +126,10 @@ let stage env table verb arguments = match verb, arguments with
   | "filter", [None, x] ->
       let predicate = Check.expression env table.schema x in
       Shape.filter table.context predicate;
-      { table with steps = Filter predicate :: table.steps }
+      { table with ordered=false; steps = Filter predicate :: table.steps }
   | ("derive" | "replace"), _ ->
+      let by,arguments = List.partition (fun (n,_) -> n=Some "by") arguments in
+      let keys = grouping table by in
       List.fold_left (fun table (name, x) ->
         let n = match name with Some n -> n | None -> raise (Error "Expected named binding") in
         let exists = List.mem_assoc n table.schema in
@@ -98,7 +139,7 @@ let stage env table verb arguments = match verb, arguments with
         let field = n, input table.next value.typ in
         let schema = if exists then List.map (fun ((k, _) as f) ->
           if k = n then field else f) table.schema else table.schema @ [field] in
-        { table with schema; next = table.next + 1; steps = Bind (n,value) :: table.steps }
+        { table with schema; next = table.next + 1; steps = (if keys=[] then Bind (n,value) else Window (n,value,keys)) :: table.steps }
       ) table arguments
   | _ -> raise (Error ("Unsupported table operation: " ^ verb))
 
@@ -158,7 +199,24 @@ let execute plan ~rows inputs =
           List.iteri (fun col v -> outputs.(col).(row) <- v) (labels @ List.map measure measures));
         Array.iter (fun a -> buffers.(!next) <- a; incr next) outputs;
         size := total
-    | Select _ -> ()
+    | Pivot p ->
+        let count,columns=Pivot.execute p ~rows:!size ~eval in
+        List.iter (fun a -> buffers.(!next) <- a; incr next) columns; size:=count
+    | Rename _ | Select _ -> ()
+    | Window (_,v,keys) ->
+        let module Groups = Map.Make(struct type t = value list let compare = compare end) in
+        let groups = ref Groups.empty and out = Array.make !size Missing in
+        let keys = List.map (fun (_,x) -> eval x) keys in
+        for i=0 to !size-1 do
+          let key=List.map (fun vs -> vs.(i)) keys in
+          groups := Groups.update key (fun g -> Some (i::Option.value ~default:[] g)) !groups
+        done;
+        Groups.iter (fun _ rows ->
+          let ids=Array.of_list (List.rev rows) in
+          let input i = Many (Array.map (Array.get buffers.(i)) ids) in
+          match evaluate ~rows:(Array.length ids) ~input v with
+          | Many vs -> Array.iteri (fun k i -> out.(i) <- vs.(k)) ids | _ -> assert false) !groups;
+        buffers.(!next) <- out; incr next
     | Bind (_, x) -> buffers.(!next) <- eval x; incr next
     | Filter x ->
         let keep = Array.map (function B b -> b | _ -> raise (Error "Expected Bool")) (eval x) in
@@ -173,6 +231,3 @@ let rec pipeline env tables x = match x.Syntax.form with
   | Binary ("|>", base, { form = Call ({ form = Name (Bare, verb); _ }, args); _ }) ->
       stage env (pipeline env tables base) verb args
   | _ -> raise (Error "Expected a table pipeline")
-
-
-
