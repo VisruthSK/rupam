@@ -13,11 +13,12 @@ let result_annotation t body = match t with None -> body | Some a -> {body with 
 %token TRUE FALSE NONE
 %token IN LB RB LC RC
 %token LP RP COMMA EQ DOT PIPE DOLLAR CARET ARROW END SEMI EOF
-%token PLUS MINUS TIMES DIV GT LT GE LE NE EQUAL AND OR NOT COLON MOD
+%token PLUS MINUS TIMES DIV GT LT GE LE NE EQUAL AND OR NOT COLON MOD TILDE
 %right TYPEARROW
 %nonassoc QUESTION
 %right IN ELSE ARROW
 %left PIPE
+%nonassoc TILDE
 %left OR
 %left AND
 %nonassoc GT LT GE LE NE EQUAL
@@ -99,6 +100,8 @@ expr: MATCH expr LC branches RC { at $startpos $endpos (Match ($2,List.rev $4)) 
  | expr EQUAL expr { at $startpos $endpos (Binary (Equal,$1,$3)) }
  | expr NE expr { at $startpos $endpos (Binary (Not_equal,$1,$3)) }
  | expr PIPE expr { at $startpos $endpos (Pipe ($1,$3)) }
+ | expr TILDE expr { at $startpos $endpos (Formula (Some $1,$3)) }
+ | TILDE expr %prec TILDE { at $startpos $endpos (Formula (None,$2)) }
  | expr AND expr { at $startpos $endpos (Binary (And,$1,$3)) }
  | expr OR expr { at $startpos $endpos (Binary (Or,$1,$3)) }
  | expr COLON expr { at $startpos $endpos (Range ($1,$3)) }

@@ -241,5 +241,13 @@ let () =
   assert (missing "let f(x) = match x { (a, Some(b)) => b, (_, None) => 0 }" = None);
   assert (
     missing "let f(n) = match n { 0 => true }"
-    = Some "Non-exhaustive match. Missing case _")
+    = Some "Non-exhaustive match. Missing case _");
+  let reserved =
+    Some "Formulas (y ~ x) are reserved for the model and graphics libraries"
+  in
+  assert (missing "let f(y, x) = y ~ x + 1" = reserved);
+  assert (missing "let f(x) = ~ x" = reserved);
+  assert (
+    Format.program (Frontend.parse (Lexing.from_string "fit(y ~ x + z, ~ g)"))
+    = "fit((y ~ (x + z)), (~ g))")
 ;;

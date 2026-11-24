@@ -183,7 +183,7 @@ The grammar below is the **v0.1 syntax baseline**. It is a source grammar, not a
 - Numbers: decimal integer literals, floating literals with fractional or exponent parts, optional explicit suffixes where needed. Literal typing is constraint-based; a plain integer constant adapts to the expected exact integer type, but a general `Int64` value is **not** silently cast to a `Float64` value if precision could be lost.
 - Strings: double quotes with escapes; dates and datetimes use explicit library constructors initially, avoiding ambiguous bare literals.
 - `true`, `false`, `None`, `Some(expr)`; `None` needs contextual type inference.
-- Operators: `+ - * / % == != < <= > >= and or not |>`, unary `-`, `^` for lexical capture in column scope, `$` for explicit column reference, `:` in types and named selectors.
+- Operators: `+ - * / % == != < <= > >= and or not |> ~`, unary `-` and `~`, `^` for lexical capture in column scope, `$` for explicit column reference, `:` in types and named selectors.
 - Table column name selectors and function labels are known at compile time. Dynamically constructed strings cannot silently become statically named columns.
 
 ### 3.2 Concrete EBNF baseline
@@ -214,7 +214,8 @@ if_expr          = "if", expr, "then", expr, "else", expr ;
 match_expr       = "match", expr, "{", branch, {",", branch}, [","], "}" ;
 branch           = pattern, "=>", expr ;
 local_let        = "let", identifier, [parameters], "=", expr, "in", expr ;
-pipeline         = logical_or, {"|>", logical_or} ;
+pipeline         = formula, {"|>", formula} ;
+formula          = logical_or, ["~", logical_or] | "~", logical_or ;
 logical_or       = logical_and, {"or", logical_and} ;
 logical_and      = comparison, {"and", comparison} ;
 comparison       = selector_range, [("==" | "!=" | "<" | "<=" | ">" | ">="),
@@ -251,11 +252,13 @@ statement_end    = newline_at_top_level | ";" | end_of_file ;
 
 `statement_end` occurs only after a syntactically complete top-level construct, not inside an open call, `match` or pipeline. A physical newline following `|>`, `=`, a binary operator, or a comma continues the current expression. The implementation must define and test tokenization for multiline `if` and `match`. `Some(x)` is an ordinary constructor call; `None` is a contextual literal. A backtick-quoted identifier occupies the same syntactic positions as an ordinary identifier. A pipeline `x |> f(a)` inserts `x` as the first positional argument, while `x |> f` means `f(x)`; it evaluates `x` exactly once. Other operators do not implicitly create table scopes.
 
+`~` builds a formula value: two-sided `y ~ x + z` or one-sided `~ group`. The checker does not evaluate either side as ordinary expressions. A model or graphics library elaborates a formula against a table schema, exactly as verbs elaborate their column arguments, so `lm(y ~ x)` and `aes(x = revenue)` need no further grammar. Until such a library is loaded, any use of a formula is a type error that says formulas are reserved.
+
 The grammar does **not** define the meaning of `select`, `derive`, `plot`, `model`, or other libraries. Column-scope insertion, selector interpretation and typed aggregate contexts happen during elaboration, based on standard-library signatures. Syntax recovery may insert hole nodes beyond this complete-program grammar.
 
 ### 3.3 Operator precedence and evaluation
 
-Highest to lowest: postfix calls/field access; unary `not`/negation; `* / %`; `+ -`; comparison; `and`; `or`; `|>`; then the outer `let`, `if`, `match`, and lambda forms. Infix arithmetic is left-associative. Comparisons are non-chaining in v0.1 (`a < b < c` is rejected; write `a < b and b < c`). Pipeline `x |> f(a, b)` means `f(x, a, b)` for the functions in this language's table-first API. It must not reorder named arguments or evaluate effects twice.
+Highest to lowest: postfix calls/field access; unary `not`/negation; `* / %`; `+ -`; comparison; `and`; `or`; `~`; `|>`; then the outer `let`, `if`, `match`, and lambda forms. `~` does not chain. Infix arithmetic is left-associative. Comparisons are non-chaining in v0.1 (`a < b < c` is rejected; write `a < b and b < c`). Pipeline `x |> f(a, b)` means `f(x, a, b)` for the functions in this language's table-first API. It must not reorder named arguments or evaluate effects twice.
 
 Function arguments and ordered derived bindings are evaluated in source order whenever evaluation has observable effects or may fail. A backend may vectorize or reorder pure, total expressions only if semantic equivalence holds, including defined failures. A potentially throwing branch of `if` must not be evaluated on an input for which that branch is not selected. This is important when targeting Polars conditional expressions, which evaluate both branches independently.
 
@@ -659,6 +662,21 @@ Allow explicitly marked backend operations, but never implicit fallback to arbit
 
 Prepare typed relational IR for projection pruning, predicate pushdown, safe column fusion, common-subexpression elimination, aggregate/window lowering and join planning. Initially let R/Polars handle native optimization. Any source optimizer must preserve row-unordered semantics, nullable/NaN behavior, exception paths, value-validation obligations, and order requirements. A rewrite that moves `filter` before contract validation is invalid if it can mask a bad source row.
 
+### 7.8 Backends are dialects, and the REPL runs what `compile` writes
+
+**REQUIRED.** A preview, an inspection or a `run` executes the same generated program that `compile` writes for the selected backend, produced by the same code path, with only the final sink changed (show a bounded page instead of writing a file). There is no separate preview engine, interpreter shortcut or REPL-only lowering. If something previews, the compiled script produces the same result. If it fails to compile for a backend, it also fails to preview there, with the same diagnostic. A conformance test asserts this for every fixture: preview output equals the compiled script's output.
+
+**DESIGN DEFAULT.** A backend is a *dialect*: a host language plus a table library, such as R + dplyr, R + data.table, R + polars, Python + polars, or Julia + TidierData. Each dialect is one module implementing a fixed signature:
+
+- a lowering for every core expression node and every relational verb, building a small syntax tree for the host language rather than concatenating strings;
+- a capability table that classifies each node as exact, guarded, fallback or unsupported for that dialect (§7.2);
+- its runtime support code, dependency list and validation preflight;
+- how to read and write each supported file format.
+
+Host-language printing (R, Python, Julia) is shared by every dialect of that language, so adding R + data.table reuses the R printer and source mapping and only supplies verb lowerings. Adding or changing how one verb lowers on one dialect is a local edit to one function. Source maps come from spans carried in the host syntax tree, and the manifest's fidelity notes come from the capability table, never from inspecting generated text.
+
+Every dialect must agree with the reference evaluator on every shared conformance fixture, compared as multisets for unordered tables (§11). A dialect that cannot reproduce a semantic rule reports the node as unsupported instead of approximating it.
+
 ## 8. Interactive environment: the primary product
 
 The terminal REPL is a first-class application. It must be usable without VS Code, a notebook, a browser-only workflow or an RStudio extension. A language server and reactive notebook can use the same underlying services, but neither substitutes for an excellent REPL.
@@ -745,6 +763,19 @@ ds contract validate data-dict.yaml
 Use a minimal project manifest to pin the language/compiler, backend versions and source files. This project manifest is **not** a replacement for the data-dict YAML contract. Ordinary scripts remain runnable without a project manifest in simple local scenarios.
 
 Source extension, CLI name and exact manifest filename may change once in an early documented ADR. Surface syntax and semantics should not drift based on tool naming preferences.
+
+### 9.1 `rupam env`: managed backend environments (FUTURE)
+
+Previews and generated scripts depend on a host language and libraries that rupam does not ship. To keep "previewed equals compiled" true across machines, a project can let rupam manage those environments:
+
+```text
+rupam env init            # create rupam.lock for this project
+rupam env add python      # uv-managed Python with the dialect's packages
+rupam env add r           # renv-managed R library with the dialect's packages
+rupam env sync            # reproduce the locked environments on this machine
+```
+
+`rupam.lock` records, per dialect, the interpreter version and exact package versions, delegating to `uv.lock` and `renv.lock` rather than inventing a package format. When a project has a lock, the REPL's workers, `rupam run` and the generated script's manifest all use the locked environment, so a preview and a later run of the compiled script load the same library versions. rupam calls `uv` and R's `renv` found on the PATH. It never downloads or bundles an interpreter itself. A project without a lock uses whatever interpreter is on the PATH, and the manifest says so.
 
 ## 10. Compiler and repository architecture
 

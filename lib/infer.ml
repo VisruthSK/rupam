@@ -393,6 +393,7 @@ let rec expression env level source =
     let t = check a in
     equal t (check b);
     t
+  | Formula _ -> fail "Formulas (y ~ x) are reserved for the model and graphics libraries"
   | _ -> fail "Unsupported scalar expression"
 ;;
 

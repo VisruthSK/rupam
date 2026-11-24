@@ -65,6 +65,7 @@ and form =
   | Field of expr * string
   | Call of expr * (string option * expr) list
   | Pipe of expr * expr
+  | Formula of expr option * expr
   | Range of expr * expr
   | Binary of binary * expr * expr
   | Unary of unary * expr

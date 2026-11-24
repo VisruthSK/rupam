@@ -53,6 +53,8 @@ let rec expr x =
         args
     ^ ")"
   | Pipe (a, b) -> "(" ^ expr a ^ " |> " ^ expr b ^ ")"
+  | Formula (lhs, rhs) ->
+    "(" ^ Option.fold ~none:"" ~some:(fun l -> expr l ^ " ") lhs ^ "~ " ^ expr rhs ^ ")"
   | Range (a, b) -> expr a ^ ":" ^ expr b
   | Binary (op, a, b) -> "(" ^ expr a ^ " " ^ binary_symbol op ^ " " ^ expr b ^ ")"
   | Unary (op, a) -> "(" ^ unary_symbol op ^ " " ^ expr a ^ ")"

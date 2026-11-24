@@ -25,7 +25,7 @@ rule token = parse
  | "==" { EQUAL } | "!=" { NE } | ">=" { GE } | "<=" { LE } | '=' { EQ }
  | '>' { GT } | '<' { LT } | "=>" { ARROW } | "|>" { PIPE }
  | '+' { PLUS } | '-' { MINUS } | '*' { TIMES } | '/' { DIV } | '%' { MOD }
- | ':' { COLON } | '$' { DOLLAR } | '^' { CARET }
+ | ':' { COLON } | '$' { DOLLAR } | '^' { CARET } | '~' { TILDE }
  | eof { EOF } | _ as c { failwith (Printf.sprintf "Unexpected character %C" c) }
 and quoted buffer = parse
  | "``" { Buffer.add_char buffer '`'; quoted buffer lexbuf }
