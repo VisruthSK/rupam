@@ -363,8 +363,8 @@ let run state = function
          let d = table state source in
          print_endline
            (match dialect with
-            | Project.R_dplyr -> Tidyverse.table d
-            | Python_polars -> Analysis_program.python_table d)));
+            | Project.R_dplyr -> R_syntax.render (Tidyverse.table d)
+            | Python_polars -> Python_syntax.render (Analysis_program.python_table d))));
     Some state
   | View (view, source) ->
     ignore

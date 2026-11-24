@@ -121,13 +121,14 @@ save_parquet(result, "checked.parquet")
             subprocess.run(["python", "checked.py"], cwd=work, check=True)
             self.assertEqual(pl.read_parquet(work / "checked.parquet")["x"].to_list(), [1, 2, 3, 4])
             manifest = json.loads((work / "checked.py.manifest.json").read_text())
-            self.assertIn("fallback", manifest["fidelity"])
+            self.assertNotIn("fallback", manifest["fidelity"])
+            generated = (work / "checked.py").read_text()
+            self.assertNotIn("map_elements", generated)
             mappings = json.loads((work / "checked.py.map.json").read_text())["mappings"]
-            self.assertEqual(mappings[0]["start"]["line"], 4)
-            generated = (work / "checked.py").read_text().splitlines()
+            lines = generated.splitlines()
             self.assertTrue(any(m["start"]["line"] == 3 and
-                                ".map_elements(" in generated[m["generated_line"] - 1]
-                                for m in mappings[1:]))
+                                ".with_columns(" in lines[m["generated_line"] - 1]
+                                for m in mappings))
 
     def test_target_capability_requires_import_and_appears_in_manifest(self):
         import json
@@ -222,8 +223,7 @@ save_parquet(wide, "result.parquet")
                 result=pl.read_parquet(work / "result.parquet")
                 self.assertEqual(result.rows(),[(1,3.,-3.),(2,5.,2.5),(3,9.,3.),(4,0.,-2.5)])
 
-    def test_group_keys_preserve_nan_and_missing(self):
-        import math
+    def test_nan_in_sources_reads_as_missing(self):
 
         with tempfile.TemporaryDirectory() as tmp:
             work = Path(tmp)
@@ -243,7 +243,5 @@ save_parquet(t, "groups.parquet")
                 script.write_bytes(subprocess.check_output([compiler,"compile","--target",DIALECT[target],source],cwd=work))
                 subprocess.run([runner, script],cwd=work,check=True)
                 rows = pl.read_parquet(work / "groups.parquet").rows()
-                self.assertEqual(len(rows), 2)
-                self.assertCountEqual([("missing" if k is None else "nan" if math.isnan(k) else k, n)
-                                       for k,n in rows], [("missing",2),("nan",2)])
+                self.assertEqual(rows, [(None, 4)])
 

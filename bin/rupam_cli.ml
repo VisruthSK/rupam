@@ -32,14 +32,19 @@ let targeted directory target strict action =
     action project)
 ;;
 
-let generate (project : Project.t) ?(annotate = Source_map.plain) path ds =
+let generate (project : Project.t) path ds =
   let directory = Filename.dirname path
   and strict = project.strict in
+  let scalar compile =
+    let mapping = Source_map.create () in
+    Source_map.finish mapping (compile (Source_map.mark mapping) ds)
+  in
   match Project.require_dialect project, Repl.contracted ds with
-  | R_dplyr, true -> Tidyverse.compile ~annotate ~strict ~directory ds
-  | R_dplyr, false -> R_scalar.compile ~annotate ds
-  | Python_polars, true -> Analysis_program.python ~annotate ~strict ~directory ds
-  | Python_polars, false -> Python.compile ~annotate ds
+  | R_dplyr, true -> R_syntax.program (Tidyverse.compile ~strict ~directory ds)
+  | R_dplyr, false -> scalar (fun annotate -> R_scalar.compile ~annotate)
+  | Python_polars, true ->
+    Python_syntax.program (Analysis_program.python ~strict ~directory ds)
+  | Python_polars, false -> scalar (fun annotate -> Python.compile ~annotate)
 ;;
 
 let run target strict path =
@@ -47,19 +52,20 @@ let run target strict path =
   @@ fun project ->
   with_program path (fun ds ->
     let language = Runtime.of_dialect (Project.require_dialect project) in
-    Runtime.run (Runtime.resolve project language) language (generate project path ds))
+    Runtime.run
+      (Runtime.resolve project language)
+      language
+      (fst (generate project path ds)))
 ;;
 
 let compile target strict path output =
   targeted (Filename.dirname path) target strict
   @@ fun project ->
   with_program path (fun ds ->
+    let code, locations = generate project path ds in
     match output with
-    | None -> print_string (generate project path ds)
+    | None -> print_string code
     | Some output ->
-      let mapping = Source_map.create () in
-      let code = generate project ~annotate:(Source_map.mark mapping) path ds in
-      let code, locations = Source_map.finish mapping code in
       let target =
         match Project.require_dialect project with
         | R_dplyr -> "r"

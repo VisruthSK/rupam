@@ -1,8 +1,4 @@
-type location =
-  { generated_line : int
-  ; generated_column : int
-  ; source : Syntax.span
-  }
+type location = Document.location
 
 type t =
   { mutable next : int
@@ -30,11 +26,7 @@ let finish t marked =
         let stop = String.index_from marked (i + 1) '\031' in
         let id = int_of_string (String.sub marked (i + 1) (stop - i - 1)) in
         let source = Hashtbl.find t.spans id in
-        scan
-          (stop + 1)
-          line
-          column
-          ({ generated_line = line; generated_column = column; source } :: entries)
+        scan (stop + 1) line column ({ Document.line; column; source } :: entries)
       | ch ->
         Buffer.add_char output ch;
         if ch = '\n'

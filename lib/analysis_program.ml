@@ -239,92 +239,6 @@ let analyze ?strict ~directory declarations =
 
 let compile ?strict ~directory ds = snd (analyze ?strict ~directory ds)
 
-let preamble =
-  {|import json
-import math
-import operator
-import shutil
-import subprocess
-import tempfile
-from pathlib import Path
-
-import polars as pl
-
-
-def rp_checked(value):
-    if type(value) is int and not -(1 << 63) <= value < (1 << 63):
-        raise OverflowError("Int64 overflow")
-    return value
-
-
-def rp_abs(value):
-    return None if value is None else rp_checked(abs(value))
-
-
-def rp_binary(op, a, b):
-    if a is None or b is None:
-        return None
-    if op == "div":
-        if b == 0:
-            if a == 0 or math.isnan(a):
-                return math.nan
-            return math.copysign(math.inf, math.copysign(1, a) * math.copysign(1, b))
-        return a / b
-    return rp_checked({"add": operator.add, "sub": operator.sub, "mul": operator.mul, "gt": operator.gt}[op](a, b))
-
-
-def rp_wider(data, ids, key, value, labels):
-    frame = data.collect()
-    if frame.filter(pl.col(key).is_null() | ~pl.col(key).is_in(labels)).height:
-        raise ValueError("Unexpected pivot key")
-    return frame.lazy().pivot(key, labels, index=ids, values=value)
-
-
-def dictionary_json(command, path):
-    result = subprocess.run(["data-dict", *command, str(path)], capture_output=True)
-    if result.returncode:
-        try:
-            report = json.loads(result.stdout)
-            codes = sorted({p["code"] for p in report.get("problems", []) if "code" in p})
-        except (ValueError, TypeError):
-            codes = []
-        raise ValueError(f"data-dict {command[0]} failed: " + ", ".join(codes))
-    return json.loads(result.stdout)
-
-
-def validated_source(dictionary, expected, name, physical_types):
-    original = Path(dictionary).resolve()
-    with tempfile.TemporaryDirectory() as directory:
-        root = Path(directory)
-        snapshot = root / original.name
-        shutil.copyfile(original, snapshot)
-        model = dictionary_json(["export-spec"], snapshot)
-        if model != json.loads(expected):
-            raise ValueError("Contract changed since compilation")
-        paths = {}
-        for table in model["tables"]:
-            relative = Path(table["source"]["parquet"])
-            if relative.is_absolute() or ".." in relative.parts:
-                raise ValueError("Snapshot requires a dictionary-relative source")
-            destination = root / relative
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(original.parent / relative, destination)
-            paths[table["name"]] = destination
-        for level in ["validate-meta", "validate-data"]:
-            report = dictionary_json([level, "--json"], snapshot)
-            if report["run"]["tool"]["version"] != "0.0.3":
-                raise ValueError("Unsupported data-dict validator version")
-            if report["status"] != "ok" or any(s["outcome"] != "pass" for s in report["steps"]):
-                raise ValueError(f"Incomplete {level} validation")
-        schema = pl.read_parquet_schema(paths[name])
-        if {k: str(v) for k, v in schema.items()} != physical_types:
-            raise ValueError("Physical schema changed since compilation")
-        fields = next(t["columns"] for t in model["tables"] if t["name"] == name)
-        return pl.read_parquet(paths[name], columns=[c["name"] for c in fields]).lazy()
-
-|}
-;;
-
 let rec restrictions d =
   let source =
     match d.join with
@@ -394,38 +308,59 @@ let public_view d =
     })
 ;;
 
-let rec python_table ?(annotate = Source_map.plain) d =
-  let q = Polars.quoted in
+module P = Python_syntax
+
+let rec python_stages d =
   let base =
     match d.join with
     | None ->
-      Printf.sprintf
-        "validated_source(%s, %s, %s, %s)"
-        (q d.dictionary.path)
-        (q (Yojson.Basic.to_string d.dictionary.metadata))
-        (q d.table.name)
-        (Yojson.Basic.to_string d.physical_types)
+      P.call
+        "validated_source"
+        [ P.Str d.dictionary.path
+        ; P.Str (Yojson.Basic.to_string d.dictionary.metadata)
+        ; P.Str d.table.name
+        ; P.Dict
+            (Yojson.Basic.Util.to_assoc d.physical_types
+             |> List.map (fun (name, physical) ->
+               ( P.Str name
+               , match physical with
+                 | `String t -> P.Str t
+                 | _ -> P.Null )))
+        ]
     | Some { left; right; key; kind } ->
-      Printf.sprintf
-        "%s.join(%s, on=%s, how=%s, nulls_equal=False, coalesce=True).select([%s])"
-        (python_table ~annotate left)
-        (python_table ~annotate right)
-        (q key)
-        (q (join_name kind))
-        (String.concat ", " (List.map q d.fields))
+      P.Chain
+        ( python_table left
+        , [ P.link
+              "join"
+              [ P.Positional (python_table right)
+              ; P.Keyword ("on", P.Str key)
+              ; P.Keyword ("how", P.Str (join_name kind))
+              ; P.Keyword ("nulls_equal", P.Bool false)
+              ; P.Keyword ("coalesce", P.Bool true)
+              ]
+          ; P.link "select" [ P.Positional (P.names d.fields) ]
+          ] )
   in
-  Printf.sprintf "(%s\n    %s\n)" base (Polars.lower ~annotate ~fields:d.fields d.plan)
+  base, Polars.lower ~fields:d.fields d.plan
+
+and python_table d =
+  let base, links = python_stages d in
+  P.Chain (base, links)
 ;;
 
-let python ?(annotate = Source_map.plain) ?strict ~directory declarations =
-  let emit (d, path) =
-    let d = public_view d in
-    Printf.sprintf
-      "%s.collect().write_parquet(%s)\n"
-      (python_table ~annotate d)
-      (Polars.quoted path)
-  in
-  preamble ^ String.concat "\n" (List.map emit (compile ?strict ~directory declarations))
+let python ?strict ~directory declarations =
+  P.Verbatim Adapters.polars
+  :: List.map
+       (fun (d, path) ->
+          P.Expression
+            (let base, links = python_stages (public_view d) in
+             P.Chain
+               ( base
+               , links
+                 @ [ P.link "collect" []
+                   ; P.link "write_parquet" [ P.Positional (P.Str path) ]
+                   ] )))
+       (compile ?strict ~directory declarations)
 ;;
 
 let bound env name =
@@ -451,14 +386,23 @@ let schema d =
 
 let preview_page ~runtime d ~offset ~limit =
   let d = public_view d in
-  let script =
-    preamble
-    ^ "\nprint("
-    ^ python_table d
-    ^ Printf.sprintf ".slice(%d, %d).collect())" offset limit
+  let page =
+    P.meth
+      (P.meth
+         (python_table d)
+         "slice"
+         [ P.Positional (P.Int (string_of_int offset))
+         ; P.Positional (P.Int (string_of_int limit))
+         ])
+      "collect"
+      []
   in
   print_endline (if d.plan.ordered then "Ordered preview" else "Unordered preview");
-  Worker.run runtime Runtime.Python script
+  Worker.run
+    runtime
+    Runtime.Python
+    (fst
+       (P.program [ P.Verbatim Adapters.polars; P.Expression (P.call "print" [ page ]) ]))
 ;;
 
 let explain d =
@@ -496,16 +440,13 @@ let validate ~runtime d =
   in
   List.sort_uniq compare (sources d)
   |> List.iter (fun path ->
-    let script =
-      preamble
-      ^ "\nfor level in ['validate-meta','validate-data']:\n"
-      ^ "    report = dictionary_json([level, '--json'], "
-      ^ Polars.quoted path
-      ^ ")\n"
-      ^ "    if report['status'] != 'ok' or any(s['outcome'] != 'pass' for s in \
-         report['steps']):\n"
-      ^ "        raise ValueError('Validation incomplete')\n"
-    in
-    Runtime.run runtime Runtime.Python script);
+    Runtime.run
+      runtime
+      Runtime.Python
+      (fst
+         (P.program
+            [ P.Verbatim Adapters.polars
+            ; P.Expression (P.call "validate_contract" [ P.Str path ])
+            ])));
   print_endline "Validation passed. Materialization will validate its own snapshot."
 ;;

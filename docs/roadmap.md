@@ -33,3 +33,21 @@ improve ergonomics or performance are made freely.
     dates).
 
 Everything in [Future](spec/future.md) comes after these.
+
+## Formalisation
+
+A Lean 4 development of the core calculus, kept in `formal/` and checked in
+CI, alongside the implementation rather than after it:
+
+- syntax and typing rules of the typed core: shapes, optional values, sign
+  refinements and contextual requirements (coeffects) through higher-order
+  calls;
+- the guarded-evaluation rule shared by `if`, `match`, `let ... else`,
+  `coalesce`, `and` and `or`, including reductions over whole groups;
+- the missing-value policy and grouping witnesses;
+- type soundness (progress and preservation) for the reference evaluator,
+  and the theorem that sign refinements make undefined arithmetic
+  unreachable.
+
+The reference evaluator is the executable counterpart; conformance fixtures
+check that it agrees with the formal rules on concrete programs.

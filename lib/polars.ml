@@ -1,198 +1,141 @@
 open Shape
+module P = Python_syntax
 
 let quoted s = Yojson.Basic.to_string (`String s)
-let col n = "pl.col(" ^ quoted n ^ ")"
+let pl name = P.Attribute (P.Name "pl", name)
+let col n = P.Call (pl "col", [ P.Positional (P.Str n) ])
+let lit e = P.Call (pl "lit", [ P.Positional e ])
+let named n e = P.meth e "alias" [ P.Positional (P.Str n) ]
+let positional xs = List.map (fun x -> P.Positional x) xs
 
-let lower ?(annotate = Source_map.plain) ~fields table =
-  let symbols = Array.make table.Table.next "" in
+let choose condition yes no =
+  P.meth
+    (P.meth (P.Call (pl "when", [ P.Positional condition ])) "then" [ P.Positional yes ])
+    "otherwise"
+    [ P.Positional no ]
+;;
+
+let lower ~fields (table : Table.t) =
+  let symbols = Array.make table.next "" in
   List.iteri (fun i n -> symbols.(i) <- n) fields;
   let next = ref (List.length fields) in
-  let callback x =
-    let inputs = ref [] in
-    let rec scalar v =
-      match v.node with
-      | Input i ->
-        if not (List.mem i !inputs) then inputs := i :: !inputs;
-        "row[" ^ quoted symbols.(i) ^ "]"
-      | Broadcast (_, e) -> scalar e
-      | Constant (`Bool b) -> if b then "True" else "False"
-      | Constant (`Float f) -> "float(" ^ quoted (Printf.sprintf "%.17g" f) ^ ")"
-      | Constant (`Int i) -> Int64.to_string i
-      | Choose (c, t, f) -> "(" ^ scalar t ^ " if " ^ scalar c ^ " else " ^ scalar f ^ ")"
-      | Polars_sqrt _ ->
-        raise (Error "polars.sqrt cannot be lowered inside a scalar callback")
-      | Abs e -> "rp_abs(" ^ scalar e ^ ")"
-      | Coalesce (a, b) ->
-        "(lambda v: " ^ scalar b ^ " if v is None else v)(" ^ scalar a ^ ")"
-      | Binary (op, a, b) ->
-        let name =
-          match op with
-          | Add -> "add"
-          | Sub -> "sub"
-          | Mul -> "mul"
-          | Div -> "div"
-          | Greater -> "gt"
-        in
-        "rp_binary(" ^ quoted name ^ ", " ^ scalar a ^ ", " ^ scalar b ^ ")"
-      | Reduce _ ->
-        raise (Error "A checked callback cannot evaluate a whole-column reducer per row")
-    in
-    let body = scalar x in
-    let ty =
-      match x.typ.primitive with
-      | Int64 -> "Int64"
-      | Float64 -> "Float64"
-      | Bool -> "Boolean"
-      | String -> "String"
-    in
-    match !inputs with
-    | [] -> "pl.lit(" ^ body ^ ", dtype=pl." ^ ty ^ ")"
-    | ids ->
-      "pl.struct(["
-      ^ String.concat ", " (List.rev_map (fun i -> col symbols.(i)) ids)
-      ^ "]).map_elements(lambda row: "
-      ^ body
-      ^ ", return_dtype=pl."
-      ^ ty
-      ^ ")"
-  in
-  let rec checked e =
-    match e.node with
-    | Binary (op, a, b) ->
-      (a.typ.primitive = Int64 && op <> Greater) || checked a || checked b
-    | Abs a -> a.typ.primitive = Int64 || checked a
-    | Polars_sqrt a | Broadcast (_, a) | Reduce (_, a) -> checked a
-    | Choose (a, b, c) -> checked a || checked b || checked c
-    | Coalesce (a, b) -> checked a || checked b
-    | Constant _ | Input _ -> false
+  let bind n =
+    symbols.(!next) <- n;
+    incr next
   in
   let rec emit x =
     match x.node with
-    | Choose _ when checked x -> callback x
     | Input i -> col symbols.(i)
     | Broadcast (_, x) -> emit x
-    | Constant (`Int i) -> Printf.sprintf "pl.lit(%Ld, dtype=pl.Int64)" i
-    | Constant (`Float f) ->
-      Printf.sprintf "pl.lit(float(%s))" (quoted (Printf.sprintf "%.17g" f))
-    | Constant (`Bool b) -> if b then "pl.lit(True)" else "pl.lit(False)"
-    | Choose (c, t, f) ->
-      (* Each supported native branch is total. Checked Int64 arithmetic below rejects lowering. *)
-      "pl.when(" ^ emit c ^ ").then(" ^ emit t ^ ").otherwise(" ^ emit f ^ ")"
-    | Coalesce (a, b) -> "pl.coalesce(" ^ emit a ^ ", " ^ emit b ^ ")"
-    | Polars_sqrt a -> emit a ^ ".sqrt()"
-    | Abs a when a.typ.primitive = Float64 -> emit a ^ ".abs()"
-    | Abs _ -> callback x
-    | Binary (op, a, _) when a.typ.primitive = Int64 && op <> Greater -> callback x
+    | Constant (`Int i) ->
+      P.Call
+        ( pl "lit"
+        , [ P.Positional (P.Int (Int64.to_string i)); P.Keyword ("dtype", pl "Int64") ] )
+    | Constant (`Float f) -> lit (P.Float (P.float f))
+    | Constant (`Bool b) -> lit (P.Bool b)
+    | Choose (c, t, f) -> choose (emit c) (emit t) (emit f)
+    | Coalesce (a, b) -> P.Call (pl "coalesce", positional [ emit a; emit b ])
+    | Polars_sqrt a -> P.meth (emit a) "sqrt" []
+    | Abs a -> P.meth (emit a) "abs" []
     | Binary (op, a, b) ->
-      let op_text =
-        match op with
-        | Add -> "+"
-        | Sub -> "-"
-        | Mul -> "*"
-        | Div -> "/"
-        | Greater -> ">"
-      in
-      let l = emit a
-      and r = emit b in
-      let value = "(" ^ l ^ " " ^ op_text ^ " " ^ r ^ ")" in
-      if op = Greater && a.typ.primitive = Float64
-      then
-        "pl.when("
-        ^ l
-        ^ ".is_null() | "
-        ^ r
-        ^ ".is_null()).then(None).otherwise("
-        ^ value
-        ^ " & ~"
-        ^ l
-        ^ ".is_nan() & ~"
-        ^ r
-        ^ ".is_nan())"
-      else value
-    | Reduce (r, a) ->
+      P.Binary
+        ( (match op with
+           | Add -> P.Add
+           | Sub -> P.Subtract
+           | Mul -> P.Multiply
+           | Div -> P.Divide
+           | Greater -> P.Greater)
+        , emit a
+        , emit b )
+    | Reduce (Mean, a) -> P.meth (emit a) "mean" []
+    | Reduce (Sd, a) -> P.meth (emit a) "std" [ P.Keyword ("ddof", P.Int "1") ]
+    | Reduce (Sum, a) ->
       let a = emit a in
-      (match r with
-       | Mean -> a ^ ".mean()"
-       | Sd -> a ^ ".std(ddof=1)"
-       | Sum -> "pl.when(" ^ a ^ ".count() > 0).then(" ^ a ^ ".sum()).otherwise(None)")
+      choose
+        (P.Binary (P.Greater, P.meth a "count" [], P.Int "0"))
+        (P.meth a "sum" [])
+        P.Null
   in
   let stage = function
     | Table.Pivot p ->
       let ids = List.map fst p.ids in
-      let ls xs = "[" ^ String.concat ", " (List.map quoted xs) ^ "]" in
-      List.iter
-        (fun n ->
-           symbols.(!next) <- n;
-           incr next)
-        (ids @ if p.wider then p.labels else [ p.key; p.value ]);
+      List.iter bind (ids @ if p.wider then p.labels else [ p.key; p.value ]);
       if p.wider
       then
-        Printf.sprintf
-          ".pipe(rp_wider, %s, %s, %s, %s)"
-          (ls ids)
-          (quoted p.key)
-          (quoted p.value)
-          (ls p.labels)
+        [ P.link
+            "pipe"
+            (positional
+               [ P.Name "rp_wider"
+               ; P.names ids
+               ; P.Str p.key
+               ; P.Str p.value
+               ; P.names p.labels
+               ])
+        ]
       else
-        Printf.sprintf
-          ".unpivot(%s, index=%s, variable_name=%s, value_name=%s)"
-          (ls p.labels)
-          (ls ids)
-          (quoted p.key)
-          (quoted p.value)
+        [ P.link
+            "unpivot"
+            [ P.Positional (P.names p.labels)
+            ; P.Keyword ("index", P.names ids)
+            ; P.Keyword ("variable_name", P.Str p.key)
+            ; P.Keyword ("value_name", P.Str p.value)
+            ]
+        ]
     | Table.Rename changes ->
-      let pair (a, b, i) =
-        symbols.(i) <- b;
-        quoted a ^ ": " ^ quoted b
-      in
-      ".rename({" ^ String.concat ", " (List.map pair changes) ^ "})"
+      List.iter (fun (_, b, i) -> symbols.(i) <- b) changes;
+      [ P.link
+          "rename"
+          [ P.Positional (P.Dict (List.map (fun (a, b, _) -> P.Str a, P.Str b) changes)) ]
+      ]
     | Window (n, x, keys) ->
-      let v = emit x in
-      symbols.(!next) <- n;
-      incr next;
-      ".with_columns("
-      ^ v
-      ^ ".over(["
-      ^ String.concat ", " (List.map (fun (k, _) -> quoted k) keys)
-      ^ "]).alias("
-      ^ quoted n
-      ^ "))"
-    | Table.Take n -> Printf.sprintf ".head(%d)" n
-    | Distinct keys -> ".unique(subset=[" ^ String.concat ", " (List.map emit keys) ^ "])"
+      let value = emit x in
+      bind n;
+      [ P.link
+          "with_columns"
+          [ P.Positional
+              (named
+                 n
+                 (P.meth value "over" [ P.Positional (P.names (List.map fst keys)) ]))
+          ]
+      ]
+    | Table.Take n -> [ P.link "head" [ P.Positional (P.Int (string_of_int n)) ] ]
+    | Distinct keys ->
+      [ P.link "unique" [ P.Keyword ("subset", P.List (List.map emit keys)) ] ]
     | Table.Arrange keys ->
-      let xs, ds = List.split keys in
-      ".sort(["
-      ^ String.concat ", " (List.map emit xs)
-      ^ "], descending=["
-      ^ String.concat ", " (List.map (fun d -> if d then "True" else "False") ds)
-      ^ "], nulls_last=True)"
+      [ P.link
+          "sort"
+          [ P.Positional (P.List (List.map (fun (x, _) -> emit x) keys))
+          ; P.Keyword ("descending", P.List (List.map (fun (_, d) -> P.Bool d) keys))
+          ; P.Keyword ("nulls_last", P.Bool true)
+          ]
+      ]
     | Summarize (keys, measures) ->
       let measure (n, x) =
-        Option.fold ~none:"pl.len().cast(pl.Int64)" ~some:emit x
-        ^ ".alias("
-        ^ quoted n
-        ^ ")"
+        named
+          n
+          (match x with
+           | None -> P.meth (P.Call (pl "len", [])) "cast" [ P.Positional (pl "Int64") ]
+           | Some x -> emit x)
       in
-      let aggs = String.concat ", " (List.map measure measures) in
-      let groups = String.concat ", " (List.map (fun (n, _) -> quoted n) keys) in
-      List.iter
-        (fun n ->
-           symbols.(!next) <- n;
-           incr next)
-        (List.map fst keys @ List.map fst measures);
+      let aggregates = P.List (List.map measure measures) in
+      List.iter bind (List.map fst keys @ List.map fst measures);
       if keys = []
-      then ".select([" ^ aggs ^ "])"
-      else ".group_by([" ^ groups ^ "]).agg([" ^ aggs ^ "])"
-    | Table.Select fields ->
-      ".select([" ^ String.concat ", " (List.map quoted fields) ^ "])"
-    | Filter x -> ".filter(" ^ emit x ^ ")"
+      then [ P.link "select" [ P.Positional aggregates ] ]
+      else
+        [ P.link "group_by" [ P.Positional (P.names (List.map fst keys)) ]
+        ; P.link "agg" [ P.Positional aggregates ]
+        ]
+    | Table.Select fields -> [ P.link "select" [ P.Positional (P.names fields) ] ]
+    | Filter x -> [ P.link "filter" [ P.Positional (emit x) ] ]
     | Bind (name, x) ->
       let value = emit x in
-      symbols.(!next) <- name;
-      incr next;
-      ".with_columns(" ^ value ^ ".alias(" ^ quoted name ^ "))"
+      bind name;
+      [ P.link "with_columns" [ P.Positional (named name value) ] ]
   in
-  List.rev table.steps
-  |> List.map (Table.render_step annotate table stage)
-  |> String.concat "\n    "
+  List.concat_map
+    (fun step ->
+       match stage step, List.find_opt (fun (s, _) -> s == step) table.locations with
+       | first :: rest, Some (_, span) -> { first with P.span = Some span } :: rest
+       | links, _ -> links)
+    (List.rev table.steps)
 ;;

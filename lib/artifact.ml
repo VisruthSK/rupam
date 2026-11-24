@@ -69,11 +69,11 @@ let write ~locations ~target ~source ~output ~code declarations =
   let maps =
     maps
     @ List.map
-        (fun (entry : Source_map.location) ->
+        (fun (entry : Document.location) ->
            let start, finish = entry.source in
            `Assoc
-             [ "generated_line", `Int entry.generated_line
-             ; "generated_column", `Int entry.generated_column
+             [ "generated_line", `Int entry.line
+             ; "generated_column", `Int entry.column
              ; "source", `String source
              ; "start", point start
              ; "end", point finish
