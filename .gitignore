@@ -3,3 +3,5 @@ _build/
 __pycache__/
 *.parquet
 !examples/orders.parquet
+vendor/duckdb/*
+!vendor/duckdb/dune

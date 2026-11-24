@@ -1,0 +1,76 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux-x86_64
+          - os: ubuntu-24.04-arm
+            platform: linux-arm64
+          - os: macos-latest
+            platform: macos-arm64
+          - os: macos-15-intel
+            platform: macos-x86_64
+          - os: windows-latest
+            platform: windows-x86_64
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+      - run: scripts/fetch-duckdb
+
+      - uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: "5.5"
+      - run: opam install . --deps-only
+      - run: opam exec -- dune build --profile release bin/rupam_cli.exe
+
+      - name: Package
+        run: |
+          name=rupam-${GITHUB_REF_NAME}-${{ matrix.platform }}
+          mkdir -p "dist/$name"
+          if [ "$RUNNER_OS" = Windows ]; then
+            cp _build/default/bin/rupam_cli.exe "dist/$name/rupam.exe"
+          else
+            cp _build/default/bin/rupam_cli.exe "dist/$name/rupam"
+            strip "dist/$name/rupam"
+          fi
+          cp LICENSE LICENSE.exception README.md "dist/$name/"
+          cd dist
+          if [ "$RUNNER_OS" = Windows ]; then
+            7z a "$name.zip" "$name" > /dev/null
+          else
+            tar czf "$name.tar.gz" "$name"
+          fi
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.platform }}
+          path: dist/rupam-*.*
+
+  publish:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: dist
+          merge-multiple: true
+      - run: gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes
+        env:
+          GH_TOKEN: ${{ github.token }}

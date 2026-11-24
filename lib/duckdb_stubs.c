@@ -4,7 +4,13 @@
 #include <caml/fail.h>
 #include <caml/memory.h>
 #include <caml/mlvalues.h>
+#define DUCKDB_STATIC_BUILD
 #include <duckdb.h>
+#include <duckdb_static_extension.h>
+
+int32_t duckdb_extension_parquet_describe(duckdb_extension_descriptor *);
+int32_t duckdb_extension_json_describe(duckdb_extension_descriptor *);
+int32_t duckdb_extension_core_functions_describe(duckdb_extension_descriptor *);
 
 static duckdb_database database;
 static duckdb_connection connection;
@@ -12,6 +18,10 @@ static int connected = 0;
 
 static void connect_once(void) {
   if (connected) return;
+  if (duckdb_register_static_extension(duckdb_extension_parquet_describe) ||
+      duckdb_register_static_extension(duckdb_extension_json_describe) ||
+      duckdb_register_static_extension(duckdb_extension_core_functions_describe))
+    caml_failwith("Cannot register DuckDB extensions");
   if (duckdb_open(NULL, &database) == DuckDBError) caml_failwith("Cannot open DuckDB");
   if (duckdb_connect(database, &connection) == DuckDBError) {
     duckdb_close(&database);

@@ -27,21 +27,28 @@ no answer.
 
 ## Install
 
-rupam needs OCaml 5.5, opam and the DuckDB C library (1.5.x), which it uses
-to read data files. Get `libduckdb` from the
-[DuckDB releases](https://github.com/duckdb/duckdb/releases/tag/v1.5.6) or
-`brew install duckdb`, and put `duckdb.h` and the library where your C
-compiler finds them. The generated scripts and the REPL's previews call out to
-Python or R, and both validate input through the data-dict CLI.
+Download the archive for your system from the
+[releases page](https://github.com/VisruthSK/rupam/releases), unpack it and
+put `rupam` (or `rupam.exe`) on your PATH. Builds exist for Linux and macOS
+on x86-64 and ARM, and for Windows on x86-64. The binary is self-contained:
+it embeds [DuckDB](https://duckdb.org) 2.0, which rupam uses to read Parquet,
+CSV and TSV files.
+
+Running generated scripts, or previewing through `:backend r` or
+`:backend python`, needs that language installed, plus the data-dict CLI for
+contract validation. For Python, `uv sync` in this repository installs
+`polars` and `data-dict`. For R, install `dplyr`, `tidyr`, `bit64`, `gmp`,
+`jsonlite` and `nanoparquet`.
+
+### From source
+
+You need OCaml 5.5, opam, a C compiler, `curl` and `tar`.
 
 ```sh
+scripts/fetch-duckdb          # pinned, checksummed DuckDB static libraries
 opam install . --deps-only --with-test --with-dev-setup
-opam pin add rupam .          # puts `rupam` on your PATH
-uv sync                       # Python side: polars and data-dict
+opam pin add rupam .
 ```
-
-For the R target, install `dplyr`, `tidyr`, `bit64`, `gmp`, `jsonlite` and
-`nanoparquet`. On Windows, use WSL.
 
 ## Use
 
@@ -75,3 +82,16 @@ uv run python -m unittest discover -s test   # runs the generated R and Python
 ```
 
 CI runs the same three steps on every push and pull request.
+
+## License
+
+Copyright (C) 2026 Visruth Srimath Kandali.
+
+rupam is free software: you can redistribute it and/or modify it under the
+terms of the GNU General Public License as published by the Free Software
+Foundation, either version 3 of the License, or (at your option) any later
+version. See [LICENSE](LICENSE).
+
+Scripts that rupam generates are yours. The
+[output exception](LICENSE.exception) lets you distribute them, including the
+helper code rupam copies into them, under any terms you like.

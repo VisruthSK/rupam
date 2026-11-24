@@ -1,0 +1,15 @@
+rupam output exception
+
+As a special exception, you may create a larger work that contains part or
+all of the output of rupam, including the runtime support code that rupam
+copies into the R, Python and other scripts it generates, and distribute that
+work under terms of your choice, so long as that work isn't itself a compiler
+or code generator that uses rupam's runtime support code as its own runtime
+support code. Alternatively, if you modify or redistribute rupam's runtime
+support code itself, you may (at your option) remove this special exception,
+which will cause that code and the resulting rupam output to be licensed
+under the GNU General Public License without this special exception.
+
+This special exception is an additional permission under section 7 of the
+GNU General Public License, version 3. It was added by Visruth Srimath
+Kandali in rupam 0.1, following the exception in GNU Bison 2.2.
