@@ -416,22 +416,29 @@ let rec loop state =
      | Ok command -> Option.iter loop (run state command))
 ;;
 
+let open_session ~project ?path editor =
+  let session = { empty with project; editor } in
+  match path with
+  | None -> Some session
+  | Some path ->
+    let buf = Lexing.from_string (In_channel.with_open_text path In_channel.input_all) in
+    Lexing.set_filename buf path;
+    diagnostic buf (fun () ->
+      submit
+        { session with directory = Filename.dirname path; source_path = Some path }
+        (Frontend.parse buf))
+    |> Result.to_option
+;;
+
+let incomplete source =
+  let buf = Lexing.from_string source in
+  match Frontend.parse buf with
+  | _ -> false
+  | exception Parser.Error -> Lexing.lexeme buf = ""
+  | exception Failure _ -> false
+;;
+
 let start ~project ?path () =
   Sys.catch_break true;
-  let session = { empty with project; editor = Line.persistent () } in
-  let state =
-    match path with
-    | None -> Some session
-    | Some path ->
-      let buf =
-        Lexing.from_string (In_channel.with_open_text path In_channel.input_all)
-      in
-      Lexing.set_filename buf path;
-      diagnostic buf (fun () ->
-        submit
-          { session with directory = Filename.dirname path; source_path = Some path }
-          (Frontend.parse buf))
-      |> Result.to_option
-  in
-  Option.iter loop state
+  Option.iter loop (open_session ~project ?path (Line.persistent ()))
 ;;

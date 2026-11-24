@@ -105,7 +105,10 @@ let command name doc term = Cmd.v (Cmd.info name ~doc) term
 let repl target strict path =
   let directory = Option.fold ~none:(Sys.getcwd ()) ~some:Filename.dirname path in
   guarded (fun () ->
-    Repl.start ~project:(settings directory target strict) ?path ();
+    let project = settings directory target strict in
+    if Lazy.force Line.interactive
+    then Console.start ~project ?path ()
+    else Repl.start ~project ?path ();
     Cmd.Exit.ok)
 ;;
 

@@ -17,5 +17,6 @@
   toml
   (cmdliner (>= 2.0))
   lambda-term
+  mosaic
   lwt
   (ocamlformat (and :with-dev-setup (= 0.29.0)))))

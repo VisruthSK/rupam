@@ -1,0 +1,274 @@
+open Mosaic
+module Style = Ansi.Style
+module Color = Ansi.Color
+
+type msg =
+  | Edit of Editor.t
+  | Submit of string
+  | Recall of int
+  | Complete
+  | Clear
+  | Quit
+
+type model =
+  { session : Repl.session
+  ; input : Editor.t
+  ; pending : string list
+  ; history : string list
+  ; recalled : int option
+  ; suggestions : string list
+  }
+
+let accent = Color.of_rgb 120 180 255
+let subtle = Color.grayscale ~level:12
+let faint = Color.grayscale ~level:8
+let success = Color.of_rgb 125 211 160
+let failure = Color.of_rgb 240 113 120
+let typed = Color.of_rgb 130 200 220
+let style ?bold ?dim fg = Style.make ?bold ?dim ~fg ()
+let prompt = "rupam \xe2\x9d\xaf "
+let continuation = "    \xe2\x80\xa6 "
+let full = { width = pct 100; height = auto }
+
+let capture f =
+  flush stdout;
+  flush stderr;
+  let file = Filename.temp_file "rupam" ".out" in
+  let target = Unix.openfile file [ O_WRONLY; O_TRUNC ] 0o600 in
+  let saved_out = Unix.dup Unix.stdout
+  and saved_err = Unix.dup Unix.stderr in
+  Unix.dup2 target Unix.stdout;
+  Unix.dup2 target Unix.stderr;
+  let result =
+    Fun.protect
+      ~finally:(fun () ->
+        flush stdout;
+        flush stderr;
+        Unix.dup2 saved_out Unix.stdout;
+        Unix.dup2 saved_err Unix.stderr;
+        List.iter Unix.close [ saved_out; saved_err; target ])
+      f
+  in
+  let text = In_channel.with_open_text file In_channel.input_all in
+  Sys.remove file;
+  result, text
+;;
+
+let output_line line =
+  let prefix = "error: " in
+  if String.starts_with ~prefix line
+  then
+    box
+      ~flex_direction:Row
+      [ text ~style:(style ~bold:true failure) "error "
+      ; text ~wrap:`Word (String.sub line 7 (String.length line - 7))
+      ]
+  else (
+    match String.index_opt line ':' with
+    | Some i
+      when i > 0
+           && i + 2 <= String.length line
+           && line.[i - 1] = ' '
+           && line.[i + 1] = ' ' ->
+      box
+        ~flex_direction:Row
+        [ text (String.sub line 0 (i - 1))
+        ; text ~style:(style subtle) " : "
+        ; text ~style:(style typed) (String.sub line (i + 2) (String.length line - i - 2))
+        ]
+    | _ -> text line)
+;;
+
+let transcript source output =
+  let lines = String.split_on_char '\n' source in
+  let echoed =
+    List.mapi
+      (fun i line ->
+         box
+           ~flex_direction:Row
+           [ text ~style:(style faint) (if i = 0 then prompt else continuation)
+           ; text ~style:(style subtle) line
+           ])
+      lines
+  in
+  let results =
+    String.split_on_char '\n' output
+    |> List.filter (fun l -> String.trim l <> "")
+    |> List.map output_line
+  in
+  box ~flex_direction:Column ~size:full ~margin:(margin_lrtb 0 0 0 1) (echoed @ results)
+;;
+
+let status session =
+  let dialect =
+    match session.Repl.project.dialect with
+    | Some d -> Rupam.Project.dialect_name d
+    | None -> "no dialect"
+  in
+  text
+    ~style:(style faint)
+    (Printf.sprintf "  %s \xc2\xb7 :help \xc2\xb7 Ctrl+D quits" dialect)
+;;
+
+let view model =
+  let pending =
+    List.mapi
+      (fun i line ->
+         box
+           ~flex_direction:Row
+           [ text ~style:(style subtle) (if i = 0 then prompt else continuation)
+           ; text line
+           ])
+      (List.rev model.pending)
+  in
+  let editor =
+    box
+      ~flex_direction:Row
+      ~align_items:Center
+      ~size:{ width = pct 100; height = px 1 }
+      [ text
+          ~style:(style ~bold:true accent)
+          (if model.pending = [] then prompt else continuation)
+      ; input
+          ~size:{ width = pct 100; height = px 1 }
+          ~focused:true
+          ~state:model.input
+          ~on_change:(fun e -> Edit e)
+          ~on_submit:(fun s -> Submit s)
+          ()
+      ]
+  in
+  let suggestions =
+    match model.suggestions with
+    | [] -> []
+    | xs -> [ text ~style:(style subtle) ("  " ^ String.concat "   " xs) ]
+  in
+  box
+    ~flex_direction:Column
+    ~size:full
+    (pending @ [ editor ] @ suggestions @ [ status model.session ])
+;;
+
+let banner session =
+  Cmd.static_commit
+    (box
+       ~flex_direction:Column
+       ~size:full
+       ~margin:(margin_lrtb 0 0 0 1)
+       [ box
+           ~flex_direction:Row
+           [ text ~style:(style ~bold:true accent) "rupam"
+           ; text ~style:(style subtle) "  typed data analysis for R and Python"
+           ]
+       ; text
+           ~style:(style faint)
+           (match session.Repl.source_path with
+            | Some path -> "loaded " ^ path
+            | None -> "type an expression, or :help")
+       ])
+;;
+
+let evaluate model source =
+  let entry = String.concat "\n" (List.rev (source :: model.pending)) in
+  if String.trim entry = ""
+  then { model with input = Editor.empty; pending = [] }, Cmd.none
+  else if Repl.incomplete entry
+  then { model with input = Editor.empty; pending = source :: model.pending }, Cmd.none
+  else (
+    Line.remember model.session.editor entry;
+    let history = entry :: model.history in
+    let next, output =
+      capture (fun () ->
+        match Repl.parse entry with
+        | Error message ->
+          Repl.report message;
+          Some model.session
+        | Ok command -> Repl.run model.session command)
+    in
+    let committed = Cmd.static_commit (transcript entry output) in
+    match next with
+    | None -> model, Cmd.batch [ committed; Cmd.quit ]
+    | Some session ->
+      ( { session
+        ; input = Editor.empty
+        ; pending = []
+        ; history
+        ; recalled = None
+        ; suggestions = []
+        }
+      , committed ))
+;;
+
+let recall model step =
+  let count = List.length model.history in
+  let index =
+    match model.recalled, step with
+    | None, -1 -> Some 0
+    | Some i, -1 -> Some (min (count - 1) (i + 1))
+    | Some 0, 1 -> None
+    | Some i, 1 -> Some (i - 1)
+    | current, _ -> current
+  in
+  match index with
+  | Some i when i < count ->
+    let text = List.nth model.history i in
+    { model with recalled = Some i; input = Editor.of_string text }
+  | _ -> { model with recalled = None; input = Editor.empty }
+;;
+
+let complete model =
+  let line = Editor.text model.input in
+  let start, candidates = Repl.complete model.session line in
+  match candidates with
+  | [ only ] ->
+    { model with
+      input = Editor.of_string (String.sub line 0 start ^ only)
+    ; suggestions = []
+    }
+  | [] -> { model with suggestions = [] }
+  | many -> { model with suggestions = many }
+;;
+
+let update msg model =
+  match msg with
+  | Edit input -> { model with input; suggestions = [] }, Cmd.none
+  | Submit source -> evaluate model source
+  | Recall step -> recall model step, Cmd.none
+  | Complete -> complete model, Cmd.none
+  | Clear -> { model with input = Editor.empty; pending = [] }, Cmd.static_clear
+  | Quit -> model, Cmd.quit
+;;
+
+let subscriptions model =
+  Sub.on_keys
+    ~phase:Capture
+    ([ Shortcut.up, Recall (-1)
+     ; Shortcut.down, Recall 1
+     ; Shortcut.tab, Complete
+     ; Shortcut.ctrl 'l', Clear
+     ]
+     @ if Editor.text model.input = "" then [ Shortcut.ctrl 'd', Quit ] else [])
+;;
+
+let start ~project ?path () =
+  match Repl.open_session ~project ?path (Line.persistent ()) with
+  | None -> ()
+  | Some session ->
+    let config = Matrix.config ~mode:`Primary ~mouse:`Off () in
+    run
+      ~config
+      { init =
+          (fun () ->
+            ( { session
+              ; input = Editor.empty
+              ; pending = []
+              ; history = []
+              ; recalled = None
+              ; suggestions = []
+              }
+            , banner session ))
+      ; update
+      ; view
+      ; subscriptions
+      }
+;;
