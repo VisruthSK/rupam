@@ -5,4 +5,8 @@
 
 (library
  (name rupam)
- (libraries unix yojson uucp))
+ (libraries unix yojson uucp)
+ (foreign_stubs
+  (language c)
+  (names duckdb_stubs))
+ (c_library_flags (-lduckdb)))

@@ -47,15 +47,23 @@ and environment = (string * binding) list
 let fail x msg = raise (Infer.Error (x.span, msg))
 
 let physical path =
-  let script =
-    "import json,polars as p,sys;print(json.dumps({k:str(v) for k,v in \
-     p.read_parquet_schema(sys.argv[1]).items()}))"
-  in
-  let ch = Unix.open_process_args_in "python" [| "python"; "-c"; script; path |] in
-  let output = In_channel.input_all ch in
-  match Unix.close_process_in ch with
-  | Unix.WEXITED 0 -> Yojson.Basic.from_string output |> Yojson.Basic.Util.to_assoc
-  | _ -> failwith "Cannot read Parquet schema"
+  List.map
+    (fun (c : Data_file.column) ->
+       ( c.name
+       , match c.physical with
+         | "BIGINT" -> Some Shape.Int64
+         | "DOUBLE" -> Some Float64
+         | "BOOLEAN" -> Some Bool
+         | "VARCHAR" -> Some String
+         | _ -> None ))
+    (Data_file.columns path)
+;;
+
+let polars_name = function
+  | Shape.Int64 -> "Int64"
+  | Float64 -> "Float64"
+  | Bool -> "Boolean"
+  | String -> "String"
 ;;
 
 let rec dataset env scalars x =
@@ -88,11 +96,9 @@ let rec dataset env scalars x =
         (fun (c : Contract.column) ->
            let t =
              match List.assoc_opt c.name types with
-             | Some (`String "Int64") -> Shape.Int64
-             | Some (`String "Float64") -> Float64
-             | Some (`String "Boolean") -> Bool
-             | Some (`String "String") -> String
-             | _ -> fail x ("Unsupported physical type for " ^ c.name)
+             | Some (Some t) -> t
+             | Some None -> fail x ("Unsupported physical type for " ^ c.name)
+             | None -> fail x ("Contract column " ^ c.name ^ " is missing from the file")
            in
            c.name, t, not c.required)
         table.columns
@@ -101,7 +107,12 @@ let rec dataset env scalars x =
     ; table
     ; fields = List.map (fun (n, _, _) -> n) fields
     ; plan = Table.source 0 fields
-    ; physical_types = `Assoc types
+    ; physical_types =
+        `Assoc
+          (List.map
+             (fun (n, t) ->
+                n, Option.fold ~none:`Null ~some:(fun t -> `String (polars_name t)) t)
+             types)
     ; join = None
     }
   | Pipe (a, { form = Call ({ form = Name (Bare, "join"); _ }, (None, b) :: options); _ })

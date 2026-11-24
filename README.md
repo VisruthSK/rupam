@@ -27,8 +27,12 @@ no answer.
 
 ## Install
 
-rupam needs OCaml 5.5 and opam. The generated scripts and the REPL's previews
-call out to Python or R, and both validate input through the data-dict CLI.
+rupam needs OCaml 5.5, opam and the DuckDB C library (1.5.x), which it uses
+to read data files. Get `libduckdb` from the
+[DuckDB releases](https://github.com/duckdb/duckdb/releases/tag/v1.5.6) or
+`brew install duckdb`, and put `duckdb.h` and the library where your C
+compiler finds them. The generated scripts and the REPL's previews call out to
+Python or R, and both validate input through the data-dict CLI.
 
 ```sh
 opam install . --deps-only --with-test --with-dev-setup
