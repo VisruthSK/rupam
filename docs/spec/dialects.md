@@ -151,3 +151,12 @@ this import mechanism. Record imports and dependencies in the manifest.
 - Accompanied by a source map to `.rp` spans and JSON manifest of lock digest,
   compiler version, dialect, packages, discharged obligations, remaining
   checks, and non-portable calls.
+
+## Data interchange
+
+Every dialect reads and writes tables through Arrow: CSV, TSV and Parquet are
+parsed by the Arrow readers, so parsing and types agree by construction, and
+a runtime can be replaced by any Arrow-speaking one. R and Python run in
+separate worker processes with their own sessions. A table passed between
+processes goes through an Arrow IPC file that both sides memory-map, so it is
+shared without being copied or parsed.
