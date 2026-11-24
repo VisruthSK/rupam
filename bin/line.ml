@@ -20,7 +20,13 @@ let rec ensure_directory path =
 
 let load_history () =
   match In_channel.with_open_text (history_file ()) In_channel.input_lines with
-  | lines -> List.rev_map Scanf.unescaped lines
+  | lines ->
+    List.rev
+      (List.filter_map
+         (fun line ->
+            try Some (Scanf.unescaped line) with
+            | Scanf.Scan_failure _ -> None)
+         lines)
   | exception Sys_error _ -> []
 ;;
 

@@ -473,3 +473,21 @@ let display t =
   in
   show t
 ;;
+
+let rec descriptor t =
+  match repr t with
+  | Int -> `String "int"
+  | Float -> `String "float"
+  | Bool -> `String "bool"
+  | String -> `String "string"
+  | List t -> `List [ `String "list"; descriptor t ]
+  | Option t -> `List [ `String "option"; descriptor t ]
+  | Tuple ts -> `List (`String "tuple" :: List.map descriptor ts)
+  | Record (fields, _) ->
+    `List
+      [ `String "record"
+      ; `List (List.map (fun (n, t) -> `List [ `String n; descriptor t ]) fields)
+      ]
+  | Variant _ | Var _ -> `String "any"
+  | Arrow _ -> `String "function"
+;;

@@ -111,7 +111,7 @@ let diagnostic buf f =
   | Sys.Break ->
     prerr_endline "Cancelled";
     Error ()
-  | Infer.Error ((p, _), msg) | Eval.Error ((p, _), msg) ->
+  | Infer.Error ((p, _), msg) ->
     report (position p ^ ": " ^ msg);
     Error ()
   | Parser.Error ->
@@ -122,33 +122,26 @@ let diagnostic buf f =
     Error ()
 ;;
 
-let contracted = Analysis_program.tabular
-
-let execute (types, values) ds =
-  let types = Infer.program types ds in
-  let values, result = Eval.run values ds in
-  Option.iter (fun v -> print_endline (Eval.display v)) result;
-  types, values
-;;
-
 type session =
-  { scalar : Infer.env * (string * Eval.value) list
+  { scalar : Infer.env
   ; history : Syntax.declaration list
   ; tables : Analysis_program.environment
   ; lexical : Check.env
   ; directory : string
   ; project : Project.t
   ; source_path : string option
+  ; definitions : Syntax.declaration list
   }
 
 let empty =
-  { scalar = Infer.empty, []
+  { scalar = Infer.empty
   ; history = []
   ; tables = []
   ; lexical = []
   ; directory = "."
   ; project = Project.standalone
   ; source_path = None
+  ; definitions = []
   }
 ;;
 
@@ -165,16 +158,29 @@ let preview state d =
   | Python_polars -> Analysis_program.preview_page ~runtime d ~offset:0 ~limit:20
 ;;
 
+let compute state d =
+  let dialect = Project.require_dialect state.project in
+  let language = Runtime.of_dialect dialect in
+  let script =
+    match dialect with
+    | Project.R_dplyr -> R_scalar.compile (state.definitions @ [ d ])
+    | Python_polars -> Python.compile (state.definitions @ [ d ])
+  in
+  String.trim (Worker.evaluate (Runtime.resolve state.project language) language script)
+;;
+
 let echo ?(announce = true) state d =
-  let types, values = state.scalar in
-  let types, t = Infer.declaration types d in
-  let values, result = Eval.run values [ d ] in
-  (match d, result with
-   | _ when not announce -> ()
-   | Syntax.Let (name, _, _), _ -> Printf.printf "%s : %s\n" name (Infer.display t)
-   | Evaluate _, Some v -> Printf.printf "%s : %s\n" (Eval.display v) (Infer.display t)
-   | _ -> ());
-  { state with scalar = types, values }
+  let scalar, t = Infer.declaration state.scalar d in
+  let state = { state with scalar } in
+  match d with
+  | Syntax.Evaluate _ ->
+    if announce then Printf.printf "%s : %s\n" (compute state d) (Infer.display t);
+    state
+  | Let (name, _, _) ->
+    if announce then Printf.printf "%s : %s\n" name (Infer.display t);
+    { state with definitions = state.definitions @ [ d ] }
+  | Type _ | Alias _ -> { state with definitions = state.definitions @ [ d ] }
+  | Import _ | Contract _ -> state
 ;;
 
 let extend state ds =
@@ -240,8 +246,7 @@ let declare ~announce state d =
 let submit ?(announce = true) state ds = List.fold_left (declare ~announce) state ds
 
 let names state =
-  List.map fst state.tables @ List.map fst (fst state.scalar).values
-  |> List.sort_uniq compare
+  List.map fst state.tables @ List.map fst state.scalar.values |> List.sort_uniq compare
 ;;
 
 let keywords = [ "let"; "match"; "type"; "fn"; "if"; "else"; "use"; "contract" ]
@@ -295,7 +300,13 @@ let reload state =
   in
   submit
     ~announce:false
-    { state with history = []; tables = []; lexical = []; scalar = Infer.empty, [] }
+    { state with
+      history = []
+    ; tables = []
+    ; lexical = []
+    ; scalar = Infer.empty
+    ; definitions = []
+    }
     history
 ;;
 
@@ -331,7 +342,7 @@ let run state = function
       (List.rev state.tables);
     List.iter
       (fun (name, (_, t)) -> Printf.printf "%s : %s\n" name (Infer.display t))
-      (List.rev (fst state.scalar).values);
+      (List.rev state.scalar.values);
     Some state
   | Type source ->
     let buf = Lexing.from_string source in
@@ -341,7 +352,7 @@ let run state = function
          | [ (Syntax.Evaluate x as d) ] when tabular state d ->
            Analysis_program.schema (dataset state x)
          | [ Syntax.Evaluate x ] ->
-           print_endline (Infer.display (Infer.expression (fst state.scalar) 1 x))
+           print_endline (Infer.display (Infer.expression state.scalar 1 x))
          | _ -> failwith "Expected one expression"));
     Some state
   | Code (chosen, source) ->

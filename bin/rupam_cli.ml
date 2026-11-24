@@ -39,7 +39,7 @@ let generate (project : Project.t) path ds =
     let mapping = Source_map.create () in
     Source_map.finish mapping (compile (Source_map.mark mapping) ds)
   in
-  match Project.require_dialect project, Repl.contracted ds with
+  match Project.require_dialect project, Analysis_program.tabular ds with
   | R_dplyr, true -> R_syntax.program (Tidyverse.compile ~strict ~directory ds)
   | R_dplyr, false -> scalar (fun annotate -> R_scalar.compile ~annotate)
   | Python_polars, true ->
@@ -106,6 +106,7 @@ let repl target strict path =
   let directory = Option.fold ~none:(Sys.getcwd ()) ~some:Filename.dirname path in
   guarded (fun () ->
     let project = settings directory target strict in
+    ignore (Project.require_dialect project);
     if Lazy.force Line.interactive
     then Console.start ~project ?path ()
     else Repl.start ~project ?path ();

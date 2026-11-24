@@ -77,7 +77,7 @@ let stop w =
 let active = Hashtbl.create 2
 let () = at_exit (fun () -> Hashtbl.iter (fun _ w -> stop w) active)
 
-let run runtime language script =
+let evaluate runtime language script =
   let key = runtime, language in
   let w =
     match Hashtbl.find_opt active key with
@@ -106,7 +106,10 @@ let run runtime language script =
   if to_int (member "revision" reply) <> w.revision then failwith "Stale backend response";
   match member "error" reply |> to_string_option with
   | Some message -> failwith message
-  | None ->
-    print_string (member "output" reply |> to_string);
-    flush stdout
+  | None -> member "output" reply |> to_string
+;;
+
+let run runtime language script =
+  print_string (evaluate runtime language script);
+  flush stdout
 ;;

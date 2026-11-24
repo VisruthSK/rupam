@@ -1,17 +1,5 @@
 open Syntax
 
-let preamble =
-  {|rp_int <- function(x) {
-  value <- gmp::as.bigz(x)
-  if (value < gmp::as.bigz("-9223372036854775808") || value > gmp::as.bigz("9223372036854775807"))
-    stop("Int64 overflow")
-  value
-}
-rp_numeric <- function(x) if (inherits(x, "bigz")) rp_int(x) else x
-rp_variant <- function(tag, ...) structure(list(...), tag = tag)
-|}
-;;
-
 let compile ?(annotate = Source_map.plain) ds =
   let next = ref 0 in
   let fresh () =
@@ -128,7 +116,7 @@ let compile ?(annotate = Source_map.plain) ds =
   let _, _, lines =
     List.fold_left
       (fun (types, env, lines) d ->
-         let types, _ = Infer.declaration types d in
+         let types, typ = Infer.declaration types d in
          match d with
          | Alias _ -> types, env, lines
          | Type (_, _, cs) ->
@@ -151,11 +139,16 @@ let compile ?(annotate = Source_map.plain) ds =
            in
            let id = fresh () in
            types, (n, id) :: env, (id ^ " <- " ^ emit env v) :: lines
-         | Evaluate x -> types, env, ("print(" ^ emit env x ^ ")") :: lines
+         | Evaluate x ->
+           let shape = q (Yojson.Basic.to_string (Infer.descriptor typ)) in
+           ( types
+           , env
+           , ("cat(rp_show(" ^ emit env x ^ ", " ^ shape ^ "), \"\\n\", sep = \"\")")
+             :: lines )
          | Import (n, _) -> failwith ("Module " ^ n ^ " requires a table backend")
          | Contract _ -> failwith "Expected scalar program")
       (Infer.empty, [], [])
       ds
   in
-  preamble ^ String.concat "\n" (List.rev lines) ^ "\n"
+  Adapters.r ^ String.concat "\n" (List.rev lines) ^ "\n"
 ;;

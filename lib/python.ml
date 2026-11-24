@@ -1,25 +1,5 @@
 open Syntax
 
-let helpers =
-  {|import math
-
-def rp_div(a, b):
-    if b != 0.0:
-        return a / b
-    if a == 0.0 or math.isnan(a):
-        return math.nan
-    return math.copysign(math.inf, math.copysign(1.0, a) * math.copysign(1.0, b))
-
-def rp_int(x):
-    if x < -(1 << 63) or x >= (1 << 63):
-        raise OverflowError("Int64 overflow")
-    return x
-
-def rp_num(x):
-    return rp_int(x) if type(x) is int else x
-|}
-;;
-
 let compile ?(annotate = Source_map.plain) program =
   let serial = ref 0 in
   let fresh () =
@@ -124,7 +104,7 @@ let compile ?(annotate = Source_map.plain) program =
   let _, _, lines =
     List.fold_left
       (fun (types, env, lines) d ->
-         let types, _ = Infer.declaration types d in
+         let types, typ = Infer.declaration types d in
          match d with
          | Let (n, ps, body) ->
            let x =
@@ -134,7 +114,9 @@ let compile ?(annotate = Source_map.plain) program =
            in
            let id = fresh () in
            types, (n, id) :: env, (id ^ " = " ^ emit env x) :: lines
-         | Evaluate x -> types, env, ("print(" ^ emit env x ^ ")") :: lines
+         | Evaluate x ->
+           let shape = Polars.quoted (Yojson.Basic.to_string (Infer.descriptor typ)) in
+           types, env, ("print(rp_show(" ^ emit env x ^ ", " ^ shape ^ "))") :: lines
          | Alias _ -> types, env, lines
          | Type (_, _, constructors) ->
            List.fold_left
@@ -155,5 +137,5 @@ let compile ?(annotate = Source_map.plain) program =
       (Infer.empty, [], [])
       program
   in
-  String.concat "\n" (helpers :: List.rev lines) ^ "\n"
+  String.concat "\n" (Adapters.python :: List.rev lines) ^ "\n"
 ;;
