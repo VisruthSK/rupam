@@ -17,7 +17,7 @@ type command =
   | Target of Project.dialect
   | Type of string
   | View of view * string
-  | Code of Project.dialect * string
+  | Code of Project.dialect option * string
   | Source of string
 
 let views =
@@ -38,7 +38,7 @@ let help =
   ; ":explain TABLE", "relational plan and lowering notes"
   ; ":contract TABLE", "contract source and validation status"
   ; ":validate TABLE", "run data-dict validation now"
-  ; ":code DIALECT TABLE", "generated script for a table"
+  ; ":code [DIALECT] TABLE", "generated code for a table"
   ; ":target DIALECT", "r-dplyr or python-polars, used by :preview and :inspect"
   ; ":bindings", "everything defined in this session"
   ; ":prefix", "inside an unfinished input: check the complete part"
@@ -86,12 +86,15 @@ let parse line =
     | "target" -> Result.map (fun d -> Target d) (dialect rest)
     | "type" | "t" -> needs "an expression" (fun x -> Type x)
     | "code" ->
-      (match String.index_opt rest ' ' with
-       | Some i ->
-         Result.map
-           (fun b -> Code (b, String.trim (String.sub rest i (String.length rest - i))))
-           (dialect (String.sub rest 0 i))
-       | None -> Error ":code expects a dialect and a table")
+      let first, after =
+        match String.index_opt rest ' ' with
+        | Some i ->
+          String.sub rest 0 i, String.trim (String.sub rest i (String.length rest - i))
+        | None -> rest, ""
+      in
+      (match List.assoc_opt first Project.dialects with
+       | Some d when after <> "" -> Ok (Code (Some d, after))
+       | _ -> needs "a table" (fun x -> Code (None, x)))
     | name ->
       (match List.assoc_opt name views with
        | Some v -> needs "a table" (fun x -> View (v, x))
@@ -357,12 +360,14 @@ let run state = function
                 (Analysis_program.dataset state.tables state.lexical x))
          | _ -> failwith "Expected one expression"));
     Some state
-  | Code (dialect, source) ->
+  | Code (chosen, source) ->
     ignore
       (diagnostic (Lexing.from_string source) (fun () ->
          let d = table state source in
          print_endline
-           (match dialect with
+           (match
+              Option.value chosen ~default:(Project.require_dialect state.project)
+            with
             | Project.R_dplyr -> R_syntax.render (Tidyverse.table d)
             | Python_polars -> Python_syntax.render (Analysis_program.python_table d))));
     Some state
