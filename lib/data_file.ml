@@ -19,6 +19,12 @@ let format path =
   | extension -> failwith ("Unsupported data file extension " ^ extension)
 ;;
 
+let format_name = function
+  | Parquet -> "parquet"
+  | Csv -> "csv"
+  | Tsv -> "tsv"
+;;
+
 let literal text = "'" ^ String.concat "''" (String.split_on_char '\'' text) ^ "'"
 
 let reader path =

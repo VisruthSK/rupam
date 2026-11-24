@@ -11,4 +11,4 @@ let measurements = margins
   |> pivot_longer(cols = (margin, deviation), names_to = measure, values_to = amount)
   |> arrange(region, customer_id, measure)
 
-save_parquet(measurements, "regional-variation.parquet")
+write_parquet(measurements, "regional-variation.parquet")

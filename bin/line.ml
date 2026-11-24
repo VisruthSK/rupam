@@ -23,6 +23,16 @@ let rec ensure_directory path =
 
 let ephemeral = { history = LTerm_history.create []; file = None }
 
+let bind_editing_keys () =
+  let key control code = { LTerm_key.control; meta = false; shift = false; code } in
+  let kill action = [ LTerm_read_line.Edit (LTerm_edit.Zed action) ] in
+  LTerm_read_line.bind [ key true LTerm_key.Delete ] (kill Zed_edit.Kill_next_word);
+  LTerm_read_line.bind [ key true LTerm_key.Backspace ] (kill Zed_edit.Kill_prev_word);
+  LTerm_read_line.bind
+    [ key true (LTerm_key.Char (Uchar.of_char 'h')) ]
+    (kill Zed_edit.Kill_prev_word)
+;;
+
 let persistent () =
   if not (Lazy.force interactive)
   then ephemeral
@@ -30,6 +40,7 @@ let persistent () =
     let file = Filename.concat (Filename.concat (state_directory ()) "rupam") "history" in
     let history = LTerm_history.create ~max_entries:1000 [] in
     ensure_directory (Filename.dirname file);
+    bind_editing_keys ();
     Lwt_main.run (LTerm_history.load history file);
     { history; file = Some file })
 ;;
@@ -38,6 +49,7 @@ class reader term history prompt complete =
   object (self)
     inherit LTerm_read_line.read_line ~history ()
     inherit [Zed_string.t] LTerm_read_line.term term
+    method! show_box = false
 
     method! completion =
       let before = Zed_string.to_utf8 (Zed_rope.to_string self#input_prev) in
@@ -52,6 +64,8 @@ class reader term history prompt complete =
   end
 
 let read t ?(complete = fun _ -> 0, []) prompt =
+  flush stdout;
+  flush stderr;
   if not (Lazy.force interactive)
   then In_channel.input_line stdin
   else

@@ -66,3 +66,19 @@ def validate_contract(dictionary):
         report = dictionary_json([level, "--json"], dictionary)
         if report["status"] != "ok" or any(s["outcome"] != "pass" for s in report["steps"]):
             raise ValueError(f"Incomplete {level} validation")
+
+
+def read_file(path, format, schema):
+    dtypes = {name: getattr(pl, kind) for name, kind in schema.items()}
+    if format == "parquet":
+        frame = pl.read_parquet(path)
+    else:
+        frame = pl.read_csv(
+            path,
+            separator="\t" if format == "tsv" else ",",
+            schema_overrides=dtypes,
+            null_values=[""],
+        )
+    if {k: str(v) for k, v in frame.schema.items()} != schema:
+        raise ValueError(f"{path} no longer matches the schema it was compiled against")
+    return frame.with_columns(pl.col(pl.Float64).fill_nan(None)).lazy()

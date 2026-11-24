@@ -25,4 +25,4 @@ let regional =
        )
     |> arrange(desc(total_margin), region)
 
-save_parquet(regional, "regional.parquet")
+write_parquet(regional, "regional.parquet")

@@ -22,12 +22,26 @@ let join_kinds =
 ;;
 
 type dataset =
-  { dictionary : Contract.t
-  ; table : Contract.table
+  { origin : origin
   ; fields : string list
   ; plan : Table.t
+  }
+
+and origin =
+  | Contracted of contracted
+  | File of file
+  | Joined of join
+
+and contracted =
+  { dictionary : Contract.t
+  ; table : Contract.table
   ; physical_types : Yojson.Basic.t
-  ; join : join option
+  }
+
+and file =
+  { path : string
+  ; format : Data_file.format
+  ; columns : (string * Shape.primitive) list
   }
 
 and join =
@@ -45,6 +59,28 @@ type binding =
 and environment = (string * binding) list
 
 let fail x msg = raise (Infer.Error (x.span, msg))
+let readers = [ "read_csv"; "read_tsv"; "read_parquet" ]
+
+let rec reads x =
+  match x.form with
+  | Call ({ form = Name (Bare, f); _ }, _) when List.mem f readers -> true
+  | Call (f, args) -> reads f || List.exists (fun (_, a) -> reads a) args
+  | Pipe (a, b) | Binary (_, a, b) | Range (a, b) | Local (_, a, b) -> reads a || reads b
+  | Formula (a, b) -> Option.fold ~none:false ~some:reads a || reads b
+  | If (a, b, c) -> reads a || reads b || reads c
+  | Match (a, branches) -> reads a || List.exists (fun (_, b) -> reads b) branches
+  | Tuple xs | List xs -> List.exists reads xs
+  | Record fs -> List.exists (fun (_, a) -> reads a) fs
+  | Field (a, _) | Unary (_, a) | Annotated (a, _) | Lambda (_, a) -> reads a
+  | Name _ | Literal _ -> false
+;;
+
+let tabular =
+  List.exists (function
+    | Contract _ -> true
+    | Let (_, _, x) | Evaluate x -> reads x
+    | Alias _ | Type _ | Import _ -> false)
+;;
 
 let physical path =
   List.map
@@ -66,7 +102,7 @@ let polars_name = function
   | String -> "String"
 ;;
 
-let rec dataset env scalars x =
+let rec dataset ~directory env scalars x =
   match x.form with
   | Name (Bare, n) ->
     (match List.assoc_opt n env with
@@ -103,22 +139,57 @@ let rec dataset env scalars x =
            c.name, t, not c.required)
         table.columns
     in
-    { dictionary = dict
-    ; table
+    { origin =
+        Contracted
+          { dictionary = dict
+          ; table
+          ; physical_types =
+              `Assoc
+                (List.map
+                   (fun (n, t) ->
+                      ( n
+                      , Option.fold ~none:`Null ~some:(fun t -> `String (polars_name t)) t
+                      ))
+                   types)
+          }
     ; fields = List.map (fun (n, _, _) -> n) fields
     ; plan = Table.source 0 fields
-    ; physical_types =
-        `Assoc
-          (List.map
-             (fun (n, t) ->
-                n, Option.fold ~none:`Null ~some:(fun t -> `String (polars_name t)) t)
-             types)
-    ; join = None
+    }
+  | Call
+      ( { form = Name (Bare, (("read_csv" | "read_parquet" | "read_tsv") as reader)); _ }
+      , [ (None, { form = Literal (Text path); _ }) ] ) ->
+    let path =
+      if Filename.is_relative path then Filename.concat directory path else path
+    in
+    let format = Data_file.format path in
+    let expected =
+      match reader with
+      | "read_csv" -> Data_file.Csv
+      | "read_tsv" -> Data_file.Tsv
+      | _ -> Data_file.Parquet
+    in
+    if format <> expected then fail x (reader ^ " cannot read " ^ Filename.basename path);
+    let columns =
+      List.map
+        (fun (c : Data_file.column) ->
+           match c.physical with
+           | "BIGINT" | "INTEGER" -> c.name, Shape.Int64
+           | "DOUBLE" -> c.name, Float64
+           | "BOOLEAN" -> c.name, Bool
+           | "VARCHAR" -> c.name, String
+           | other ->
+             fail x (Printf.sprintf "Column %s has unsupported type %s" c.name other))
+        (try Data_file.columns path with
+         | Failure message -> fail x message)
+    in
+    { origin = File { path; format; columns }
+    ; fields = List.map fst columns
+    ; plan = Table.source 0 (List.map (fun (n, t) -> n, t, true) columns)
     }
   | Pipe (a, { form = Call ({ form = Name (Bare, "join"); _ }, (None, b) :: options); _ })
     ->
-    let left = dataset env scalars a
-    and right = dataset env scalars b in
+    let left = dataset ~directory env scalars a
+    and right = dataset ~directory env scalars b in
     let key, right_key =
       match List.assoc_opt (Some "on") options with
       | Some { form = Name (Bare, k); _ } -> k, k
@@ -175,19 +246,22 @@ let rec dataset env scalars x =
                Some (n, e.typ.primitive, e.typ.nullable || nullable_right)))
           right.plan.schema
     in
-    { left with
-      fields = List.map (fun (n, _, _) -> n) fields
+    { origin = Joined { left; right; key; kind }
+    ; fields = List.map (fun (n, _, _) -> n) fields
     ; plan = Table.source 0 fields
-    ; join = Some { left; right; key; kind }
     }
   | Pipe (a, { form = Call ({ form = Name (Bare, verb); _ }, args); _ }) ->
-    let t = dataset env scalars a in
+    let t = dataset ~directory env scalars a in
     (try { t with plan = Table.stage ~span:x.span scalars t.plan verb args } with
      | Shape.Error message -> fail x message)
   | Call ({ form = Name (Bare, f); _ }, [ (None, arg) ]) ->
     (match List.assoc_opt f env with
      | Some (Function ([ p ], body, closure, captured)) ->
-       dataset ((p, Dataset (dataset env scalars arg)) :: closure) captured body
+       dataset
+         ~directory
+         ((p, Dataset (dataset ~directory env scalars arg)) :: closure)
+         captured
+         body
      | _ -> fail x ("Unsupported table function " ^ f))
   | _ -> fail x "Expected table expression"
 ;;
@@ -216,18 +290,18 @@ let extend ?(strict = true) ~directory env scalars declarations =
     | (Let (_, None, { form = Literal _; _ }) as d) :: ds ->
       loop env (Check.define scalars d) outputs ds
     | Let (n, None, x) :: ds ->
-      loop ((n, Dataset (dataset env scalars x)) :: env) scalars outputs ds
+      loop ((n, Dataset (dataset ~directory env scalars x)) :: env) scalars outputs ds
     | Evaluate
         { form =
             Call
-              ( { form = Name (Bare, "save_parquet"); _ }
+              ( { form = Name (Bare, "write_parquet"); _ }
               , [ (None, x); (None, { form = Literal (Text path); _ }) ] )
         ; _
         }
-      :: ds -> loop env scalars ((dataset env scalars x, path) :: outputs) ds
+      :: ds -> loop env scalars ((dataset ~directory env scalars x, path) :: outputs) ds
     | Alias _ :: ds -> loop env scalars outputs ds
     | Type _ :: _ -> failwith "Table backend does not support variant declarations"
-    | Evaluate x :: _ -> fail x "Expected save_parquet"
+    | Evaluate x :: _ -> fail x "Expected write_parquet"
   in
   loop env scalars [] declarations
 ;;
@@ -241,12 +315,13 @@ let compile ?strict ~directory ds = snd (analyze ?strict ~directory ds)
 
 let rec restrictions d =
   let source =
-    match d.join with
-    | None ->
+    match d.origin with
+    | Contracted { table; _ } ->
       List.filter_map
         (fun (c : Contract.column) -> if c.restricted then Some c.name else None)
-        d.table.columns
-    | Some { left; right; key; _ } ->
+        table.columns
+    | File _ -> []
+    | Joined { left; right; key; _ } ->
       let hidden = restrictions left @ restrictions right in
       if List.mem key hidden then d.fields else hidden
   in
@@ -312,22 +387,29 @@ module P = Python_syntax
 
 let rec python_stages d =
   let base =
-    match d.join with
-    | None ->
+    match d.origin with
+    | File { path; format; columns } ->
+      P.call
+        "read_file"
+        [ P.Str path
+        ; P.Str (Data_file.format_name format)
+        ; P.Dict (List.map (fun (n, t) -> P.Str n, P.Str (polars_name t)) columns)
+        ]
+    | Contracted { dictionary; table; physical_types } ->
       P.call
         "validated_source"
-        [ P.Str d.dictionary.path
-        ; P.Str (Yojson.Basic.to_string d.dictionary.metadata)
-        ; P.Str d.table.name
+        [ P.Str dictionary.path
+        ; P.Str (Yojson.Basic.to_string dictionary.metadata)
+        ; P.Str table.name
         ; P.Dict
-            (Yojson.Basic.Util.to_assoc d.physical_types
+            (Yojson.Basic.Util.to_assoc physical_types
              |> List.map (fun (name, physical) ->
                ( P.Str name
                , match physical with
                  | `String t -> P.Str t
                  | _ -> P.Null )))
         ]
-    | Some { left; right; key; kind } ->
+    | Joined { left; right; key; kind } ->
       P.Chain
         ( python_table left
         , [ P.link
@@ -408,9 +490,11 @@ let preview_page ~runtime d ~offset ~limit =
 let explain d =
   print_endline "Validate a private snapshot before materialization (full source scan)";
   let rec visit d =
-    (match d.join with
-     | None -> Printf.printf "load %s\n" d.table.name
-     | Some { left; right; key; kind } ->
+    (match d.origin with
+     | Contracted { table; _ } -> Printf.printf "load %s\n" table.name
+     | File { path; format; _ } ->
+       Printf.printf "read %s %s\n" (Data_file.format_name format) path
+     | Joined { left; right; key; kind } ->
        visit left;
        visit right;
        Printf.printf "%s join on %s\n" (join_name kind) key);
@@ -434,9 +518,10 @@ let explain d =
 
 let validate ~runtime d =
   let rec sources d =
-    match d.join with
-    | None -> [ d.dictionary.path ]
-    | Some { left; right; _ } -> sources left @ sources right
+    match d.origin with
+    | Contracted { dictionary; _ } -> [ dictionary.path ]
+    | File _ -> []
+    | Joined { left; right; _ } -> sources left @ sources right
   in
   List.sort_uniq compare (sources d)
   |> List.iter (fun path ->

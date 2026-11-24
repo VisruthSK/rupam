@@ -4,7 +4,7 @@ A dialect is a host language and table library.
 
 | Dialect | Host | Libraries |
 | --- | --- | --- |
-| `r-dplyr` | R | dplyr, tidyr, bit64 |
+| `r-dplyr` | R | dplyr, tidyr, bit64, arrow |
 | `python-polars` | Python | polars |
 
 ## Compilation

@@ -6,6 +6,21 @@ contract, transform it with a small set of verbs, and write it out. The checker
 knows the schema at every step, so a typo or a nullable column in the wrong
 place fails before any data is read.
 
+## Reading files
+
+```text
+let visits = read_csv("visits.csv")
+let scores = read_parquet("scores.parquet")
+```
+
+`read_csv`, `read_tsv` and `read_parquet` take a path relative to the
+program. rupam reads the file's schema while checking, through its embedded
+DuckDB, so column names and types are known before anything runs. Every
+column of such a file is optional (`T?`), because nothing guarantees it is
+complete. The generated script checks that the file still has that schema
+before reading it, reads 64-bit integers exactly in both dialects, and turns
+NaN into a missing value.
+
 ## Contracts
 
 ```text
@@ -39,7 +54,7 @@ left out of previews and generated output.
 | `join(other, on = k, how = left)` | `inner`, `left`, `right`, `full`, `semi` or `anti`; `on = left.a == right.b` for differing names |
 | `pivot_longer(cols = (a, b), names_to = k, values_to = v)` | columns into key/value rows |
 | `pivot_wider(names_from = k, values_from = v, levels = [a, b])` | the reverse; the output columns must be listed |
-| `save_parquet(t, "out.parquet")` | writes the result |
+| `write_parquet(t, "out.parquet")` | writes the result |
 
 `mutate(..., by = region)` evaluates aggregates per group but keeps every row,
 which is how you compute a value relative to its group:

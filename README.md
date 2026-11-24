@@ -17,7 +17,7 @@ let regional =
   |> summarize(transactions = count(), total = sum(margin), by = region)
   |> arrange(desc(total), region)
 
-save_parquet(regional, "regional.parquet")
+write_parquet(regional, "regional.parquet")
 ```
 
 The checker knows `cost` may be missing, so `margin` needs the `coalesce`.
@@ -37,7 +37,7 @@ CSV and TSV files.
 Previews and `rupam run` execute the generated script, so they need the target
 language installed, plus the data-dict CLI for contract validation. The
 `python-polars` dialect needs `polars` and `data-dict`. The `r-dplyr` dialect
-needs `dplyr`, `tidyr`, `bit64`, `gmp`, `jsonlite` and `nanoparquet`.
+needs `dplyr`, `tidyr`, `bit64`, `gmp`, `jsonlite` and `arrow`.
 
 ### From source
 

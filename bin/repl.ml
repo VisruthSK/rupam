@@ -14,7 +14,7 @@ type command =
   | Reload
   | Bindings
   | Clear
-  | Target of Project.dialect
+  | Target of Project.dialect option
   | Type of string
   | View of view * string
   | Code of Project.dialect option * string
@@ -83,7 +83,8 @@ let parse line =
     | "reload" -> Ok Reload
     | "bindings" -> Ok Bindings
     | "clear" -> Ok Clear
-    | "target" -> Result.map (fun d -> Target d) (dialect rest)
+    | "target" when rest = "" -> Ok (Target None)
+    | "target" -> Result.map (fun d -> Target (Some d)) (dialect rest)
     | "type" | "t" -> needs "an expression" (fun x -> Type x)
     | "code" ->
       let first, after =
@@ -131,11 +132,7 @@ let diagnostic buf f =
     Error ()
 ;;
 
-let contracted =
-  List.exists (function
-    | Syntax.Contract _ -> true
-    | _ -> false)
-;;
+let contracted = Analysis_program.tabular
 
 let execute (types, values) ds =
   let types = Infer.program types ds in
@@ -267,7 +264,8 @@ let rec continue state source =
 
 let table state source =
   match Frontend.parse (Lexing.from_string source) with
-  | [ Syntax.Evaluate x ] -> Analysis_program.dataset state.tables state.lexical x
+  | [ Syntax.Evaluate x ] ->
+    Analysis_program.dataset ~directory:state.directory state.tables state.lexical x
   | _ -> failwith "Expected a table expression"
 ;;
 
@@ -325,7 +323,14 @@ let run state = function
   | Clear ->
     Line.clear ();
     Some state
-  | Target dialect ->
+  | Target None ->
+    print_endline
+      (match state.project.dialect with
+       | Some d -> Project.dialect_name d
+       | None ->
+         "No dialect yet. Choose one with :target r-dplyr or :target python-polars.");
+    Some state
+  | Target (Some dialect) ->
     Some { state with project = { state.project with dialect = Some dialect } }
   | Reload ->
     Some
@@ -357,7 +362,11 @@ let run state = function
             | t -> print_endline (Infer.display t)
             | exception Infer.Error _ when contracted state.history ->
               Analysis_program.schema
-                (Analysis_program.dataset state.tables state.lexical x))
+                (Analysis_program.dataset
+                   ~directory:state.directory
+                   state.tables
+                   state.lexical
+                   x))
          | _ -> failwith "Expected one expression"));
     Some state
   | Code (chosen, source) ->
@@ -378,7 +387,12 @@ let run state = function
          match view with
          | Schema -> Analysis_program.schema d
          | Contract ->
-           Printf.printf "%s (%s), values pending\n" d.dictionary.path d.table.name
+           print_endline
+             (match d.origin with
+              | Contracted { dictionary; table; _ } ->
+                Printf.sprintf "%s (%s), values pending" dictionary.path table.name
+              | File { path; _ } -> path ^ " has no contract; its schema is inferred"
+              | Joined _ -> "joined from several sources; see :explain")
          | Validate ->
            Analysis_program.validate
              ~runtime:(Runtime.resolve state.project Runtime.Python)

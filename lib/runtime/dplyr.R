@@ -46,23 +46,43 @@ rp_source <- function(path, expected, name, expected_types) {
   }
   fields <- Filter(function(t) identical(t$name, name), model$tables)[[1]]$columns
   file <- sources[[name]]
-  footer <- nanoparquet::read_parquet_schema(file)
-  footer <- footer[!is.na(footer$r_col), ]
-  types <- c(Int64 = "INT64", Float64 = "DOUBLE", String = "BYTE_ARRAY", Boolean = "BOOLEAN")
-  expected_types <- unlist(jsonlite::fromJSON(expected_types), use.names = TRUE)
-  stopifnot(identical(footer$name, names(expected_types)),
-            identical(footer$type, unname(types[expected_types])))
-  data <- nanoparquet::read_parquet(file, options = nanoparquet::parquet_options(read_int64_type = "double"))
-  for (column in names(expected_types)[expected_types == "Int64"]) {
-    x <- data[[column]]
-    if (any(abs(x) >= 2^53, na.rm = TRUE)) stop("Int64 source exceeds exact nanoparquet conversion range")
-    data[[column]] <- bit64::as.integer64(x)
+  data <- rp_read(file, "parquet", unlist(jsonlite::fromJSON(expected_types)))
+  data[vapply(fields, function(c) c$name, character(1))]
+}
+
+options(arrow.int64_downcast = FALSE)
+
+rp_arrow_type <- function(kind) {
+  switch(kind,
+    Int64 = arrow::int64(),
+    Float64 = arrow::float64(),
+    Boolean = arrow::boolean(),
+    String = arrow::utf8())
+}
+
+rp_read <- function(path, format, schema) {
+  data <- if (format == "parquet") {
+    arrow::read_parquet(path, as_data_frame = FALSE)
+  } else {
+    fields <- Map(function(name, kind) arrow::field(name, rp_arrow_type(kind)), names(schema), schema)
+    arrow::read_delim_arrow(path, delim = if (format == "tsv") "\t" else ",",
+                            schema = arrow::schema(unname(fields)), skip = 1, na = "",
+                            as_data_frame = FALSE)
   }
-  for (column in names(expected_types)[expected_types == "Float64"]) {
+  kinds <- c(int64 = "Int64", double = "Float64", bool = "Boolean", string = "String", large_string = "String")
+  found <- kinds[vapply(data$schema$fields, function(f) f$type$ToString(), character(1))]
+  if (!identical(names(data), names(schema)) || !identical(unname(found), unname(schema)))
+    stop(path, " no longer matches the schema it was compiled against")
+  data <- dplyr::as_tibble(as.data.frame(data))
+  for (column in names(schema)[schema == "Float64"]) {
     x <- data[[column]]
     x[is.nan(x)] <- NA
     data[[column]] <- x
   }
-  data[vapply(fields, function(c) c$name, character(1))]
+  data
 }
 
+rp_write <- function(data, path) {
+  arrow::write_parquet(data, path)
+  invisible(data)
+}

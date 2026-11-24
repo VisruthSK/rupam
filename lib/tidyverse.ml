@@ -125,16 +125,25 @@ let lower ~fields (plan : Table.t) base =
 let rec table d =
   let open Analysis_program in
   let base =
-    match d.join with
-    | None ->
+    match d.origin with
+    | File { path; format; columns } ->
+      R.call
+        "rp_read"
+        [ R.String path
+        ; R.String (Data_file.format_name format)
+        ; R.Call
+            ( R.Name "c"
+            , List.map (fun (n, t) -> R.Named (n, R.String (polars_name t))) columns )
+        ]
+    | Contracted { dictionary; table; physical_types } ->
       R.call
         "rp_source"
-        [ R.String d.dictionary.path
-        ; R.String (Yojson.Basic.to_string d.dictionary.metadata)
-        ; R.String d.table.name
-        ; R.String (Yojson.Basic.to_string d.physical_types)
+        [ R.String dictionary.path
+        ; R.String (Yojson.Basic.to_string dictionary.metadata)
+        ; R.String table.name
+        ; R.String (Yojson.Basic.to_string physical_types)
         ]
-    | Some { left; right; key; kind } ->
+    | Joined { left; right; key; kind } ->
       R.Call
         ( R.Name (join_name kind ^ "_join")
         , [ R.Positional (table left)
@@ -153,10 +162,7 @@ let compile ?strict ~directory declarations =
           R.Expression
             (R.pipe
                (table (Analysis_program.public_view d))
-               (R.qualified
-                  "nanoparquet"
-                  "write_parquet"
-                  [ R.Positional (R.String path) ])))
+               (R.call "rp_write" [ R.String path ])))
        (Analysis_program.compile ?strict ~directory declarations)
 ;;
 

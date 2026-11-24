@@ -57,7 +57,7 @@ let orders = load(shop.orders)
 let lefts = orders |> select(customer_id, cost)
 let rights = orders |> select(cost, region)
 let joined = lefts |> join(rights, on = cost, how = left) |> arrange(customer_id)
-save_parquet(joined, "joined.parquet")
+write_parquet(joined, "joined.parquet")
 """)
             compiler = ROOT / "_build/default/bin/rupam_cli.exe"
             for target, runner in [("python", "python"), ("r", "Rscript")]:
@@ -83,7 +83,7 @@ save_parquet(joined, "joined.parquet")
                 "- name: cost", "- name: cost\n        display: restricted"))
             (work / "private.rp").write_text("""use contract "data-dict.yaml" as shop
 let orders = load(shop.orders) |> mutate(discount = cost * 0.5)
-save_parquet(orders, "result.parquet")
+write_parquet(orders, "result.parquet")
 """)
             compiler = ROOT / "_build/default/bin/rupam_cli.exe"
             for target, runner in [("python", "python"), ("r", "Rscript")]:
@@ -114,7 +114,7 @@ save_parquet(orders, "result.parquet")
             (work / "checked.rp").write_text("""use contract "data-dict.yaml" as shop
 let orders = load(shop.orders)
 let result = orders |> mutate(x = if customer_id > 0 then customer_id else customer_id + 9223372036854775807) |> select(x)
-save_parquet(result, "checked.parquet")
+write_parquet(result, "checked.parquet")
 """)
             compiler = ROOT / "_build/default/bin/rupam_cli.exe"
             subprocess.run([compiler, "compile", "--target", "python-polars", "checked.rp", "-o", "checked.py"], cwd=work, check=True)
@@ -140,7 +140,7 @@ save_parquet(result, "checked.parquet")
             source = work / "sqrt.rp"
             body = """use contract "data-dict.yaml" as shop
 let t = load(shop.orders) |> mutate(root = polars.sqrt(revenue)) |> select(root)
-save_parquet(t, "sqrt.parquet")
+write_parquet(t, "sqrt.parquet")
 """
             compiler = ROOT / "_build/default/bin/rupam_cli.exe"
             source.write_text(body)
@@ -213,7 +213,7 @@ get(Just(9007199254740993))
 let t = load(shop.orders) |> mutate(center = revenue - mean(revenue), by = region)
 let tall = t |> select(customer_id, revenue, center) |> pivot_longer(cols = (revenue, center), names_to = metric, values_to = reading)
 let wide = tall |> pivot_wider(names_from = metric, values_from = reading, levels = [revenue, center]) |> rename(center = centered) |> arrange(customer_id)
-save_parquet(wide, "result.parquet")
+write_parquet(wide, "result.parquet")
 """)
             compiler = ROOT / "_build/default/bin/rupam_cli.exe"
             for target,runner in [("python","python"),("r","Rscript")]:
@@ -235,7 +235,7 @@ save_parquet(wide, "result.parquet")
             source = work / "groups.rp"
             source.write_text("""use contract "data-dict.yaml" as shop
 let t = load(shop.orders) |> summarize(n=count(), by=cost)
-save_parquet(t, "groups.parquet")
+write_parquet(t, "groups.parquet")
 """)
             compiler = ROOT / "_build/default/bin/rupam_cli.exe"
             for target, runner in [("r", "Rscript"), ("python", "python")]:
@@ -245,3 +245,27 @@ save_parquet(t, "groups.parquet")
                 rows = pl.read_parquet(work / "groups.parquet").rows()
                 self.assertEqual(rows, [(None, 4)])
 
+
+
+class FileSources(unittest.TestCase):
+    def test_csv_and_parquet_without_contract_agree_across_dialects(self):
+        compiler = ROOT / "_build/default/bin/rupam_cli.exe"
+        big = 9007199254740993
+        with tempfile.TemporaryDirectory() as tmp:
+            work = Path(tmp)
+            (work / "visits.csv").write_text(f"id,site,value\n{big},North,2.5\n2,North,\n3,South,4.0\n")
+            pl.DataFrame({"id": [big, 2], "score": [float("nan"), 1.5]}).write_parquet(work / "scores.parquet")
+            (work / "files.rp").write_text("""let visits = read_csv("visits.csv")
+let scores = read_parquet("scores.parquet")
+write_parquet(visits |> select(id, site), "ids.parquet")
+write_parquet(scores, "scores_out.parquet")
+""")
+            for target in ("python-polars", "r-dplyr"):
+                with self.subTest(target=target):
+                    subprocess.run([compiler, "run", "--target", target, "files.rp"], cwd=work,
+                                   check=True, capture_output=True)
+                    ids = pl.read_parquet(work / "ids.parquet").sort("site")
+                    self.assertEqual(ids["id"].to_list()[0], big)
+                    scores = pl.read_parquet(work / "scores_out.parquet")
+                    self.assertEqual(scores["id"].to_list(), [big, 2])
+                    self.assertEqual(scores["score"].to_list(), [None, 1.5])

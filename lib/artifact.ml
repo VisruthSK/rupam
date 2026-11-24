@@ -32,7 +32,7 @@ let write ~locations ~target ~source ~output ~code declarations =
     List.filter_map
       (function
         | Syntax.Evaluate
-            { form = Call ({ form = Name (Bare, "save_parquet"); _ }, _); span; _ } ->
+            { form = Call ({ form = Name (Bare, "write_parquet"); _ }, _); span; _ } ->
           Some span
         | _ -> None)
       declarations
@@ -40,10 +40,7 @@ let write ~locations ~target ~source ~output ~code declarations =
   let emitted =
     List.filter_map
       (fun (i, line) ->
-         if
-           contains
-             line
-             (if target = "r" then "nanoparquet::write_parquet(" else ".write_parquet(")
+         if contains line (if target = "r" then "rp_write(" else ".write_parquet(")
          then Some i
          else None)
       indexed
@@ -90,7 +87,7 @@ let write ~locations ~target ~source ~output ~code declarations =
     match target, contracted with
     | "python", true -> [ "polars"; "data-dict-yaml==0.0.3" ]
     | "r", true ->
-      [ "dplyr"; "bit64"; "jsonlite"; "nanoparquet"; "tidyr"; "data-dict-yaml==0.0.3" ]
+      [ "dplyr"; "tidyr"; "bit64"; "jsonlite"; "arrow"; "data-dict-yaml==0.0.3" ]
     | "r", false -> [ "gmp" ]
     | _ -> []
   in
