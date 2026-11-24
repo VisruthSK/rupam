@@ -65,11 +65,9 @@ let select table arguments =
       , { Syntax.form =
             Call
               ( { form = Name (Bare, "starts_with"); _ }
-              , [ (None, { form = Literal s; _ }) ] )
+              , [ (None, { form = Literal (Text prefix); _ }) ] )
         ; _
-        } ) ->
-      let prefix = Yojson.Basic.from_string s |> Yojson.Basic.Util.to_string in
-      List.filter (String.starts_with ~prefix) fields
+        } ) -> List.filter (String.starts_with ~prefix) fields
     | ( None
       , { Syntax.form =
             Call
@@ -83,20 +81,20 @@ let select table arguments =
            | Int64 | Float64 -> true
            | _ -> false)
         fields
-    | None, { Syntax.form = Binary (":", a, b); _ } -> range (resolve a) (resolve b)
+    | None, { Syntax.form = Range (a, b); _ } -> range (resolve a) (resolve b)
     | Some _, x | None, x -> [ resolve x ]
   in
   let excluded, included =
     List.partition
       (function
-        | None, { Syntax.form = Unary ("-", _); _ } -> true
+        | None, { Syntax.form = Unary (Negate, _); _ } -> true
         | _ -> false)
       arguments
   in
   let removed =
     List.map
       (function
-        | None, { Syntax.form = Unary ("-", x); _ } -> resolve x
+        | None, { Syntax.form = Unary (Negate, x); _ } -> resolve x
         | _ -> assert false)
       excluded
   in
@@ -185,7 +183,7 @@ let transform env table verb arguments =
       || List.length old <> List.length (List.sort_uniq compare old)
     then raise (Error "Duplicate rename field");
     { table with schema; steps = Rename mapping :: table.steps }
-  | "take", [ (None, { Syntax.form = Literal n; _ }) ] ->
+  | "take", [ (None, { Syntax.form = Literal (Int n); _ }) ] ->
     if not table.ordered
     then raise (Error "take requires arrange with explicit ordering keys");
     let count =
@@ -486,7 +484,7 @@ let execute plan ~rows inputs =
 let rec pipeline env tables x =
   match x.Syntax.form with
   | Syntax.Name (Bare, n) -> Check.lookup n tables
-  | Binary ("|>", base, { form = Call ({ form = Name (Bare, verb); _ }, args); _ }) ->
+  | Pipe (base, { form = Call ({ form = Name (Bare, verb); _ }, args); _ }) ->
     stage env (pipeline env tables base) verb args
   | _ -> raise (Error "Expected a table pipeline")
 ;;

@@ -1,66 +1,73 @@
 # rupam
 
-rupam is a typed data-analysis language implemented in OCaml. Programs use the
-`.rp` extension. The example in `examples/shop.rp` imports a data dictionary,
-derives nullable margins and standardized scores, groups orders by region, and
-writes an explicitly ordered Parquet result.
+rupam is a small typed language for data analysis. You write a pipeline once,
+check it against a [data-dict](https://data-dict.tidyverse.org/) contract,
+explore it in a REPL, and compile it to a plain R (dplyr) or Python (Polars)
+script that runs without rupam installed.
 
-## Build and run
+```text
+use contract "data-dict.yaml" as shop
 
-Install OCaml 5.3, Dune, Menhir, Yojson and Uucp. For Python execution install uv.
-The R target requires R, dplyr, bit64, jsonlite, nanoparquet, tidyr and gmp. Both table
-targets use the upstream data-dict CLI from the locked uv environment.
+let standardize(x) = (x - mean(x)) / sd(x)
 
-```sh
-opam install . --deps-only
-uv sync --locked
-dune build
-uv run dune exec rupam -- examples/shop.rp
-uv run dune exec rupam -- repl examples/shop.rp
+let regional =
+  load(shop.orders)
+  |> filter(revenue > 0.0)
+  |> derive(margin = revenue - coalesce(cost, 0.0), z = standardize(margin))
+  |> summarize(transactions = count(), total = sum(margin), by = region)
+  |> arrange(desc(total), region)
+
+save_parquet(regional, "regional.parquet")
 ```
 
-The example writes `regional.parquet` in the working directory. North has two
-transactions totaling 10.0 and South has one totaling 5.0.
+The checker knows `cost` may be missing, so `margin` needs the `coalesce`.
+It knows `sd` can be undefined, so `z` comes out as `Float64?`. And it rejects
+`filter(cost > 0.0)` outright, because a comparison with a missing value has
+no answer.
 
-In the REPL, enter `:schema regional` to inspect the inferred fields,
-`:explain regional` to inspect its plan, and `:preview regional` to execute it.
-Use `:backend r` or `:backend python` to select a preview engine. Type
-`:help` to list commands and `:quit` to leave.
+## Install
 
-## Windows REPL
-
-The installed Windows launcher runs the Debian build through WSL. In PowerShell,
-run `rupam` to start an empty session or `rupam repl .\examples\shop.rp` from
-the repository to explore the example. The launcher is on the user PATH.
-
-## Standalone scripts
-
-Run the following commands from the repository root. The generated scripts
-retain the dictionary path relative to the compilation working directory.
-They call data-dict and their target libraries directly.
+rupam needs OCaml 5.5 and opam. The generated scripts and the REPL's previews
+call out to Python or R, and both validate input through the data-dict CLI.
 
 ```sh
-uv run dune exec rupam -- compile python examples/shop.rp > shop.py
-uv run python shop.py
-uv run dune exec rupam -- compile r examples/shop.rp > shop.R
-uv run Rscript shop.R
+opam install . --deps-only --with-test --with-dev-setup
+opam pin add rupam .          # puts `rupam` on your PATH
+uv sync                       # Python side: polars and data-dict
 ```
 
-Use `compile python examples/shop.rp -o shop.py` to write a script with a
-JSON dependency manifest and source map for output statements and lowered expressions. The editor server
-runs with `dune exec rupam -- lsp` and uses standard LSP over stdin/stdout.
+For the R target, install `dplyr`, `tidyr`, `bit64`, `gmp`, `jsonlite` and
+`nanoparquet`. On Windows, use WSL.
 
-## Verification
+## Use
 
 ```sh
-dune build @all @runtest
-uv run python -m unittest discover -s test
+rupam                                # empty REPL
+rupam repl examples/shop.rp          # REPL with a program loaded
+uv run rupam run examples/shop.rp    # check, validate and execute
+rupam compile r examples/shop.rp     # print a standalone R script
+rupam compile python examples/shop.rp -o shop.py
+rupam fmt examples/shop.rp
 ```
 
-The OCaml suite exercises parsing, formatting, inference, elaboration and
-reference evaluation. The integration suite invokes the compiler and both
-generated scripts, reads their Parquet outputs, and checks failure on invalid
-input. Release requirements and acceptance cases are in
-[the language brief](typed_polyglot_data_science_language_agent_brief.md).
+`compile -o` also writes a JSON manifest (dependencies, validation steps,
+fidelity notes) and a source map back to the `.rp` file. `rupam --help`
+lists every command.
 
+## Documentation
 
+- [Language](docs/language.md): values, functions, types, records, variants and pattern matching
+- [Tables](docs/tables.md): contracts, the table verbs, missing values and how code is generated
+- [REPL](docs/repl.md): commands, completion and inspecting unfinished pipelines
+- [B2T2 datasheet](docs/b2t2.md): coverage of the Brown table-types benchmark
+- [Design brief](typed_polyglot_data_science_language_agent_brief.md): the full specification and its rationale
+
+## Development
+
+```sh
+dune build @all @runtest      # parser, inference, evaluator, elaboration
+dune fmt                      # ocamlformat 0.29.0, Jane Street profile
+uv run python -m unittest discover -s test   # runs the generated R and Python
+```
+
+CI runs the same three steps on every push and pull request.

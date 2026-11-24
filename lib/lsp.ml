@@ -83,7 +83,7 @@ let inspect text =
                  | Let (n, _, _) -> symbols := (n, Infer.display t) :: !symbols
                  | _ -> ());
                 env))
-           []
+           Infer.empty
            ds);
       []
     with

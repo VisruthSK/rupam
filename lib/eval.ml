@@ -57,7 +57,7 @@ let rec expression env source =
       | Precord ns, Record fs -> Some (List.map (fun n -> n, List.assoc n fs) ns)
       | Wildcard, _ -> Some []
       | Bind n, _ -> Some [ n, v ]
-      | Pliteral s, v when v = eval { source with form = Literal s } -> Some []
+      | Pliteral l, v when v = eval { source with form = Literal l } -> Some []
       | Tag ("Some", [ p ]), Option (Some x) -> bind p x
       | Ptuple ps, Tuple vs -> many ps vs
       | Tag (n, ps), Variant (m, vs) when n = m -> many ps vs
@@ -84,19 +84,18 @@ let rec expression env source =
      | Record fs -> List.assoc n fs
      | _ -> fail "Expected record")
   | Local (n, x, y) -> expression ((n, eval x) :: env) y
-  | Literal "None" -> Option None
   | Call ({ form = Name (Bare, "Some"); _ }, [ (None, x) ]) -> Option (Some (eval x))
-  | Literal "true" -> Bool true
-  | Literal "false" -> Bool false
-  | Literal s when s.[0] = '"' ->
-    Text (Scanf.unescaped (String.sub s 1 (String.length s - 2)))
-  | Literal s when String.contains s '.' || String.contains s 'e' || String.contains s 'E'
-    ->
-    (try Float (float_of_string s) with
-     | Failure _ -> fail "Expected numeric literal")
-  | Literal s ->
-    (try Int (Int64.of_string s) with
-     | Failure _ -> fail "Expected Int64 literal")
+  | Literal Absent -> Option None
+  | Literal (Syntax.Bool b) -> Bool b
+  | Literal (Syntax.Text s) -> Text s
+  | Literal (Syntax.Float s) ->
+    (match float_of_string_opt s with
+     | Some f -> Float f
+     | None -> fail "Expected numeric literal")
+  | Literal (Syntax.Int s) ->
+    (match Int64.of_string_opt s with
+     | Some n -> Int n
+     | None -> fail "Expected Int64 literal")
   | Name (Bare, name) ->
     (match List.assoc_opt name env with
      | Some v -> v
@@ -107,28 +106,28 @@ let rec expression env source =
      | Bool b -> eval (if b then yes else no)
      | _ -> fail "Expected Bool")
   | Call (f, xs) -> apply (eval f) (args xs)
-  | Binary ("|>", x, f) ->
+  | Pipe (x, f) ->
     let v = eval x in
     (match f.form with
      | Call (g, xs) -> apply (eval g) (v :: args xs)
      | _ -> apply (eval f) [ v ])
-  | Unary ("not", x) ->
+  | Unary (Not, x) ->
     (match eval x with
      | Bool b -> Bool (not b)
      | _ -> fail "Expected Bool")
-  | Unary ("-", x) ->
+  | Unary (Negate, x) ->
     (match eval x with
      | Int n ->
        (try Int (Integer.sub 0L n) with
         | Integer.Overflow -> fail "Int64 overflow")
      | Float f -> Float (-.f)
      | _ -> fail "Expected number")
-  | Binary ("and", a, b) ->
+  | Binary (And, a, b) ->
     (match eval a with
      | Bool true -> eval b
      | Bool false -> Bool false
      | _ -> fail "Expected Bool")
-  | Binary ("or", a, b) ->
+  | Binary (Or, a, b) ->
     (match eval a with
      | Bool false -> eval b
      | Bool true -> Bool true
@@ -137,26 +136,26 @@ let rec expression env source =
     let x = eval a in
     (try
        match op, x, eval b with
-       | "+", Int a, Int b -> Int (Integer.add a b)
-       | "-", Int a, Int b -> Int (Integer.sub a b)
-       | "*", Int a, Int b -> Int (Integer.mul a b)
-       | "+", Float a, Float b -> Float (a +. b)
-       | "-", Float a, Float b -> Float (a -. b)
-       | "*", Float a, Float b -> Float (a *. b)
-       | "/", Float a, Float b -> Float (a /. b)
-       | "<", Int a, Int b -> Bool (a < b)
-       | "<", Float a, Float b -> Bool (a < b)
-       | "<=", Int a, Int b -> Bool (a <= b)
-       | "<=", Float a, Float b -> Bool (a <= b)
-       | ">=", Int a, Int b -> Bool (a >= b)
-       | ">=", Float a, Float b -> Bool (a >= b)
-       | "==", Int a, Int b -> Bool (a = b)
-       | "==", Float a, Float b -> Bool (a = b)
-       | "!=", Int a, Int b -> Bool (a <> b)
-       | "!=", Float a, Float b -> Bool (a <> b)
-       | ">", Int a, Int b -> Bool (a > b)
-       | ">", Float a, Float b -> Bool (a > b)
-       | _ -> fail ("Unsupported operands for " ^ op)
+       | Add, Int a, Int b -> Int (Integer.add a b)
+       | Sub, Int a, Int b -> Int (Integer.sub a b)
+       | Mul, Int a, Int b -> Int (Integer.mul a b)
+       | Add, Float a, Float b -> Float (a +. b)
+       | Sub, Float a, Float b -> Float (a -. b)
+       | Mul, Float a, Float b -> Float (a *. b)
+       | Div, Float a, Float b -> Float (a /. b)
+       | Less, Int a, Int b -> Bool (a < b)
+       | Less, Float a, Float b -> Bool (a < b)
+       | Less_equal, Int a, Int b -> Bool (a <= b)
+       | Less_equal, Float a, Float b -> Bool (a <= b)
+       | Greater_equal, Int a, Int b -> Bool (a >= b)
+       | Greater_equal, Float a, Float b -> Bool (a >= b)
+       | Equal, Int a, Int b -> Bool (a = b)
+       | Equal, Float a, Float b -> Bool (a = b)
+       | Not_equal, Int a, Int b -> Bool (a <> b)
+       | Not_equal, Float a, Float b -> Bool (a <> b)
+       | Greater, Int a, Int b -> Bool (a > b)
+       | Greater, Float a, Float b -> Bool (a > b)
+       | _ -> fail ("Unsupported operands for " ^ binary_symbol op)
      with
      | Integer.Overflow -> fail "Int64 overflow")
   | _ -> fail "Unsupported expression in scalar evaluator"

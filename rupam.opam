@@ -3,10 +3,13 @@ opam-version: "2.0"
 synopsis: "A typed language for interactive data analysis"
 depends: [
   "dune" {>= "3.17"}
-  "ocaml" {>= "5.1"}
-  "menhir"
+  "ocaml" {>= "5.5"}
+  "menhir" {>= "20180523"}
   "yojson"
   "uucp"
+  "cmdliner" {>= "2.0"}
+  "linenoise"
+  "ocamlformat" {with-dev-setup & = "0.29.0"}
   "odoc" {with-doc}
 ]
 build: [

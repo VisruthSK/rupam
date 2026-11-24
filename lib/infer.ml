@@ -23,6 +23,15 @@ and cell =
 
 type scheme = cell ref list * typ
 
+type env =
+  { values : (string * scheme) list
+  ; types : (string * scheme) list
+  ; variants : (string * (string * scheme) list) list
+  }
+
+let empty = { values = []; types = []; variants = [] }
+let extend env xs = { env with values = xs @ env.values }
+
 exception Error of span * string
 
 let fresh level c = Var (ref (Free (level, c)))
@@ -166,7 +175,7 @@ let rec annotation env params level = function
      | "Option", [ t ] -> Option t
      | n, [] when List.mem_assoc n params -> List.assoc n params
      | n, ts ->
-       (match List.assoc_opt ("type " ^ n) env with
+       (match List.assoc_opt n env.types with
         | Some (_, Variant (_, ps)) when List.length ps = List.length ts -> Variant (n, ts)
         | Some scheme ->
           (match instantiate level scheme with
@@ -175,6 +184,98 @@ let rec annotation env params level = function
              result
            | _ -> failwith ("Wrong type arity: " ^ n))
         | _ -> failwith ("Unknown type or wrong arity: " ^ n)))
+;;
+
+let literal level = function
+  | Syntax.Int _ -> Int
+  | Syntax.Float _ -> Float
+  | Syntax.Text _ -> String
+  | Syntax.Bool _ -> Bool
+  | Syntax.Absent -> Option (fresh level Any)
+;;
+
+type head =
+  | Constructor of string
+  | Constant of Syntax.literal
+  | Product
+
+let uncovered env level equal subject branches =
+  let heads t =
+    match repr t with
+    | Bool -> [ Constant (Syntax.Bool true), []; Constant (Syntax.Bool false), [] ]
+    | Option inner -> [ Constant Syntax.Absent, []; Constructor "Some", [ inner ] ]
+    | Tuple fields -> [ Product, fields ]
+    | Variant (name, _) ->
+      List.assoc name env.variants
+      |> List.map (fun (tag, scheme) ->
+        let fields, result =
+          match instantiate level scheme with
+          | Arrow (fields, result) -> fields, result
+          | result -> [], result
+        in
+        equal t result;
+        Constructor tag, fields)
+    | _ -> []
+  in
+  let catchall = function
+    | Wildcard | Bind _ | Precord _ -> true
+    | Tag _ | Ptuple _ | Pliteral _ -> false
+  in
+  let specialize head arity = function
+    | p :: ps when catchall p -> Some (List.init arity (fun _ -> Wildcard) @ ps)
+    | p :: ps ->
+      (match head, p with
+       | Constructor n, Tag (m, vs) when n = m -> Some (vs @ ps)
+       | Constant l, Pliteral m when l = m -> Some ps
+       | Product, Ptuple vs -> Some (vs @ ps)
+       | _ -> None)
+    | [] -> None
+  in
+  let rebuild head arity witness =
+    let args = List.filteri (fun i _ -> i < arity) witness
+    and rest = List.filteri (fun i _ -> i >= arity) witness in
+    let p =
+      match head with
+      | Constructor n -> Tag (n, args)
+      | Constant l -> Pliteral l
+      | Product -> Ptuple args
+    in
+    p :: rest
+  in
+  let rec missing types rows =
+    match types with
+    | [] -> if rows = [] then Some [] else None
+    | t :: rest ->
+      let wildcard () =
+        List.filter_map
+          (function
+            | p :: ps when catchall p -> Some ps
+            | _ -> None)
+          rows
+        |> missing rest
+        |> Option.map (List.cons Wildcard)
+      in
+      let all_catchall =
+        List.for_all
+          (function
+            | p :: _ -> catchall p
+            | [] -> false)
+          rows
+      in
+      (match heads t with
+       | [] -> wildcard ()
+       | _ when all_catchall -> wildcard ()
+       | cases ->
+         List.find_map
+           (fun (head, fields) ->
+              let arity = List.length fields in
+              missing (fields @ rest) (List.filter_map (specialize head arity) rows)
+              |> Option.map (rebuild head arity))
+           cases)
+  in
+  match missing [ subject ] (List.map (fun (p, _) -> [ p ]) branches) with
+  | Some [ p ] -> Some p
+  | _ -> None
 ;;
 
 let rec expression env level source =
@@ -201,8 +302,8 @@ let rec expression env level source =
         List.map (fun (n, t) -> n, ([], t)) fs
       | Wildcard -> []
       | Bind n -> [ n, ([], t) ]
-      | Pliteral s ->
-        equal t (check { source with form = Literal s });
+      | Pliteral l ->
+        equal t (literal level l);
         []
       | Ptuple ps ->
         let ts = List.map (fun _ -> fresh level Any) ps in
@@ -214,7 +315,7 @@ let rec expression env level source =
          | "Some", [ v ] -> equal t (Option v)
          | _ ->
            let constr =
-             match List.assoc_opt n env with
+             match List.find_map (fun (_, cs) -> List.assoc_opt n cs) env.variants with
              | Some s -> instantiate level s
              | None -> fail ("Unknown constructor " ^ n)
            in
@@ -227,52 +328,17 @@ let rec expression env level source =
          let ns = List.map fst vars in
          if List.length ns <> List.length (List.sort_uniq compare ns)
          then fail "Repeated pattern variable";
-         equal result (expression (vars @ env) level body))
+         equal result (expression (extend env vars) level body))
       branches;
-    let rec irrefutable = function
-      | Precord _ | Bind _ | Wildcard -> true
-      | Ptuple ps -> List.for_all irrefutable ps
-      | _ -> false
-    in
-    let covers n =
-      List.exists
-        (function
-          | Tag (tag, ps), _ -> tag = n && List.for_all irrefutable ps
-          | Pliteral s, _ -> s = n
-          | _ -> false)
-        branches
-    in
-    if not (List.exists (fun (p, _) -> irrefutable p) branches)
-    then (
-      let tags =
-        match repr subject with
-        | Bool -> [ "true"; "false" ]
-        | Option _ -> [ "Some"; "None" ]
-        | Variant (n, _) ->
-          List.filter_map
-            (fun (tag, (_, t)) ->
-               let t =
-                 match t with
-                 | Arrow (_, r) -> r
-                 | r -> r
-               in
-               match t with
-               | Variant (m, _)
-                 when n = m
-                      && (not (String.starts_with ~prefix:"type " tag))
-                      && Char.uppercase_ascii tag.[0] = tag.[0] -> Some tag
-               | _ -> None)
-            env
-        | _ -> []
-      in
-      if tags = [] || not (List.for_all covers tags) then fail "Non-exhaustive match");
+    (match uncovered env level equal subject branches with
+     | Some p -> fail ("Non-exhaustive match. Missing case " ^ Format.pattern p)
+     | None -> ());
     result
   | Name (Bare, n) ->
-    (match List.assoc_opt n env with
+    (match List.assoc_opt n env.values with
      | Some s -> instantiate level s
      | None -> fail ("Unknown name: " ^ n))
-  | Literal ("true" | "false") -> Bool
-  | Literal "None" -> Option (fresh level Any)
+  | Literal l -> literal level l
   | Call ({ form = Name (Bare, "Some"); _ }, [ (None, x) ]) -> Option (check x)
   | List xs ->
     let t = fresh level Any in
@@ -290,34 +356,24 @@ let rec expression env level source =
     field
   | Local (n, x, y) ->
     let t = expression env (level + 1) x in
-    expression ((n, generalize level t) :: env) level y
-  | Literal s when s.[0] = '"' -> String
-  | Literal s ->
-    if
-      String.exists
-        (function
-          | '.' | 'e' | 'E' -> true
-          | _ -> false)
-        s
-    then Float
-    else Int
+    expression (extend env [ n, generalize level t ]) level y
   | Lambda (ps, body) ->
     let ts = List.map (fun _ -> fresh level Any) ps in
     let locals = List.map2 (fun p t -> p, ([], t)) ps ts in
-    Arrow (ts, expression (locals @ env) level body)
+    Arrow (ts, expression (extend env locals) level body)
   | Call (f, args) -> call (check f) (List.map (fun (_, x) -> check x) args)
-  | Binary ("|>", x, f) ->
+  | Pipe (x, f) ->
     (match f.form with
      | Call (g, args) -> call (check g) (check x :: List.map (fun (_, a) -> check a) args)
      | _ -> call (check f) [ check x ])
-  | Unary ("not", x) ->
+  | Unary (Not, x) ->
     equal (check x) Bool;
     Bool
-  | Unary ("-", x) ->
+  | Unary (Negate, x) ->
     let t = fresh level Numeric in
     equal t (check x);
     t
-  | Binary (("and" | "or"), a, b) ->
+  | Binary ((And | Or), a, b) ->
     equal (check a) Bool;
     equal (check b) Bool;
     Bool
@@ -326,12 +382,12 @@ let rec expression env level source =
     equal t (check a);
     equal t (check b);
     (match op with
-     | ">" | "<" | ">=" | "<=" | "==" | "!=" -> Bool
-     | "+" | "-" | "*" -> t
-     | "/" ->
+     | op when comparison op -> Bool
+     | Add | Sub | Mul -> t
+     | Div ->
        equal t Float;
        Float
-     | _ -> fail ("Unsupported operator: " ^ op))
+     | op -> fail ("Unsupported operator: " ^ binary_symbol op))
   | If (c, a, b) ->
     equal (check c) Bool;
     let t = check a in
@@ -342,25 +398,28 @@ let rec expression env level source =
 
 let declaration env = function
   | Alias (name, params, body) ->
-    if List.mem_assoc ("type " ^ name) env then failwith ("Duplicate type " ^ name);
+    if List.mem_assoc name env.types then failwith ("Duplicate type " ^ name);
     let ps = List.map (fun n -> n, fresh 1 Any) params in
     let t = annotation env ps 1 body in
-    ("type " ^ name, generalize 0 (Arrow (List.map snd ps, t))) :: env, t
+    { env with types = (name, generalize 0 (Arrow (List.map snd ps, t))) :: env.types }, t
   | Type (name, params, constructors) ->
-    if List.mem_assoc ("type " ^ name) env then failwith ("Duplicate type " ^ name);
+    if List.mem_assoc name env.types then failwith ("Duplicate type " ^ name);
     let ps = List.map (fun n -> n, fresh 1 Any) params in
     let t = Variant (name, List.map snd ps) in
-    let env = ("type " ^ name, generalize 0 t) :: env in
-    let env =
+    let env = { env with types = (name, generalize 0 t) :: env.types } in
+    let known tag = List.exists (fun (_, cs) -> List.mem_assoc tag cs) env.variants in
+    let tags =
       List.fold_left
-        (fun env (n, fs) ->
-           if List.mem_assoc n env then failwith ("Duplicate constructor " ^ n);
+        (fun tags (tag, fs) ->
+           if known tag || List.mem_assoc tag tags
+           then failwith ("Duplicate constructor " ^ tag);
            let args = List.map (fun (_, a) -> annotation env ps 1 a) fs in
-           (n, generalize 0 (if args = [] then t else Arrow (args, t))) :: env)
-        env
+           (tag, generalize 0 (if args = [] then t else Arrow (args, t))) :: tags)
+        []
         constructors
+      |> List.rev
     in
-    env, t
+    { (extend env tags) with variants = (name, tags) :: env.variants }, t
   | Let (name, ps, body) ->
     let x =
       match ps with
@@ -368,11 +427,13 @@ let declaration env = function
       | Some ps -> { body with form = Lambda (ps, body) }
     in
     let t = expression env 1 x in
-    (name, generalize 0 t) :: env, t
+    extend env [ name, generalize 0 t ], t
   | Evaluate x -> env, expression env 1 x
   | Import (n, _) -> failwith ("Module " ^ n ^ " requires a table backend")
   | Contract _ -> failwith "Contract loading is unavailable"
 ;;
+
+let program env ds = List.fold_left (fun env d -> fst (declaration env d)) env ds
 
 let display t =
   let vars = ref [] in

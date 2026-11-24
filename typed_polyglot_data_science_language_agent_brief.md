@@ -406,6 +406,33 @@ Functions are pure by default. Loading/saving data, reading the clock, randomnes
 
 General recursion may be deferred in v0.1. If supported later, recursion does not automatically become vectorizable; a pure recursive function may compile to ordinary native code with a performance warning. Neither recursion nor an effectful operation may be silently executed per row using unsafe side effects.
 
+### 4.10 Pattern matching and exhaustiveness
+
+**REQUIRED.** Every `match` is checked for exhaustiveness during inference, and a non-exhaustive match is a static error that names one concrete missing case. A runtime "no branch matched" failure is therefore unreachable in a program that type-checks.
+
+Patterns are `_`, a variable, a literal, a constructor applied to sub-patterns (`Tag(p, ...)`, including `Some(p)`), `None`, a tuple `(p, q, ...)` and a record pattern `{a, b}`. A variable may occur at most once in a pattern. Record patterns bind the named fields and match any record that has them, so for exhaustiveness they behave like `_`.
+
+The checker treats a type as having a finite set of heads when it is:
+
+| Type | Heads |
+|---|---|
+| `Bool` | `true`, `false` |
+| `Option<T>` | `None`, `Some(T)` |
+| `(A, B, ...)` | the single tuple head with fields `A, B, ...` |
+| a declared variant | its constructors, in declaration order, with their field types instantiated at the subject's type |
+
+Every other type (`Int64`, `Float64`, `String`, records, functions, unresolved variables) has no enumerable heads, so a match over it must end in a catch-all.
+
+**DESIGN DEFAULT.** The algorithm is Maranget's usefulness check over a pattern matrix (Maranget, *Warnings for pattern matching*, JFP 2007). Starting with the subject's type as the only column and one row per branch:
+
+1. With no columns left, the match is exhaustive if any row remains; otherwise the empty witness is missing.
+2. If the first column's type has no heads, or every row starts with a catch-all, drop the column, keep the catch-all rows, and prefix any witness with `_`.
+3. Otherwise try each head in order. Specialize the matrix to that head: rows starting with the head expand into its sub-patterns, catch-all rows expand into one `_` per field, other rows are dropped. Recurse on the head's field types followed by the remaining columns. The first witness found is rebuilt by wrapping its leading entries in the head.
+
+The witness is printed with the canonical pattern formatter, for example `Missing case Measured(None)` or `Missing case (true, true)`. When the only missing values belong to a type without heads, the witness is `_`.
+
+**FUTURE.** Redundant-branch warnings use the same usefulness check row by row. Literal patterns over `Int64` and `String` and guards (`p if cond`) remain catch-all-terminated; ranges and string prefixes may later get heads of their own.
+
 ## 5. data-dict: contracts, metadata and trust boundaries
 
 This is a critical integration, not a home-grown approximation of data-dict.

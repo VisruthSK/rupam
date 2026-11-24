@@ -20,7 +20,8 @@ let rec annotation = function
 let rec pattern = function
   | Precord ns -> "{" ^ String.concat ", " ns ^ "}"
   | Wildcard -> "_"
-  | Bind n | Pliteral n | Tag (n, []) -> n
+  | Bind n | Tag (n, []) -> n
+  | Pliteral l -> literal_text l
   | Tag (n, ps) -> n ^ "(" ^ comma pattern ps ^ ")"
   | Ptuple ps -> "(" ^ comma pattern ps ^ ")"
 ;;
@@ -41,7 +42,7 @@ let rec expr x =
   | Record fields ->
     "{" ^ comma (fun (n, x) -> Identifier.quote n ^ " = " ^ expr x) fields ^ "}"
   | Local (n, x, y) -> "(let " ^ n ^ " = " ^ expr x ^ " in " ^ expr y ^ ")"
-  | Literal text -> text
+  | Literal l -> literal_text l
   | Field (record, name) -> expr record ^ "." ^ Identifier.quote name
   | Call (callee, args) ->
     expr callee
@@ -51,8 +52,10 @@ let rec expr x =
            Option.fold ~none:"" ~some:(fun l -> Identifier.quote l ^ " = ") label ^ expr x)
         args
     ^ ")"
-  | Binary (op, a, b) -> "(" ^ expr a ^ " " ^ op ^ " " ^ expr b ^ ")"
-  | Unary (op, a) -> "(" ^ op ^ " " ^ expr a ^ ")"
+  | Pipe (a, b) -> "(" ^ expr a ^ " |> " ^ expr b ^ ")"
+  | Range (a, b) -> expr a ^ ":" ^ expr b
+  | Binary (op, a, b) -> "(" ^ expr a ^ " " ^ binary_symbol op ^ " " ^ expr b ^ ")"
+  | Unary (op, a) -> "(" ^ unary_symbol op ^ " " ^ expr a ^ ")"
   | If (c, y, n) -> "(if " ^ expr c ^ " then " ^ expr y ^ " else " ^ expr n ^ ")"
   | Lambda (ps, body) -> "(fn(" ^ String.concat ", " ps ^ ") => " ^ expr body ^ ")"
 ;;

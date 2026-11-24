@@ -42,18 +42,12 @@ let compile ?(annotate = Source_map.plain) ds =
     in
     match x.form with
     | Name (Bare, n) -> List.assoc n env
-    | Literal "None" -> "NULL"
-    | Literal "true" -> "TRUE"
-    | Literal "false" -> "FALSE"
-    | Literal s when s.[0] = '"' ->
-      q (Scanf.unescaped (String.sub s 1 (String.length s - 2)))
-    | Literal s
-      when String.exists
-             (function
-               | '.' | 'e' | 'E' -> true
-               | _ -> false)
-             s -> s
-    | Literal s -> "rp_int(" ^ q s ^ ")"
+    | Literal Absent -> "NULL"
+    | Literal (Bool true) -> "TRUE"
+    | Literal (Bool false) -> "FALSE"
+    | Literal (Text s) -> q s
+    | Literal (Float s) -> s
+    | Literal (Int s) -> "rp_int(" ^ q s ^ ")"
     | Annotated (v, _) -> exp v
     | Tuple vs | List vs -> call "list" (List.map exp vs)
     | Record fs ->
@@ -65,9 +59,9 @@ let compile ?(annotate = Source_map.plain) ds =
     | Call ({ form = Name (Bare, "Some"); _ }, [ (None, v) ]) ->
       call "rp_variant" [ q "Some"; exp v ]
     | Call (f, vs) -> call (exp f) (args vs)
-    | Unary ("not", v) -> "(!" ^ exp v ^ ")"
-    | Unary ("-", v) -> "rp_numeric(-" ^ exp v ^ ")"
-    | Binary ("|>", v, f) ->
+    | Unary (Not, v) -> "(!" ^ exp v ^ ")"
+    | Unary (Negate, v) -> "rp_numeric(-" ^ exp v ^ ")"
+    | Pipe (v, f) ->
       let id = fresh () in
       let body =
         match f.form with
@@ -76,30 +70,27 @@ let compile ?(annotate = Source_map.plain) ds =
       in
       call ("function(" ^ id ^ ") { force(" ^ id ^ "); " ^ body ^ " }") [ exp v ]
     | Binary (op, a, b) ->
-      let op =
+      let symbol =
         match op with
-        | "and" -> "&&"
-        | "or" -> "||"
-        | op -> op
+        | And -> "&&"
+        | Or -> "||"
+        | op -> binary_symbol op
       in
-      let v = "(" ^ exp a ^ " " ^ op ^ " " ^ exp b ^ ")" in
-      if List.mem op [ "+"; "-"; "*" ]
-      then "rp_numeric(" ^ v ^ ")"
-      else if List.mem op [ "<"; "<="; ">"; ">="; "=="; "!=" ]
-      then
-        if op = "!="
-        then "(isTRUE(" ^ v ^ ") || is.na(" ^ v ^ "))"
-        else "isTRUE(" ^ v ^ ")"
-      else v
+      let v = "(" ^ exp a ^ " " ^ symbol ^ " " ^ exp b ^ ")" in
+      (match op with
+       | Add | Sub | Mul -> "rp_numeric(" ^ v ^ ")"
+       | Not_equal -> "(isTRUE(" ^ v ^ ") || is.na(" ^ v ^ "))"
+       | op when comparison op -> "isTRUE(" ^ v ^ ")"
+       | _ -> v)
     | Match (subject, bs) ->
       let id = fresh () in
       let rec pattern path = function
         | Precord ns -> [], List.map (fun n -> n, path ^ "[[" ^ q n ^ "]]") ns
         | Wildcard -> [], []
         | Bind n -> [], [ n, path ]
-        | Pliteral "None" -> [ "is.null(" ^ path ^ ")" ], []
-        | Pliteral s ->
-          [ "isTRUE(" ^ path ^ " == " ^ exp { x with form = Literal s } ^ ")" ], []
+        | Pliteral Absent -> [ "is.null(" ^ path ^ ")" ], []
+        | Pliteral l ->
+          [ "isTRUE(" ^ path ^ " == " ^ exp { x with form = Literal l } ^ ")" ], []
         | Tag (n, ps) ->
           let ts, vs = parts path ps in
           ("identical(attr(" ^ path ^ ", 'tag'), " ^ q n ^ ")") :: ts, vs
@@ -163,7 +154,7 @@ let compile ?(annotate = Source_map.plain) ds =
          | Evaluate x -> types, env, ("print(" ^ emit env x ^ ")") :: lines
          | Import (n, _) -> failwith ("Module " ^ n ^ " requires a table backend")
          | Contract _ -> failwith "Expected scalar program")
-      ([], [], [])
+      (Infer.empty, [], [])
       ds
   in
   preamble ^ String.concat "\n" (List.rev lines) ^ "\n"

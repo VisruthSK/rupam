@@ -130,7 +130,7 @@ let () =
       (Lexing.from_string
          "let id(x)=x; let r={a=Some(3), b=[true,false]}; (r.a, id(r.b))")
   in
-  ignore (List.fold_left (fun env d -> fst (Infer.declaration env d)) [] ds);
+  ignore (Infer.program Infer.empty ds);
   let _, value = Eval.run [] ds in
   assert (Option.map Eval.display value = Some "(Some(3), [true, false])")
 ;;
@@ -140,7 +140,7 @@ let () =
   let ds =
     Frontend.parse (Lexing.from_string "let get(r)=r.x; (get({x=1}), get({y=2,x=true}))")
   in
-  ignore (List.fold_left (fun env d -> fst (Infer.declaration env d)) [] ds);
+  ignore (Infer.program Infer.empty ds);
   assert (Option.map Eval.display (snd (Eval.run [] ds)) = Some "(1, true)")
 ;;
 
@@ -151,16 +151,13 @@ let () =
      => n }; let answer: Int64=get(Just(42)); answer"
   in
   let ds = Frontend.parse (Lexing.from_string src) in
-  ignore (List.fold_left (fun env d -> fst (Infer.declaration env d)) [] ds);
+  ignore (Infer.program Infer.empty ds);
   assert (Option.map Eval.display (snd (Eval.run [] ds)) = Some "42")
 ;;
 
 let () =
   let open Rupam in
-  let infer s =
-    Frontend.parse (Lexing.from_string s)
-    |> List.fold_left (fun env d -> fst (Infer.declaration env d)) []
-  in
+  let infer s = Frontend.parse (Lexing.from_string s) |> Infer.program Infer.empty in
   ignore (infer "let décaler(δ: Float64): Float64 = δ + 1.0; décaler(3.0)");
   (match infer "let bad(x: Int64): String=x" with
    | exception Infer.Error _ -> ()
@@ -187,7 +184,7 @@ let () =
          "type Pair<a> = {x: a, y: a}; let f(p: Pair<Int64>)=match p { {x,y} => x+y }; \
           f({x=2,y=3})")
   in
-  ignore (List.fold_left (fun env d -> fst (Infer.declaration env d)) [] ds);
+  ignore (Infer.program Infer.empty ds);
   assert (Option.map Eval.display (snd (Eval.run [] ds)) = Some "5")
 ;;
 
@@ -216,4 +213,33 @@ let () =
   match Frontend.parse (Lexing.from_string "let f(x)=x; f(1;2)") with
   | exception Parser.Error -> ()
   | _ -> failwith "semicolon inside call must fail"
+;;
+
+let () =
+  let open Rupam in
+  let missing src =
+    match Frontend.parse (Lexing.from_string src) |> Infer.program Infer.empty with
+    | exception Infer.Error (_, message) -> Some message
+    | _ -> None
+  in
+  let reading =
+    "type Reading<a> = | Measured(value: a) | Offline | Fault(reason: String); "
+  in
+  assert (
+    missing
+      (reading
+       ^ "let f(r) = match r { Measured(Some(v)) => v, Offline => 0.0, Fault(_) => 1.0 }"
+      )
+    = Some "Non-exhaustive match. Missing case Measured(None)");
+  assert (
+    missing "let f(p) = match p { (true, false) => 1, (false, _) => 2 }"
+    = Some "Non-exhaustive match. Missing case (true, true)");
+  assert (
+    missing
+      (reading ^ "let f(r) = match r { Measured(_) => 1, Offline => 2, Fault(_) => 3 }")
+    = None);
+  assert (missing "let f(x) = match x { (a, Some(b)) => b, (_, None) => 0 }" = None);
+  assert (
+    missing "let f(n) = match n { 0 => true }"
+    = Some "Non-exhaustive match. Missing case _")
 ;;

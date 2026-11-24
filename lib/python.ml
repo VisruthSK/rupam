@@ -40,9 +40,9 @@ let compile ?(annotate = Source_map.plain) program =
     in
     match x.form with
     | Name (Bare, name) -> List.assoc name env
-    | Literal "None" -> "None"
-    | Literal "true" -> "True"
-    | Literal "false" -> "False"
+    | Literal Absent -> "None"
+    | Literal (Bool true) -> "True"
+    | Literal (Bool false) -> "False"
     | Annotated (v, _) -> expr v
     | Tuple xs -> "(" ^ String.concat ", " (List.map expr xs) ^ ")"
     | List xs -> "[" ^ String.concat ", " (List.map expr xs) ^ "]"
@@ -62,7 +62,7 @@ let compile ?(annotate = Source_map.plain) program =
         | Precord ns -> [], List.map (fun n -> n, path ^ "[" ^ Polars.quoted n ^ "]") ns
         | Wildcard -> [], []
         | Bind n -> [], [ n, path ]
-        | Pliteral s -> [ path ^ " == " ^ expr { x with form = Literal s } ], []
+        | Pliteral l -> [ path ^ " == " ^ expr { x with form = Literal l } ], []
         | Tag (n, ps) ->
           let tests, bindings = children path 1 ps in
           ( ("isinstance(" ^ path ^ ", tuple)")
@@ -87,19 +87,13 @@ let compile ?(annotate = Source_map.plain) program =
       apply
         ("(lambda " ^ id ^ ": " ^ List.fold_right branch branches "None" ^ ")")
         [ expr subject ]
-    | Literal s when s.[0] = '"' ->
-      let text = Scanf.unescaped (String.sub s 1 (String.length s - 2)) in
+    | Literal (Text text) ->
       let codes =
         List.init (String.length text) (fun i -> string_of_int (Char.code text.[i]))
       in
       "bytes([" ^ String.concat ", " codes ^ "]).decode('utf-8')"
-    | Literal s
-      when String.exists
-             (function
-               | '.' | 'e' | 'E' -> true
-               | _ -> false)
-             s -> "float('" ^ s ^ "')"
-    | Literal s -> "rp_int(int('" ^ s ^ "'))"
+    | Literal (Float s) -> "float('" ^ s ^ "')"
+    | Literal (Int s) -> "rp_int(int('" ^ s ^ "'))"
     | Call (f, xs) -> apply (expr f) (args xs)
     | Lambda (ps, body) ->
       let names = List.map (fun p -> p, fresh ()) ps in
@@ -109,7 +103,7 @@ let compile ?(annotate = Source_map.plain) program =
       ^ emit (names @ env) body
       ^ ")"
     | If (c, a, b) -> "(" ^ expr a ^ " if " ^ expr c ^ " else " ^ expr b ^ ")"
-    | Binary ("|>", a, f) ->
+    | Pipe (a, f) ->
       let v = fresh () in
       let body =
         match f.form with
@@ -117,13 +111,13 @@ let compile ?(annotate = Source_map.plain) program =
         | _ -> apply (expr f) [ v ]
       in
       "(lambda " ^ v ^ ": " ^ body ^ ")(" ^ expr a ^ ")"
-    | Binary ((("+" | "-" | "*") as op), a, b) ->
-      "rp_num(" ^ expr a ^ " " ^ op ^ " " ^ expr b ^ ")"
-    | Binary ("/", a, b) -> apply "rp_div" [ expr a; expr b ]
-    | Unary ("-", v) -> "rp_num(-" ^ expr v ^ ")"
-    | Unary ("not", v) -> "(not " ^ expr v ^ ")"
-    | Binary (((">" | "<" | ">=" | "<=" | "==" | "!=" | "and" | "or") as op), a, b) ->
-      "(" ^ expr a ^ " " ^ op ^ " " ^ expr b ^ ")"
+    | Binary (((Add | Sub | Mul) as op), a, b) ->
+      "rp_num(" ^ expr a ^ " " ^ binary_symbol op ^ " " ^ expr b ^ ")"
+    | Binary (Div, a, b) -> apply "rp_div" [ expr a; expr b ]
+    | Unary (Negate, v) -> "rp_num(-" ^ expr v ^ ")"
+    | Unary (Not, v) -> "(not " ^ expr v ^ ")"
+    | Binary (op, a, b) when comparison op || op = And || op = Or ->
+      "(" ^ expr a ^ " " ^ binary_symbol op ^ " " ^ expr b ^ ")"
     | _ -> error x "Expression has no supported Python lowering"
   in
   let _, _, lines =
@@ -157,7 +151,7 @@ let compile ?(annotate = Source_map.plain) program =
              constructors
          | Import (n, _) -> failwith ("Module " ^ n ^ " requires a table backend")
          | Contract _ -> failwith "Contract lowering is unavailable")
-      ([], [], [])
+      (Infer.empty, [], [])
       program
   in
   String.concat "\n" (helpers :: List.rev lines) ^ "\n"

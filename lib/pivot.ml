@@ -18,8 +18,7 @@ let parse schema verb arguments =
   let name x =
     match x.Syntax.form with
     | Name (Bare, n) | Name (Column, n) -> n
-    | Literal s when String.starts_with ~prefix:"\"" s ->
-      Yojson.Basic.from_string s |> Yojson.Basic.Util.to_string
+    | Literal (Text n) -> n
     | _ -> raise (Error "Expected literal field name")
   in
   let fields n =

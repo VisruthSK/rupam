@@ -1,25 +1,49 @@
 name: CI
 
-on: [push, pull_request]
+on:
+  push:
+    branches: [main]
+  pull_request:
 
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: "5.5"
+      - uses: ocaml/setup-ocaml/lint-fmt@v3
+
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
+
       - uses: ocaml/setup-ocaml@v3
         with:
-          ocaml-compiler: '5.3'
+          ocaml-compiler: "5.5"
       - run: opam install . --deps-only --with-test
-      - run: opam exec -- dune build @all @runtest
-      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
+      - run: opam exec -- dune build @all
+      - run: opam exec -- dune runtest
+
+      - uses: astral-sh/setup-uv@v10
+        with:
+          enable-cache: true
+      - run: uv sync --locked
+
       - uses: r-lib/actions/setup-r@v2
         with:
           use-public-rspm: true
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
-          packages: any::dplyr, any::bit64, any::jsonlite, any::nanoparquet, any::gmp, any::tidyr
-      - run: opam exec -- uv run --locked python -m unittest discover -s test
+          packages: any::dplyr, any::tidyr, any::bit64, any::gmp, any::jsonlite, any::nanoparquet
+
+      - run: opam exec -- uv run --locked python -m unittest discover -s test -v

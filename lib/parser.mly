@@ -9,9 +9,10 @@ let result_annotation t body = match t with None -> body | Some a -> {body with 
 %}
 %token DOTDOT TYPEARROW IMPORT TYPE MATCH BAR QUESTION
 %token LET USE CONTRACT AS FN IF THEN ELSE
-%token <string> NAME NUMBER STRING BOOL
+%token <string> NAME INT FLOAT STRING
+%token TRUE FALSE NONE
 %token IN LB RB LC RC
-%token LP RP COMMA EQ DOT PIPE DOLLAR CARET ARROW END EOF
+%token LP RP COMMA EQ DOT PIPE DOLLAR CARET ARROW END SEMI EOF
 %token PLUS MINUS TIMES DIV GT LT GE LE NE EQUAL AND OR NOT COLON MOD
 %right TYPEARROW
 %nonassoc QUESTION
@@ -29,7 +30,8 @@ let result_annotation t body = match t with None -> body | Some a -> {body with 
 %type <Syntax.declaration list> program
 %%
 program: items EOF { List.rev $1 };
-items: /* empty */ { [] } | items END { $1 } | items decl END { $2 :: $1 };
+items: /* empty */ { [] } | items separator { $1 } | items decl separator { $2 :: $1 };
+separator: END {} | SEMI {};
 decl: IMPORT NAME { Import ($2,$2) } | IMPORT NAME AS NAME { Import ($2,$4) }
  | TYPE NAME type_params EQ annotation { Alias ($2,$3,$5) }
  | TYPE NAME type_params EQ variants { Type ($2,$3,List.rev $5) }
@@ -55,10 +57,11 @@ branches: pattern ARROW expr { [$1,$3] } | branches COMMA pattern ARROW expr { (
 pattern: NAME { if $1="_" then Wildcard else if Char.uppercase_ascii $1.[0]=$1.[0] then Tag ($1,[]) else Bind $1 }
  | NAME LP patterns RP { Tag ($1,List.rev $3) }
  | LC names RC { Precord (List.rev $2) }
- | STRING { Pliteral (Printf.sprintf "%S" $1) }
- | BOOL { Pliteral $1 } | NUMBER { Pliteral $1 }
+ | literal { Pliteral $1 }
  | LP pattern COMMA patterns RP { Ptuple ($2 :: List.rev $4) };
 patterns: pattern { [$1] } | patterns COMMA pattern { $3 :: $1 };
+literal: INT { Int $1 } | FLOAT { Float $1 } | STRING { Text $1 }
+ | TRUE { Bool true } | FALSE { Bool false } | NONE { Absent };
 return_type: /* empty */ { None } | COLON annotation { Some $2 };
 param: NAME { $1,None } | NAME COLON annotation { $1,Some $3 };
 params: /* empty */ { [] } | param_list { List.rev $1 };
@@ -77,27 +80,26 @@ expr: MATCH expr LC branches RC { at $startpos $endpos (Match ($2,List.rev $4)) 
  | LP expr COMMA values RP { at $startpos $endpos (Tuple ($2 :: List.rev $4)) }
  | LET NAME EQ expr IN expr { at $startpos $endpos (Local ($2,$4,$6)) }
  | NAME { at $startpos $endpos (Name (Bare,$1)) } | DOLLAR NAME { at $startpos $endpos (Name (Column,$2)) }
- | CARET NAME { at $startpos $endpos (Name (Lexical,$2)) } | NUMBER { at $startpos $endpos (Literal $1) }
- | BOOL { at $startpos $endpos (Literal $1) } | STRING { at $startpos $endpos (Literal (Printf.sprintf "%S" $1)) }
+ | CARET NAME { at $startpos $endpos (Name (Lexical,$2)) } | literal { at $startpos $endpos (Literal $1) }
  | LP expr RP { $2 } | expr DOT NAME { at $startpos $endpos (Field ($1,$3)) }
  | expr LP args RP { at $startpos $endpos (Call ($1,$3)) }
  | IF expr THEN expr ELSE expr { at $startpos $endpos (If ($2,$4,$6)) }
  | FN LP params RP ARROW expr { at $startpos $endpos (Lambda (List.map fst $3,parameters $3 $6)) }
- | MINUS expr %prec UNARY { at $startpos $endpos (Unary ("-",$2)) }
- | NOT expr %prec UNARY { at $startpos $endpos (Unary ("not",$2)) }
- | expr PLUS expr { at $startpos $endpos (Binary ("+",$1,$3)) }
- | expr MINUS expr { at $startpos $endpos (Binary ("-",$1,$3)) }
- | expr TIMES expr { at $startpos $endpos (Binary ("*",$1,$3)) }
- | expr DIV expr { at $startpos $endpos (Binary ("/",$1,$3)) }
- | expr MOD expr { at $startpos $endpos (Binary ("%",$1,$3)) }
- | expr GT expr { at $startpos $endpos (Binary (">",$1,$3)) }
- | expr LT expr { at $startpos $endpos (Binary ("<",$1,$3)) }
- | expr GE expr { at $startpos $endpos (Binary (">=",$1,$3)) }
- | expr LE expr { at $startpos $endpos (Binary ("<=",$1,$3)) }
- | expr EQUAL expr { at $startpos $endpos (Binary ("==",$1,$3)) }
- | expr NE expr { at $startpos $endpos (Binary ("!=",$1,$3)) }
- | expr PIPE expr { at $startpos $endpos (Binary ("|>",$1,$3)) }
- | expr AND expr { at $startpos $endpos (Binary ("and",$1,$3)) }
- | expr OR expr { at $startpos $endpos (Binary ("or",$1,$3)) }
- | expr COLON expr { at $startpos $endpos (Binary (":",$1,$3)) }
+ | MINUS expr %prec UNARY { at $startpos $endpos (Unary (Negate,$2)) }
+ | NOT expr %prec UNARY { at $startpos $endpos (Unary (Not,$2)) }
+ | expr PLUS expr { at $startpos $endpos (Binary (Add,$1,$3)) }
+ | expr MINUS expr { at $startpos $endpos (Binary (Sub,$1,$3)) }
+ | expr TIMES expr { at $startpos $endpos (Binary (Mul,$1,$3)) }
+ | expr DIV expr { at $startpos $endpos (Binary (Div,$1,$3)) }
+ | expr MOD expr { at $startpos $endpos (Binary (Mod,$1,$3)) }
+ | expr GT expr { at $startpos $endpos (Binary (Greater,$1,$3)) }
+ | expr LT expr { at $startpos $endpos (Binary (Less,$1,$3)) }
+ | expr GE expr { at $startpos $endpos (Binary (Greater_equal,$1,$3)) }
+ | expr LE expr { at $startpos $endpos (Binary (Less_equal,$1,$3)) }
+ | expr EQUAL expr { at $startpos $endpos (Binary (Equal,$1,$3)) }
+ | expr NE expr { at $startpos $endpos (Binary (Not_equal,$1,$3)) }
+ | expr PIPE expr { at $startpos $endpos (Pipe ($1,$3)) }
+ | expr AND expr { at $startpos $endpos (Binary (And,$1,$3)) }
+ | expr OR expr { at $startpos $endpos (Binary (Or,$1,$3)) }
+ | expr COLON expr { at $startpos $endpos (Range ($1,$3)) }
 ;

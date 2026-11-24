@@ -1,12 +1,40 @@
 open Syntax
 
+type join_kind =
+  | Inner
+  | Left
+  | Right
+  | Full
+  | Semi
+  | Anti
+
+let join_name = function
+  | Inner -> "inner"
+  | Left -> "left"
+  | Right -> "right"
+  | Full -> "full"
+  | Semi -> "semi"
+  | Anti -> "anti"
+;;
+
+let join_kinds =
+  List.map (fun k -> join_name k, k) [ Inner; Left; Right; Full; Semi; Anti ]
+;;
+
 type dataset =
   { dictionary : Contract.t
   ; table : Contract.table
   ; fields : string list
   ; plan : Table.t
   ; physical_types : Yojson.Basic.t
-  ; join : (dataset * dataset * string * string) option
+  ; join : join option
+  }
+
+and join =
+  { left : dataset
+  ; right : dataset
+  ; key : string
+  ; kind : join_kind
   }
 
 type binding =
@@ -76,31 +104,31 @@ let rec dataset env scalars x =
     ; physical_types = `Assoc types
     ; join = None
     }
-  | Binary
-      ( "|>"
-      , a
-      , { form = Call ({ form = Name (Bare, "join"); _ }, (None, b) :: options); _ } ) ->
+  | Pipe (a, { form = Call ({ form = Name (Bare, "join"); _ }, (None, b) :: options); _ })
+    ->
     let left = dataset env scalars a
     and right = dataset env scalars b in
-    let option n =
-      match List.assoc_opt (Some n) options with
-      | Some { form = Name (Bare, v); _ } -> v
-      | _ -> fail x ("join requires " ^ n)
-    in
     let key, right_key =
       match List.assoc_opt (Some "on") options with
       | Some { form = Name (Bare, k); _ } -> k, k
       | Some
           { form =
               Binary
-                ( "=="
+                ( Equal
                 , { form = Field ({ form = Name (Bare, "left"); _ }, l); _ }
                 , { form = Field ({ form = Name (Bare, "right"); _ }, r); _ } )
           ; _
           } -> l, r
       | _ -> fail x "Expected a key name or left.key == right.key"
     in
-    let how = option "how" in
+    let kind =
+      match List.assoc_opt (Some "how") options with
+      | Some { form = Name (Bare, name); _ } when List.mem_assoc name join_kinds ->
+        List.assoc name join_kinds
+      | _ -> fail x "join expects how = inner, left, right, full, semi or anti"
+    in
+    let nullable_left = kind = Right || kind = Full
+    and nullable_right = kind = Left || kind = Full in
     let right =
       if key = right_key
       then right
@@ -114,10 +142,7 @@ let rec dataset env scalars x =
               [ Some right_key, { x with form = Name (Bare, key) } ]
         }
     in
-    if
-      List.length options <> 2
-      || not (List.mem how [ "left"; "right"; "inner"; "full"; "semi"; "anti" ])
-    then fail x "Expected on and how arguments with a supported join type";
+    if List.length options <> 2 then fail x "join expects exactly on and how";
     let lk = Check.lookup key left.plan.schema
     and rk = Check.lookup key right.plan.schema in
     if lk.typ.primitive <> rk.typ.primitive then fail x "Join key types differ";
@@ -127,27 +152,24 @@ let rec dataset env scalars x =
            ( n
            , e.typ.primitive
            , e.typ.nullable
-             ||
-             if n = key
-             then rk.typ.nullable && List.mem how [ "right"; "full" ]
-             else List.mem how [ "right"; "full" ] ))
+             || if n = key then rk.typ.nullable && nullable_left else nullable_left ))
         left.plan.schema
       @ List.filter_map
           (fun (n, (e : Shape.expr)) ->
-             if n = key || List.mem how [ "semi"; "anti" ]
+             if n = key || kind = Semi || kind = Anti
              then None
              else (
                if List.mem_assoc n left.plan.schema
                then fail x ("Join column collision: " ^ n);
-               Some (n, e.typ.primitive, e.typ.nullable || List.mem how [ "left"; "full" ])))
+               Some (n, e.typ.primitive, e.typ.nullable || nullable_right)))
           right.plan.schema
     in
     { left with
       fields = List.map (fun (n, _, _) -> n) fields
     ; plan = Table.source 0 fields
-    ; join = Some (left, right, key, how)
+    ; join = Some { left; right; key; kind }
     }
-  | Binary ("|>", a, { form = Call ({ form = Name (Bare, verb); _ }, args); _ }) ->
+  | Pipe (a, { form = Call ({ form = Name (Bare, verb); _ }, args); _ }) ->
     let t = dataset env scalars a in
     (try { t with plan = Table.stage ~span:x.span scalars t.plan verb args } with
      | Shape.Error message -> fail x message)
@@ -184,12 +206,10 @@ let extend ~directory env scalars declarations =
         { form =
             Call
               ( { form = Name (Bare, "save_parquet"); _ }
-              , [ (None, x); (None, { form = Literal path; _ }) ] )
+              , [ (None, x); (None, { form = Literal (Text path); _ }) ] )
         ; _
         }
-      :: ds ->
-      let path = Yojson.Basic.from_string path |> Yojson.Basic.Util.to_string in
-      loop env scalars ((dataset env scalars x, path) :: outputs) ds
+      :: ds -> loop env scalars ((dataset env scalars x, path) :: outputs) ds
     | Alias _ :: ds -> loop env scalars outputs ds
     | Type _ :: _ -> failwith "Table backend does not support variant declarations"
     | Evaluate x :: _ -> fail x "Expected save_parquet"
@@ -297,7 +317,7 @@ let rec restrictions d =
       List.filter_map
         (fun (c : Contract.column) -> if c.restricted then Some c.name else None)
         d.table.columns
-    | Some (left, right, key, _) ->
+    | Some { left; right; key; _ } ->
       let hidden = restrictions left @ restrictions right in
       if List.mem key hidden then d.fields else hidden
   in
@@ -370,13 +390,13 @@ let rec python_table ?(annotate = Source_map.plain) d =
         (q (Yojson.Basic.to_string d.dictionary.metadata))
         (q d.table.name)
         (Yojson.Basic.to_string d.physical_types)
-    | Some (l, r, k, h) ->
+    | Some { left; right; key; kind } ->
       Printf.sprintf
         "%s.join(%s, on=%s, how=%s, nulls_equal=False, coalesce=True).select([%s])"
-        (python_table ~annotate l)
-        (python_table ~annotate r)
-        (q k)
-        (q h)
+        (python_table ~annotate left)
+        (python_table ~annotate right)
+        (q key)
+        (q (join_name kind))
         (String.concat ", " (List.map q d.fields))
   in
   Printf.sprintf "(%s\n    %s\n)" base (Polars.lower ~annotate ~fields:d.fields d.plan)
@@ -456,10 +476,10 @@ let explain d =
   let rec visit d =
     (match d.join with
      | None -> Printf.printf "load %s\n" d.table.name
-     | Some (l, r, k, h) ->
-       visit l;
-       visit r;
-       Printf.printf "%s join on %s\n" h k);
+     | Some { left; right; key; kind } ->
+       visit left;
+       visit right;
+       Printf.printf "%s join on %s\n" (join_name kind) key);
     List.rev d.plan.steps
     |> List.iter (fun step ->
       print_endline
@@ -482,7 +502,7 @@ let validate d =
   let rec sources d =
     match d.join with
     | None -> [ d.dictionary.path ]
-    | Some (l, r, _, _) -> sources l @ sources r
+    | Some { left; right; _ } -> sources left @ sources right
   in
   List.sort_uniq compare (sources d)
   |> List.iter (fun path ->

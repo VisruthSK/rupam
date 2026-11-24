@@ -42,18 +42,12 @@ let lookup name bindings =
 let rec expression env columns source =
   let check = expression env columns in
   match source.form with
-  | Literal "true" -> constant (`Bool true)
-  | Literal "false" -> constant (`Bool false)
-  | Literal s
-    when String.exists
-           (function
-             | '.' | 'e' | 'E' -> true
-             | _ -> false)
-           s ->
+  | Literal (Syntax.Bool b) -> constant (`Bool b)
+  | Literal (Syntax.Float s) ->
     (match float_of_string_opt s with
      | Some n -> constant (`Float n)
      | None -> raise (Error "Expected a number"))
-  | Literal s ->
+  | Literal (Syntax.Int s) ->
     (match Int64.of_string_opt s with
      | Some n -> constant (`Int n)
      | None -> raise (Error "Expected Int64 literal"))
@@ -67,12 +61,12 @@ let rec expression env columns source =
   | Binary (op, a, b) ->
     let operator =
       match op with
-      | "+" -> Add
-      | "*" -> Mul
-      | "-" -> Sub
-      | "/" -> Div
-      | ">" -> Greater
-      | _ -> raise (Error ("Unsupported operator: " ^ op))
+      | Syntax.Add -> Shape.Add
+      | Mul -> Mul
+      | Sub -> Sub
+      | Div -> Div
+      | Greater -> Greater
+      | op -> raise (Error ("Unsupported operator: " ^ binary_symbol op))
     in
     binary operator (check a) (check b)
   | Call ({ form = Field ({ form = Name (Bare, ns); _ }, "sqrt"); _ }, [ (None, arg) ]) ->

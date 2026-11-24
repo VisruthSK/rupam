@@ -5,4 +5,11 @@
 (package
  (name rupam)
  (synopsis "A typed language for interactive data analysis")
- (depends (ocaml (>= 5.1)) menhir yojson uucp))
+ (depends
+  (ocaml (>= 5.5))
+  menhir
+  yojson
+  uucp
+  (cmdliner (>= 2.0))
+  linenoise
+  (ocamlformat (and :with-dev-setup (= 0.29.0)))))

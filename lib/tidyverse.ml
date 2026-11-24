@@ -118,7 +118,7 @@ let lower ?(annotate = Source_map.plain) ~fields plan =
 ;;
 
 let preamble =
-  {|library(dplyr)
+  {|suppressPackageStartupMessages(library(dplyr))
 
 rp_wider <- function(data, ids, key, value, labels) {
   if (!all(data[[key]] %in% labels)) stop("Unexpected pivot key")
@@ -201,13 +201,13 @@ let rec table ?(annotate = Source_map.plain) d =
         (q (Yojson.Basic.to_string d.dictionary.metadata))
         (q d.table.name)
         (q (Yojson.Basic.to_string d.physical_types))
-    | Some (l, r, k, h) ->
+    | Some { left; right; key; kind } ->
       Printf.sprintf
         "%s_join(%s, %s, by = %s, na_matches = \"never\")"
-        h
-        (table ~annotate l)
-        (table ~annotate r)
-        (q k)
+        (Analysis_program.join_name kind)
+        (table ~annotate left)
+        (table ~annotate right)
+        (q key)
   in
   match lower ~annotate ~fields:d.fields d.plan with
   | "" -> base
