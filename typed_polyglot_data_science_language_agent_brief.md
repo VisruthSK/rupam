@@ -286,7 +286,7 @@ Result<T, E>          (errors returned as values)
 
 First release may represent decimals, time zones, nested array shapes, and additional temporal/structured data internally and surface them in later milestones. Imported physical Parquet types that cannot be represented faithfully must produce a clear unsupported-type diagnostic; do not coerce them to strings or floats without consent.
 
-Missingness is `Option<T>`; it is not encoded as a special floating value. `None` is separate from `NaN`, positive/negative infinity, zero, and empty strings. `Option<Column<T>>` and `Column<Option<T>>` are different types and never interchangeable implicitly.
+Missingness is `Option<T>`; it is not encoded as a special floating value. `None` is separate from positive/negative infinity, zero, and empty strings. rupam has no NaN (see §4.3). `Option<Column<T>>` and `Column<Option<T>>` are different types and never interchangeable implicitly.
 
 The type system has immutable records, algebraic data types, pattern matching, type variables, generalized let bindings, and qualified numeric/equality/ordering constraints. Inference uses a documented, terminating extension of HM. Full principal types are an aspiration, not something to claim automatically after adding row, rank and type-class constraints; ambiguous constraints must produce diagnostics.
 
@@ -313,10 +313,11 @@ For every operation, provide a documented schema transformer in the typed standa
 
 ### 4.3 Numeric operations and nullability
 
-- Integer arithmetic has a fixed width, with checked overflow. R's ordinary double arithmetic is not an acceptable invisible substitute for exact 64-bit integer arithmetic.
+- `Int64` is exact across its whole range in every dialect. R's double arithmetic is not an acceptable substitute, because doubles lose integers above 2^53 and real data holds 64-bit identifiers and timestamps beyond that. The R dialect uses `bit64`. Results outside the `Int64` range are unspecified; dialects do not add overflow checks.
 - A numeric literal may be contextually specialized when it fits exactly; ordinary integer variables do not silently widen to floating types when that can lose precision.
-- `/` is floating-point division after an explicit/safe numeric conversion. The language must define division-by-zero and overflow behavior, and tests must cover both; in v0.1 use IEEE-754 division for `Float64` and an explicit checked conversion for integers.
-- `Float64` arithmetic follows specified IEEE-style NaN/infinity rules, subject to a documented cross-backend tolerance for non-associative reductions. Never claim bitwise-identical summation when engines use different parallel reduction orders.
+- `/` is floating-point division after an explicit numeric conversion. Dividing a nonzero number by zero gives positive or negative infinity.
+- **rupam has no NaN.** A `Float64` is a finite number or positive/negative infinity, so equality is reflexive and sorting, grouping, `distinct` and joins behave the same in every dialect. An operation with no defined result (`0 / 0`, `Inf - Inf`, `0 * Inf`, `sqrt` or `log` of a negative number) is a runtime error that names the expression and, for columns, the first failing row. `ratio(a, b)` returns `Float64?` and gives `None` where `a / b` is undefined, for analyses that expect zero denominators. NaN values in input files load as `None`, matching R, where `is.na(NaN)` is true. Every dialect checks the results of NaN-capable operations and converts or fails accordingly.
+- Reductions over `Float64` may differ across dialects only by summation order, within a documented relative tolerance. Never claim bitwise-identical sums.
 - `f : A -> B` applied to `Column<Option<A>>` is lifted strictly to `Column<Option<B>>`: null inputs produce null outputs without invoking `f` on the missing element.
 - `g : Option<A> -> B` receives missingness explicitly and may produce a nonoptional result.
 - A plain `A` may be injected as `Some(A)` when an expected `Option<A>` argument makes that conversion unambiguous. There is no implicit conversion from `Option<A>` to `A`.
@@ -386,7 +387,7 @@ For v0.1, choose the following source-language semantics, implemented consistent
 - Aggregates skip missing input observations, except `count()` which counts rows and `count_present(x)` which counts nonmissing values.
 - `sum`, `mean`, `min`, `max` return `Option<T>` (or `Option<Float64>` for `mean`) and return `None` when no nonmissing values are available. `sd` returns `None` when fewer than two nonmissing values exist; it uses the sample standard deviation (`n - 1`) consistently.
 - `count()` always returns a nonnullable integer, including zero for an empty input.
-- Missing values in grouping keys form one group. NaNs are not missing; grouping-key equivalence treats NaNs consistently as one equivalence class. Ordinary floating equality retains IEEE behavior (`NaN == NaN` is false). This requires separate comparison and key-equivalence semantics.
+- Missing values in grouping keys form one group. Because there is no NaN, key equivalence and ordinary equality coincide.
 - Arithmetic with a missing result propagates missingness. Empty/all-null aggregates do not silently use R/Polars native identities when those disagree with the source specification.
 - Three-valued logic may be modeled through `Option<Bool>`, but control flow and filtering must make how unknown values are handled explicit.
 - `if` is branch-selective at the source level, including inside lifted column computations. Backends must use masking/guarding or a pure callback when their native conditionals evaluate unsafe nonselected branches.
@@ -624,7 +625,7 @@ Use the following target assessment categories:
 - **unsupported:** cannot preserve behavior using permitted generated code, so compilation fails;
 - **backend-specific:** allowed only with an explicit user opt-in and a recorded nonportable dependency.
 
-Never generate code that silently changes missingness, grouping, NaN behavior, integer overflow, join matching or the meaning of a conditional. Do not equate "the target library has a similar method name" with semantic equivalence.
+Never generate code that silently changes missingness, grouping, undefined floating-point results, `Int64` exactness, join matching or the meaning of a conditional. Do not equate "the target library has a similar method name" with semantic equivalence.
 
 ### 7.3 R/tidyverse target
 
@@ -659,7 +660,7 @@ Allow explicitly marked backend operations, but never implicit fallback to arbit
 
 ### 7.7 Optimization later
 
-Prepare typed relational IR for projection pruning, predicate pushdown, safe column fusion, common-subexpression elimination, aggregate/window lowering and join planning. Initially let R/Polars handle native optimization. Any source optimizer must preserve row-unordered semantics, nullable/NaN behavior, exception paths, value-validation obligations, and order requirements. A rewrite that moves `filter` before contract validation is invalid if it can mask a bad source row.
+Prepare typed relational IR for projection pruning, predicate pushdown, safe column fusion, common-subexpression elimination, aggregate/window lowering and join planning. Initially let R/Polars handle native optimization. Any source optimizer must preserve row-unordered semantics, nullable behavior, exception paths, value-validation obligations, and order requirements. A rewrite that moves `filter` before contract validation is invalid if it can mask a bad source row.
 
 ### 7.8 Backends are dialects, and the REPL runs what `compile` writes
 
@@ -709,7 +710,7 @@ Commands that can run large computations must show the intended operation/estima
 
 ### 8.3 Rich dataframe inspection
 
-The standalone inspector must provide horizontal/vertical navigation, pagination, schema/type headings, nullable-column indication, key/relationship information, units/descriptions, missing counts when known, safe sorting/filtering controls and quick copy/export of allowed fields. Default previews must exclude `display: restricted` values, including diagnostics and sample tooltips. The renderer distinguishes `None`, `NaN`, infinity and empty string. Preview row order is not treated as stable unless the query established an order.
+The standalone inspector must provide horizontal/vertical navigation, pagination, schema/type headings, nullable-column indication, key/relationship information, units/descriptions, missing counts when known, safe sorting/filtering controls and quick copy/export of allowed fields. Default previews must exclude `display: restricted` values, including diagnostics and sample tooltips. The renderer distinguishes `None`, infinity and empty string. Preview row order is not treated as stable unless the query established an order.
 
 An interactive stage inspector should let the user select any valid pipeline prefix and view its **inferred output schema** immediately. Showing values for that prefix triggers evaluation only of what is necessary, including validation. The inspector should identify materialization barriers and reuse valid cached results for an unchanged source snapshot.
 
@@ -878,7 +879,7 @@ The agent must turn the following into executable fixtures. Expected behavior is
 | T14 | `summarize(n = count())` on an empty ungrouped table | One row with nonnullable `n = 0`; `summarize(..., by = region)` on empty input yields zero groups/rows. |
 | T15 | Join with nullable key and missing rows | Null keys do not match by default; outer-side fields become nullable. |
 | T16 | Join with duplicate nonkey field labels | Static collision error until renamed or explicitly resolved. |
-| T17 | `distinct(x)` with several `None` and `NaN` values | Key-equivalence semantics distinguish missingness from NaN and treat each consistently. |
+| T17 | `distinct(x)` with several `None` values | All `None` keys form one distinct value in every dialect. |
 | T18 | `arrange(desc(value), id) |> take(5)` | Explicit ordered result; no implicit ordering elsewhere. |
 | T19 | `take(5)` on an unordered table | Static error or explicit warning/failure requiring order; not a deterministic top five. |
 | T20 | Contracted source with a required-column null | Full data validation fails before output, even if `filter` would remove the row. |
@@ -891,9 +892,9 @@ The agent must turn the following into executable fixtures. Expected behavior is
 | T27 | Target-specific function used without opt-in | Compile failure naming capability and target. |
 | T28 | Target-specific function with opt-in | Correct native target code, explicit nonportable manifest entry, failure on other target. |
 | T29 | Mixed `Int64`/`Float64` values with possible precision loss | No invisible lossy conversion; diagnostic or explicit cast. |
-| T30 | Missing/nullable source value versus NaN | Distinct representations, inspections, group/equality behavior and generated results. |
+| T30 | Source file containing NaN; `0 / 0` in a `mutate` | NaN loads as `None`; `0 / 0` fails naming the expression and row; `ratio(0, 0)` gives `None`. Same in every dialect. |
 
-For data-output comparisons, canonicalize **unordered tables as multisets of typed rows**, not as positional arrays. For ordered views compare their explicitly requested order. Handle null, NaN and float tolerance using the source-language comparison policy. Check schemas, nullability and constraints, not only serialized values.
+For data-output comparisons, canonicalize **unordered tables as multisets of typed rows**, not as positional arrays. For ordered views compare their explicitly requested order. Handle null and float tolerance using the source-language comparison policy. Check schemas, nullability and constraints, not only serialized values.
 
 ### 11.1 Minimum benchmark coverage
 
@@ -952,7 +953,7 @@ Aim for sub-200 ms incremental type/schema feedback for typical interactive edit
 3. **One call syntax.** `f(a, b, name = c)` everywhere; no bespoke dplyr-like parser for individual verbs.
 4. **`mutate` follows dplyr.** It adds or replaces columns in source order, with no second synonym.
 5. **Column scope is explicit and stable.** Bare names in value position prefer fields; `^` is lexical, `$` is column, with collision diagnostics.
-6. **Strict Option types.** Null is not NaN and missing values are not automatically filled.
+6. **Strict Option types and no NaN.** Missing values are `None`, never filled automatically, and undefined arithmetic is an error rather than a NaN.
 7. **Automatic lifting exists.** It is a type/shape elaboration pass, not a target-specific runtime trick. Ordinary `List<T>` uses `map`.
 8. **No unvalidated source facts masquerade as proven.** Runtime data validation is a dependency of contracted materialization.
 9. **Use upstream data-dict.** Import JSON exports and validation reports instead of cloning a subtly different validator in the compiler.
@@ -971,7 +972,7 @@ These risks are real; do not bury them beneath a nice parser demonstration.
 
 **Rank inference plus polymorphism.** General automatic rank polymorphism combined with row types and overloaded arithmetic is research-level work. Restrict v0.1 to scalar/column lifting with a deterministic type-directed elaboration algorithm. Emit ambiguity errors where no unique interpretation exists. Defer full Julia-style arbitrary-dimensional broadcasting.
 
-**R/Python semantic differences.** Int64 precision, NaN/None distinctions, categorical ordering, null comparisons, conditional evaluation and empty folds differ across ecosystems. Test these explicitly. Generate guards/helpers or mark a lowering unsupported; never reinterpret the source quietly.
+**R/Python semantic differences.** Int64 precision, NaN handling, categorical ordering, null comparisons, conditional evaluation and empty folds differ across ecosystems. Test these explicitly. Generate guards/helpers or mark a lowering unsupported; never reinterpret the source quietly.
 
 **Whole-column functions in Polars.** `map_batches` does not automatically preserve whole-dataset reduction semantics. Native expressions, window lowerings or explicit full materialization are required when function behavior depends on the entire group/column.
 
