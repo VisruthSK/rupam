@@ -83,6 +83,17 @@ valid for the target lock and all possible unpinned effect outcomes. Host
 numerical operations that cannot provide the required checked semantics must
 use an adapter or be rejected. No new general dataframe runtime is required.
 
+A numerical obligation established by computing on locked data (a sign,
+presence or bound) eliminates its check only if the computation that
+established it is deterministic under the locked execution conditions, or
+the obligation holds for every outcome the documented numerical tolerance
+permits. Floating-point reductions whose result depends on accumulation
+order, threading or vectorisation are not deterministic unless the dialect
+pins their order. For those, the obligation must hold with a margin larger
+than the reduction's error bound; otherwise the check remains. In
+`1.0 / sum([1e16, 1.0, -1e16])` the sum is `1.0` or `0.0` depending on order,
+so a nonzero divisor observed once does not remove the divisor check.
+
 ## Strict mode
 
 Strict mode is the default. A strict program uses the portable intersection

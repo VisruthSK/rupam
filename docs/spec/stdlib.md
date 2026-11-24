@@ -59,7 +59,7 @@ cumulative sums and integer-valued ranks; undefined results are optional.
 | `center(x)` | `x - mean(x)` |
 | `scale(x)` | `x / sd(x)` |
 | `standardize(x)` | `(x - mean(x)) / sd(x)`; `method = robust` uses median and scaled MAD |
-| `rescale(x)` | `(x - min(x)) / (max(x) - min(x))`; `to = (a, b)` maps to the range |
+| `rescale(x)` | `(x - min(x)) / (max(x) - min(x))`; `to = [a, b]` maps to the range |
 | `rank(x, ties = average)` | one-based rank by ascending value, with `average`, `min`, `max` or `dense` ties |
 | `percent_rank(x)` | `(rank(x, ties = min) - 1) / (present_count - 1)`; `None` for a singleton |
 | `ntile(x, n)` | one-based integer bucket; sorted ascending by x, ties broken by total observation order |

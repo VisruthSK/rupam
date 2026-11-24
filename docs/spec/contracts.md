@@ -36,7 +36,7 @@ Each unambiguous single-column entity primary key of primitive identifier
 type (`Int64` or `String`) has a nominal domain identified by its contract and table/key identity.
 Validated foreign keys to it share that domain. Do not infer equivalence
 from names, matching representations or arbitrary relationships. Composite
-keys retain tuple uniqueness; do not assign entity identity to individual
+keys retain combined uniqueness; do not assign entity identity to individual
 components unless explicitly declared or independently established.
 
 Each `values` declaration supplies a nominal enum with stable identity from

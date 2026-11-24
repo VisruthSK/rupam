@@ -29,7 +29,6 @@
 | `t"2026-11-24 09:30 America/Los_Angeles"` | `DateTime<"America/Los_Angeles">` |
 | `r"^[A-Z]{3}\d+$"` | `Regex` |
 | `[1, 2, 3]` | `[Int64]` |
-| `(1, "a")` | `(Int64, String)` |
 | `{site = "MRS", n = 3}`, `{site, n}` | `{site: String, n: Int64}` |
 
 - `1` is `Int64`; `1.0` is `Float64`. A literal adapts to an expected numeric
@@ -74,12 +73,12 @@ param         = pattern [ ":" type ] [ "=" expr ] ;
 
 expr          = "fn" "(" [ param { "," param } ] ")" "=>" expr
               | "if" "(" expr ")" expr "else" expr
-              | "match" expr "{" arm { "," arm } [ "," ] "}"
+              | "match" expr { "," expr } "{" arm { "," arm } [ "," ] "}"
               | "let" binding "in" expr
               | "let" pattern "=" expr "else" expr "in" expr
               | block
               | pipeline ;
-arm           = pattern [ "if" expr ] "=>" expr ;
+arm           = pattern { "," pattern } [ "if" expr ] "=>" expr ;
 block         = "{" "let" binding end { "let" binding end } expr "}" ;
 
 pipeline      = formula { "|>" formula } ;
@@ -104,7 +103,6 @@ index         = expr | "end" ;
 
 primary       = ident | Ident | "$" ident | "^" ident | literal
               | "(" expr ")"
-              | "(" expr "," expr { "," expr } [ "," ] ")"
               | "[" [ expr { "," expr } [ "," ] ] "]"
               | "{" [ field { "," field } [ "," ] ] "}" ;
 field         = ident [ "=" expr ] ;
@@ -114,7 +112,6 @@ alternative   = "_" | ident [ "@" alternative ] | literal | signed_number
               | signed_number ( "..=" | "..<" ) signed_number
               | ( "..=" | "..<" ) signed_number | signed_number ".."
               | Ident [ "(" pattern { "," pattern } ")" ]
-              | "(" pattern "," pattern { "," pattern } ")"
               | "[" [ pattern { "," pattern } [ "," ".." [ ident ] ]
                       | ".." [ ident ] ] "]"
               | "{" field_pattern { "," field_pattern } [ "," ".." ] "}" ;
@@ -151,9 +148,12 @@ type_arg      = type | string ;
   are supported as described in [Dialects](dialects.md#foreign-imports).
 - Braces starting with `let` are a block; other braces are a record. `{x, y}`
   means `{x = x, y = y}`.
-- In `x |> f(a)` the piped value is the first argument; `_` places it
-  elsewhere: `x |> f(a, _)`. `x |> f` means `f(x)`. The piped
-  expression is evaluated once. A call admits one pipeline placeholder.
+- A call with `_` arguments is a function of those holes, left to right:
+  `round(_, 2)` is `fn(x) => round(x, 2)`. Functions do not curry
+  implicitly; `_` is the only partial application.
+- `x |> f` applies `f` to `x`. In `x |> f(a)` the piped value is the first
+  argument, and `x |> f(a, _)` fills the hole, so both are ordinary
+  application. The piped expression is evaluated once.
 - Positional arguments precede named arguments in ordinary calls; names resolve
   to parameters exactly. Verbs with output declarations may interleave named
   outputs (including backtick-quoted output names) and `across(...)` in their
@@ -222,9 +222,11 @@ match reading {
 }
 ```
 
+- `match a, b { p, q => e }` matches several subjects at once; each arm has
+  one pattern per subject.
 - Patterns: `_`, names, literals except floats, ranges (`a..=b` inclusive,
   `a..<b` half-open, `..<b`, `a..`), constructors,
-  `Some(v)` and `None` for options, tuples, vector heads with `..rest`
+  `Some(v)` and `None` for options, vector heads with `..rest`
   (including `[..rest]`), records with optional `..`,
   alternatives, `@` bindings, guards.
 - A binding or parameter without a fallback must have an irrefutable pattern

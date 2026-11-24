@@ -52,3 +52,18 @@ release policy is defined, these outputs remain restricted.
 ## Recursion
 
 Recursive functions, compiled as host functions without vectorisation.
+
+## Recoverable loading
+
+Reusable loading functions may return `Result<T, LoadError>`, so a caller can
+handle a missing or malformed file as a value instead of stopping the
+analysis. `LoadError` is an enum of the failure kinds.
+
+## Sources
+
+| Work | Adopted | Deferred |
+| --- | --- | --- |
+| PingPong | `lookup` on a known key returning an optional row; explicit key transfer rules ([Tables](tables.md#keys-and-joins)) | |
+| Quone | | a separately marked interoperability layer for typed foreign functions outside strict mode; `Result` for loading functions |
+| PRIMUS | contextual requirements as coeffects ([Types](types.md#contextual-requirements)) | basing new guarantees on empirical studies of common analysis errors |
+| Petříček, *Data Exploration through Dot-driven Development* (2017) | | completion that offers only the transformations valid for a table's data-derived type, without exposing the type machinery |

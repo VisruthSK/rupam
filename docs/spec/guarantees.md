@@ -70,3 +70,6 @@ checked operations are errors, not silent fallback values.
   are checked before relying on their properties.
 - Proven obligations emit no redundant checks; necessary checks are never
   disabled. A standalone script verifies its lock before analysis.
+- A check removed on the strength of a numerical proof stays removed only if
+  the proof holds for every execution the locked environment permits,
+  including any accumulation order of floating-point reductions.

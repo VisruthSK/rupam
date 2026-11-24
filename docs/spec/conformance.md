@@ -149,6 +149,13 @@ check that proved obligations emit no redundant runtime assertions.
 | C118 | probe on incomplete pipeline and restricted derived data | completed prefix completion; no unfinished execution, restricted values hidden |
 | C119 | `if (flag) mean(x) else 0.0` for group x `[2.0,4.0]`, flag `[TRUE,FALSE]` | `[3.0,0.0]`; full-group reduction, not selected subset |
 | C120 | unknown domain in a generic helper instantiated on two different snapshots | successful proof for first cannot justify second; second rechecks |
+| C121 | `mutate(group = id, previous = lag(value, order_by = month), by = group)` with unique `id` | `lag` is ordered within the entry groups; uniqueness of the new `group` does not discharge the ordering requirement |
+| C122 | `1.0 / sum([1e16, 1.0, -1e16])` under a lock that observed a nonzero sum | the divisor check remains in generated code |
+| C123 | `mutate(r = coalesce(x, mean(y)), by = g)` | `mean(y)` runs only in groups with a missing `x`, over all of that group's `y` |
+| C124 | `let center(x) = x - mean(x); let apply(f, x) = f(x)` then `mutate(z = apply(center, value), by = group)` | same result as `mutate(z = value - mean(value), by = group)` |
+| C125 | `map([1.234, 5.678], round(_, 2))` | `[1.23, 5.68]` |
+| C126 | `lookup(customers, customer_id = 7)` on a key, then on a non-key | a `{...}?` row; type error |
+| C127 | `match x, y { 0, _ => A, _, 0 => B, _, _ => C }` | exhaustive; selects per row |
 
 ## Additional implementation requirements
 

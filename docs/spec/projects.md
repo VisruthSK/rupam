@@ -43,7 +43,9 @@ per source and target, including:
   package identities (including content/artifact digests for local or modified
   packages), data-dict version, relevant platform, locale, timezone
   database and numerical/RNG environment;
-- validation results and discharged data-dependent obligations, keyed to
+- validation results and discharged data-dependent obligations (numerical
+  ones only under the determinism rule in
+  [Dialects](dialects.md#checks-and-adapters)), keyed to
   the typed core, target, exact input/environment fingerprints and evaluation
   scope; explicitly committed discovered source and pivot schemas, including
   the stage identity, parsing rules, ordered levels and provenance.

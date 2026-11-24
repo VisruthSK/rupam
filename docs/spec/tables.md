@@ -23,10 +23,10 @@ produces an unordered table; it establishes a schema, not key uniqueness.
 | `slice_head(n = 5)` | first rows, requiring total order |
 | `slice_min(x, n = 5)`, `slice_max(x, n = 5)` | extreme rows with explicit tie semantics |
 | `summarize(name = e, ..., by = keys)` | one row per nonempty group: keys, then summaries; one row when ungrouped |
-| `count(a, b)` | `summarize(n = n(), by = (a, b))` |
+| `count(a, b)` | `summarize(n = n(), by = [a, b])` |
 | `distinct(a, b)` | only the selected key columns, one row per distinct combination |
 | `left_join`, `inner_join`, `right_join`, `full_join`, `semi_join`, `anti_join` | joins |
-| `pivot_longer(cols = (a, b), names_to = k, values_to = v)` | columns to key/value rows |
+| `pivot_longer(cols = [a, b], names_to = k, values_to = v)` | columns to key/value rows |
 | `pivot_wider(names_from = k, values_from = v, levels = [a, b])` | key/value rows to columns |
 | `bind_rows(t, ...)` | concatenate tables by column name |
 | `expand(a, b)` | all combinations of supplied or observed domains |
@@ -37,9 +37,15 @@ produces an unordered table; it establishes a schema, not key uniqueness.
   one scalar per group; `filter` takes a scalar or aligned Boolean column.
   Materialised vectors cannot be implicitly attached by position, even if
   lengths match. Use a join or a row-aligned expression in `mutate`.
-- Grouping exists only in `by =`, evaluated once at verb entry; changing a
-  grouping column within a mutation does not change its groups. Group keys
-  are column names or tuples of names; compute new keys in `mutate` first.
+- Grouping exists only in `by =`, evaluated once at verb entry. The verb
+  fixes a grouping witness: the group of every row as of entry. Group
+  membership, and every fact the checker uses about groups (uniqueness and
+  ordering within a group), refer to the witness, not to the current values
+  of the grouping columns. Replacing a grouping column inside the same verb
+  changes neither the groups nor those facts; uniqueness of the replaced
+  column cannot discharge an ordering requirement over the witness groups.
+  Group keys are column names or vectors of names; compute new keys in
+  `mutate` first.
 - `mutate(..., by = keys)` evaluates reductions per group and keeps every row,
   including missing-key rows as specified in [Missing values](missing.md).
 - A summary's expressions see the input columns, not other summary results.
@@ -158,12 +164,12 @@ No callback is needed per row.
 ## Keys and joins
 
 The checker distinguishes a required unique key, uniqueness among present
-keys, and uniqueness of key tuples including missing components. A primary
+keys, and uniqueness of key combinations including missing components. A primary
 key is required and unique. Grouping and distinctness use exact typed
 equivalence, including signed zero equivalence and componentwise missing
 identity. Float keys use exact finite binary64 values, never `~=`; keys must
 have a supported scalar relational equivalence. Missing join-key components
-never match. Composite keys use tuples of components.
+never match. Composite keys are vectors of components.
 
 Keys come from contracts, `distinct(k)`, `summarize(by = k)`, and
 `assert_key(t, k)`, which establishes required uniqueness after checking the
@@ -183,6 +189,21 @@ present values only.
   establish grouping uniqueness; `skip` on grouping keys also establishes
   their presence in the output. `bind_rows` and reshaping conservatively
   discard input keys unless uniqueness follows from their result semantics.
+Key transfer, for a key `k` of the input:
+
+| Operation | Output key |
+| --- | --- |
+| `filter`, `arrange`, `slice_*` | `k` |
+| `select`, `rename` | `k` under its new names, if every component survives |
+| `mutate` | `k`, unless a component is replaced by an expression not proved injective |
+| `summarize(by = g)`, `distinct(g)`, `count(g)` | `g` only (present under `skip`) |
+| joins | the probe side's `k` when the other side's key is proved unique; otherwise none |
+| `bind_rows`, pivots, `expand`, `complete` | none, unless established by the result semantics |
+
+`lookup(t, k = v)` returns the row of `t` whose key `k` equals `v`, as a
+record `{...}?`, and `None` when there is none. It requires `k` to be a known
+key of `t`.
+
 - Join keys compare identical underlying nominal types (or identical primitive
   types); optionality and refinements may differ. No numeric key promotion.
 
@@ -191,7 +212,7 @@ orders |> left_join(customers, by = customer_id)
 orders |> left_join(customers, by = (customer_id == id), unmatched = error)
 ```
 
-- `by` is required: a name, a left/right equality, or a tuple of these.
+- `by` is required: a name, a left/right equality, or a vector of these.
   Equalities here specify names, not ordinary numeric comparisons.
 - A join must have evidence for its cardinality or state `relationship =`.
   Known right-key uniqueness suffices for left, inner and filtering joins;
@@ -253,13 +274,13 @@ orders |> left_join(customers, by = (customer_id == id), unmatched = error)
   one observation unless `values_fn` explicitly supplies a scalar reduction.
   Absent cells are `None` unless a compatible `values_fill` is supplied;
   observed missing cells are unchanged. Output columns follow level order.
-  Output is unique on the id tuple (required key only if nonoptional).
+  Output is unique on the id combination (required key only if nonoptional).
 - `bind_rows` uses the union of names in first-appearance order. Common types
   are inferred per column; absent columns become optional. Incompatible
   nominal types are errors. It does not establish order.
 - `expand(a, b)` returns the Cartesian product of distinct values of those
   columns, or specified domains (`year = 2020:2026`). Known enums supply all
-  declared values. `nesting(a, b)` supplies only observed tuples as one domain
+  declared values. `nesting(a, b)` supplies only observed combinations as one domain
   in a product. The result has only domain columns and grouping uniqueness.
 - `complete(a, b, fill = {cases = 0}, explicit = new_only)` retains all input
   rows and adds combinations from `expand` that have no matching row. New
@@ -324,7 +345,7 @@ write_csv(summary, "summary.csv")
 Ordering is part of the inferred row-domain type, inherited by aligned
 columns. Three states suffice: unordered observations, sorted observations
 with possible ties (a total preorder), and totally ordered observations.
-A sorted table is totally ordered if its sort tuple is known unique; exact
+A sorted table is totally ordered if its sort key combination is known unique; exact
 row duplicates still count as separate observations. An unordered bag is not
 a set, and a sortable element type does not imply ordered observations.
 General partial-order data structures are not needed for these verbs.
@@ -332,7 +353,7 @@ General partial-order data structures are not needed for these verbs.
 - `arrange(a, desc(b))` establishes a lexicographic order; strings sort by
   UTF-8 byte order, enums by declaration, missing values last in either
   direction. Ties carry no implied physical order. A key contained in the
-  sort tuple proves totality; other uniqueness may be established on locked
+  sort key combination proves totality; other uniqueness may be established on locked
   data. Do not create hidden tie-breakers or automatically sort tables.
 - `lag`, `lead`, cumulative functions, `first`, `last`, `slice_head` and
   `ntile` require total order for positional decisions (unless their input

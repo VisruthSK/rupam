@@ -73,6 +73,38 @@ ordinary HM use, preserving its contextual constraints in the instantiated
 type. The receiving function must supply those requirements. This does not
 introduce first-class polymorphism or require rank-N types.
 
+### Contextual requirements
+
+A function type carries the contextual requirements of its body as a
+coeffect: evaluation scope (whole vector, group, row), unresolved missing
+policies, row-domain alignment and order requirements. These are inferred,
+never written. Syntax-directed rules:
+
+1. **Variable.** Instantiating a scheme copies its requirements with fresh
+   scope, domain and policy variables.
+2. **Abstraction.** Requirements that arise in a function body from its
+   parameters become the function's latent requirements. They are not
+   requirements of the defining context.
+3. **Application.** Applying a function adds its latent requirements to the
+   application. A parameter of function type contributes the requirements of
+   whatever function is passed for it, so a higher-order function's scheme is
+   generic in them, as with effect polymorphism.
+4. **Discharge.** A verb discharges requirements against its context: `by =`
+   supplies the group scope, `missing =` and lexical defaults supply
+   policies, and the stage supplies the row domain and order. A requirement
+   still unresolved at a top-level binding or verb stage is a type error at
+   that site.
+
+```text
+let center(x) = x - mean(x)        # requires: group scope over x's domain
+let apply(f, x) = f(x)             # requires: whatever f requires
+data |> mutate(z = apply(center, value), by = group)
+```
+
+Here `apply(center, value)` inherits `center`'s group-scope requirement,
+which `mutate(..., by = group)` discharges, so `mean` runs per group exactly
+as in `mutate(z = value - mean(value), by = group)`.
+
 Inference aims for a most general supported constraint scheme, but the full
 system makes no unproved principal-type claim. The implementation must publish
 syntax-directed rules for this core (including generalisation, role resolution,
@@ -94,7 +126,7 @@ site are errors. The compiler must not depend on backend-specific inference.
 | `Regex` | patterns in the regex dialect ([Standard library](stdlib.md#regex)) |
 | `T?` | a `T` or `None` |
 | `[T]` | vectors |
-| `(A, B)` | tuples |
+
 | `{a: A, b: B}` | records |
 | `A -> B` | functions |
 | `Table<{...}>` | [tables](tables.md) |
@@ -106,8 +138,8 @@ There is no null, NA, NaN or infinity.
 | Constraint | Types |
 | --- | --- |
 | `number` | `Int64`, `Float64` |
-| `comparable` | numbers, `String`, `Bool`, dates and times of compatible types, enums (declaration order), tuples and vectors of comparables (lexicographic), newtypes deriving `comparable` |
-| `equatable` | `Int64`, `Float64`, `Bool`, `String`, dates and times, enums, and tuples, vectors, records and variants with equatable components; eligible newtypes |
+| `comparable` | numbers, `String`, `Bool`, dates and times of compatible types, enums (declaration order), vectors of comparables (lexicographic), newtypes deriving `comparable` |
+| `equatable` | `Int64`, `Float64`, `Bool`, `String`, dates and times, enums, and vectors, records and variants with equatable components; eligible newtypes |
 | `showable` | primitive values, tables and composites of showable values; not functions |
 
 There are no user-defined type classes.
@@ -136,15 +168,23 @@ from observation order. Vectors have an intrinsic position order.
   constraints and unresolved missing policies. Function generalisation and
   instantiation preserve these properties; no user-visible lifting annotations
   are required. Hover shows the chosen lifting.
-- `if` and `match` select branches per element for lifted expressions. Only
-  selected element-wise computations may fail or consume guarded operands.
-  All branches must type-check under their guards, including inactive ones.
-  Reductions retain their full enclosing group scope, not the subset selected
-  by a conditional. A guard on a row does not prove a property of a whole
-  reduction input. A branch reduction runs once for a group if any row in
-  that group selects the branch, on the full group input; if no row selects
-  it, it does not run. Scalar conditionals select one branch for the group.
-  Nested guards compose; inactive branches cannot fail.
+- Every conditional construct elaborates to one guarded choice in the typed
+  core: `if`, `match`, `let ... else`, `coalesce`, `and` and `or`. A guarded
+  choice selects an operand per element for lifted expressions, and once per
+  group for scalar conditions. The rules below apply to all of them alike.
+  - Only selected element-wise computations run, and only they may fail.
+    Inactive operands cannot fail. All operands must type-check under their
+    guards, including inactive ones.
+  - A reduction inside an operand keeps its full enclosing group scope. It
+    runs once per group, on the whole group's input, if any row of that group
+    selects the operand, and does not run otherwise.
+  - A guard refines the values it tests at the selected rows. It never refines
+    the input of a reduction, which spans rows the guard did not select.
+  - Nested guarded choices compose.
+
+  For `mutate(result = coalesce(x, mean(y)), by = g)`: in a group where every
+  `x` is present, `mean(y)` does not run; in a group with a missing `x`, it
+  runs once over all of that group's `y`.
 
 ## Optional values
 
@@ -297,7 +337,7 @@ type Reading = | Measured(value: Float64) | Offline | Fault(reason: String)
   explicit stored-value mappings follow Syntax.
 - Variants may be stored in columns.
 - Exhaustiveness is decided by Maranget's usefulness algorithm. `Bool`,
-  `T?`, tuples, vectors by length and declared variants have finite heads.
+  `T?`, vectors by length and declared variants have finite heads.
   Numeric patterns are exhaustive when their ranges cover every value. Other
   types require a catch-all. A missing case is reported as a concrete
   pattern.
