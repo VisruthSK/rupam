@@ -1,0 +1,4 @@
+id = "C112"
+status = "pending"
+case = '''write/read required empty string and optional None to CSV'''
+expected = '''quoted empty string stays present; unquoted empty remains missing'''

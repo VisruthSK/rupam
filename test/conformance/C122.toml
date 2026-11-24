@@ -1,0 +1,4 @@
+id = "C122"
+status = "pending"
+case = '''`1.0 / sum([1e16, 1.0, -1e16])` under a lock that observed a nonzero sum'''
+expected = '''the divisor check remains in generated code'''

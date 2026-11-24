@@ -1,0 +1,4 @@
+id = "C68"
+status = "pending"
+case = '''full join left key `customer_id`, right key `id`, right-only required key 3'''
+expected = '''coalesced key 3 in customer_id; unmatched non-key columns optional'''

@@ -1,0 +1,4 @@
+id = "C92"
+status = "pending"
+case = '''`map([1,2,3], fn(x) => x * 2)`; `reduce([1,2,3],0,fn(a,x) => a+x)`'''
+expected = '''`[2,4,6]`; 6; ordinary host higher-order lowering permitted'''

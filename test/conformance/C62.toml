@@ -1,0 +1,4 @@
+id = "C62"
+status = "pending"
+case = '''`let center2(x) = x - mean(x); let f(x) = mean(center2(x))` with x `[2.0,4.0]`'''
+expected = '''scalar `0.0`; nested reduction stays in group scope'''

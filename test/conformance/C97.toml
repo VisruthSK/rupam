@@ -1,0 +1,4 @@
+id = "C97"
+status = "pending"
+case = '''floating reduction `[1e16, 1.0, -1e16]` followed by sign-based branch'''
+expected = '''document native rounding dependence; do not require cross-dialect discrete equality'''

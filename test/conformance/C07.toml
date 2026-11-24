@@ -1,0 +1,4 @@
+id = "C07"
+status = "pending"
+case = '''`filter(cost > 0.0)`'''
+expected = '''type error naming `cost`; accepted with `missing = skip`'''

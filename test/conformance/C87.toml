@@ -1,0 +1,4 @@
+id = "C87"
+status = "pending"
+case = '''`let x = 1; let f() = x; let x = 2; f()` in script and REPL'''
+expected = '''1; failed subsequent binding leaves session unchanged'''

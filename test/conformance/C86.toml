@@ -1,0 +1,4 @@
+id = "C86"
+status = "pending"
+case = '''malformed numeric CSV field; quoted empty text; unquoted empty field; large exact integer'''
+expected = '''schema error; present empty string; None; exact integer'''

@@ -1,0 +1,4 @@
+id = "C116"
+status = "pending"
+case = '''source schema discovery accepted by explicit lock'''
+expected = '''no manual schema declaration needed; inferred schema remains provisional before acceptance'''

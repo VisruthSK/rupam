@@ -1,0 +1,4 @@
+id = "C36"
+status = "pending"
+case = '''`1:0`'''
+expected = '''empty vector'''

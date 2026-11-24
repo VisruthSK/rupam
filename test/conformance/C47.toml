@@ -1,0 +1,4 @@
+id = "C47"
+status = "pending"
+case = '''`exp(-1000.0)`'''
+expected = '''`0.0`, no positive refinement'''

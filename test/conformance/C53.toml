@@ -1,0 +1,4 @@
+id = "C53"
+status = "pending"
+case = '''`x == None`, `x != None`; `some(x)`, `none(x)` on `[1, None]`'''
+expected = '''comparisons rejected; predicates `[TRUE,FALSE]`, `[FALSE,TRUE]`'''

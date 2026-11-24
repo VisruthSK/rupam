@@ -1,0 +1,4 @@
+id = "C94"
+status = "pending"
+case = '''source with unsupported formula/module import, removed user-test declaration'''
+expected = '''unsupported-feature or parse error, not silent acceptance'''

@@ -8,3 +8,10 @@
  (modules canonical)
  (libraries rupam)
  (deps ../examples/shop.rp))
+
+(test
+ (name conformance)
+ (modules conformance)
+ (libraries rupam toml)
+ (deps
+  (glob_files conformance/*.toml)))

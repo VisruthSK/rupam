@@ -1,0 +1,4 @@
+id = "C107"
+status = "pending"
+case = '''explicitly mutate grouping column then compute grouped mean'''
+expected = '''group membership fixed at verb entry'''

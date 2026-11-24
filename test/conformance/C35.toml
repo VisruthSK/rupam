@@ -1,0 +1,4 @@
+id = "C35"
+status = "pending"
+case = '''`left_join` on a non-key without `relationship`'''
+expected = '''type error'''

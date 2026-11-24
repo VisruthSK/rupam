@@ -1,0 +1,4 @@
+id = "C33"
+status = "pending"
+case = '''`DateTime<"UTC">` compared with `DateTime<"Europe/Paris">`'''
+expected = '''type error'''

@@ -1,0 +1,4 @@
+id = "C72"
+status = "pending"
+case = '''local `order_by = date` with unique `(patient_id,date)` and `by = patient_id`'''
+expected = '''lag computed within each group, results realign to original rows'''

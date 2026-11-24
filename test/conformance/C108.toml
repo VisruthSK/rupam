@@ -1,0 +1,4 @@
+id = "C108"
+status = "pending"
+case = '''`slice_min(score, n = 2, ties = drop)` with scores `[1,1,2]` then with `[1,2,2]`'''
+expected = '''first succeeds with sorted tied output; second needs cutoff tie-breaker'''

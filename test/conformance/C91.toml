@@ -1,0 +1,4 @@
+id = "C91"
+status = "pending"
+case = '''`set_seed(0)` then random draws in strict mode'''
+expected = '''no warning; repeated same-target locked run reproduces draws; cross-target stream equality not required'''

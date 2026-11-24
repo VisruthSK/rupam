@@ -1,0 +1,4 @@
+id = "C06"
+status = "pending"
+case = '''`mutate(revenue = revenue + 1.0)`'''
+expected = '''`revenue` replaced in place'''

@@ -1,0 +1,4 @@
+id = "C08"
+status = "pending"
+case = '''`select(region:cost)`'''
+expected = '''inclusive range in schema order'''

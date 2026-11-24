@@ -1,0 +1,4 @@
+id = "C61"
+status = "pending"
+case = '''helper replaces revenue with `revenue * 2` then averages substituted `revenue - cost`, initial `(100,60)`'''
+expected = '''`140.0`; removed referenced column gives a diagnostic'''

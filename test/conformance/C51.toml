@@ -1,0 +1,4 @@
+id = "C51"
+status = "pending"
+case = '''`x != 0` and `let zero = 0.0; x != zero`, x is `1e-300`'''
+expected = '''both TRUE, nonzero refinement from exact comparison to known zero'''

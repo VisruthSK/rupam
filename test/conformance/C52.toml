@@ -1,0 +1,4 @@
+id = "C52"
+status = "pending"
+case = '''`FALSE and None`, `TRUE or None`, `TRUE and None`, `FALSE or None`, `not None` with Bool? operands'''
+expected = '''FALSE, TRUE, None, None, None'''

@@ -1,0 +1,4 @@
+id = "C23"
+status = "pending"
+case = '''restricted column'''
+expected = '''absent from previews, viewer, diagnostics, output'''

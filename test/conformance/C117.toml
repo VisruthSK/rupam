@@ -1,0 +1,4 @@
+id = "C117"
+status = "pending"
+case = '''R proves an obligation through floating reduction, Python not evaluated'''
+expected = '''R proof cannot discharge Python obligation'''

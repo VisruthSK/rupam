@@ -1,0 +1,4 @@
+id = "C74"
+status = "pending"
+case = '''`pivot_wider` duplicate id/level cell; explicit `values_fn = sum`'''
+expected = '''error without aggregation; sum with aggregation'''

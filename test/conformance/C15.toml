@@ -1,0 +1,4 @@
+id = "C15"
+status = "pending"
+case = '''`left_join` with missing keys and unmatched rows'''
+expected = '''missing keys never match; right columns optional'''

@@ -1,0 +1,4 @@
+id = "C59"
+status = "pending"
+case = '''`let avg(x) = mean(x)` then `summarize(m = avg(x), missing = skip)` for `[1,None,3]`'''
+expected = '''`2.0`; helper inherits policy'''

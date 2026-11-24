@@ -1,0 +1,4 @@
+id = "C05"
+status = "pending"
+case = '''`mutate(a = revenue + 1.0, b = a * 2.0)`'''
+expected = '''`b` uses the new `a`'''

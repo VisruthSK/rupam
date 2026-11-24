@@ -1,0 +1,4 @@
+id = "C28"
+status = "pending"
+case = '''source file with NaN in a float column'''
+expected = '''read as `None`'''

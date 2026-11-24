@@ -1,0 +1,4 @@
+id = "C90"
+status = "pending"
+case = '''source changed between verification and reading'''
+expected = '''verified snapshot used or consistency error; never unverified bytes'''

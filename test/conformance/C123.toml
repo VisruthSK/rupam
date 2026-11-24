@@ -1,0 +1,4 @@
+id = "C123"
+status = "pending"
+case = '''`mutate(r = coalesce(x, mean(y)), by = g)`'''
+expected = '''`mean(y)` runs only in groups with a missing `x`, over all of that group's `y`'''

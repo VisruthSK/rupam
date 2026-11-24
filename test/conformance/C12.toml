@@ -1,0 +1,4 @@
+id = "C12"
+status = "pending"
+case = '''columns of two unrelated tables combined'''
+expected = '''type error'''

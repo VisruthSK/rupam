@@ -1,0 +1,4 @@
+id = "C46"
+status = "pending"
+case = '''`let x = 1e-200 * 1e-200; 1.0 / x`'''
+expected = '''x is zero; divisor refinement not established, type error'''

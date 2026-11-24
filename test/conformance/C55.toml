@@ -1,0 +1,4 @@
+id = "C55"
+status = "pending"
+case = '''`if (some(x)) x + 1 else 0`, x is Int64?'''
+expected = '''present Int64; missing element becomes 0'''

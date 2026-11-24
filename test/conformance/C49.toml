@@ -1,0 +1,4 @@
+id = "C49"
+status = "pending"
+case = '''`Int64(round(1e100))`'''
+expected = '''conversion-range error, not wrap or None'''

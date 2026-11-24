@@ -1,0 +1,4 @@
+id = "C111"
+status = "pending"
+case = '''integer sum `[MAX,1,-MAX]` and permutations'''
+expected = '''exact 1, no intermediate overflow'''

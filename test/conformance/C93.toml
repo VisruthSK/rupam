@@ -1,0 +1,4 @@
+id = "C93"
+status = "pending"
+case = '''`1_00_000`, `1.234_56`, `1e1_0`; `not x > 0`; `[..rest]`'''
+expected = '''valid literals, Boolean negation of comparison, valid rest-only pattern'''

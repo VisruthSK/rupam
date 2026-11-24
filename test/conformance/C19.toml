@@ -1,0 +1,4 @@
+id = "C19"
+status = "pending"
+case = '''`slice_head(n = 5)` on an unordered table'''
+expected = '''type error'''

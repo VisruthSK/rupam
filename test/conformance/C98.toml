@@ -1,0 +1,4 @@
+id = "C98"
+status = "pending"
+case = '''foreign declaration in strict mode; non-strict foreign return of incompatible representation'''
+expected = '''strict rejection; return-boundary error in non-strict mode'''

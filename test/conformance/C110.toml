@@ -1,0 +1,4 @@
+id = "C110"
+status = "pending"
+case = '''fully inactive conditional branch containing integer sum of `[MAX,1]`'''
+expected = '''no overflow; if any row selects branch, full-group sum runs and fails'''

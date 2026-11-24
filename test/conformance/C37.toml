@@ -1,0 +1,4 @@
+id = "C37"
+status = "pending"
+case = '''`[1, 2, 3] + [1, 2]`'''
+expected = '''length error'''

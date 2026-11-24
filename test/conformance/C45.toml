@@ -1,0 +1,4 @@
+id = "C45"
+status = "pending"
+case = '''`1e308 * 1e308`'''
+expected = '''arithmetic-overflow; never infinity or `None`'''

@@ -1,0 +1,4 @@
+id = "C82"
+status = "pending"
+case = '''required contracted float with NaN; conditional assertion `not active or population > 0`'''
+expected = '''requiredness fails after normalisation; no unconditional positive refinement'''

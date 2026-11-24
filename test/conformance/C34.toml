@@ -1,0 +1,4 @@
+id = "C34"
+status = "pending"
+case = '''`PatientId` joined against `HospitalId`'''
+expected = '''type error'''

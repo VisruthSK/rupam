@@ -1,0 +1,4 @@
+id = "C67"
+status = "pending"
+case = '''left join with unmatched left order, `unmatched = error`'''
+expected = '''coverage error; unrelated unused right rows alone do not fail'''

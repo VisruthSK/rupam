@@ -1,0 +1,4 @@
+id = "C103"
+status = "pending"
+case = '''`` mutate(`missing` = none(x), `by` = region, by = region) ``'''
+expected = '''output columns named missing and by; grouping uses input region; duplicate decoded output names rejected; formatter preserves required quotes'''

@@ -1,0 +1,4 @@
+id = "C38"
+status = "pending"
+case = '''`arrange(name)` on mixed-case strings'''
+expected = '''byte order'''

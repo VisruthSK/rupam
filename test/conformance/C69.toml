@@ -1,0 +1,4 @@
+id = "C69"
+status = "pending"
+case = '''replace key by constant, then join without relationship; rename key without replacing'''
+expected = '''first loses key, second preserves it'''

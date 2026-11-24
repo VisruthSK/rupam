@@ -1,0 +1,4 @@
+id = "C50"
+status = "pending"
+case = '''`1.0 ~= 1.000000001` in both operand orders; `0.0 == -0.0`'''
+expected = '''TRUE in both approximate comparisons; exact TRUE for zero'''

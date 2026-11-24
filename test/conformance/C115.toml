@@ -1,0 +1,4 @@
+id = "C115"
+status = "pending"
+case = '''discover pivot levels B,A in full exploration without explicit levels'''
+expected = '''provisional A,B schema; explicit lock commits; changed levels require relock and downstream check'''

@@ -1,0 +1,4 @@
+id = "C95"
+status = "pending"
+case = '''nominal Usd used in `log` without explicit unwrapping'''
+expected = '''type error; explicit base conversion works with positive refinement'''

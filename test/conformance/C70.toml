@@ -1,0 +1,4 @@
+id = "C70"
+status = "pending"
+case = '''`distinct(id)` with rows `(1,40),(1,41)`'''
+expected = '''only id column, one row containing 1'''

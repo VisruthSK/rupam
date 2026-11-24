@@ -1,0 +1,4 @@
+id = "C16"
+status = "pending"
+case = '''join with a duplicated non-key column'''
+expected = '''type error'''

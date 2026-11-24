@@ -1,0 +1,4 @@
+id = "C88"
+status = "pending"
+case = '''inferred CSV in strict REPL; strict standalone export'''
+expected = '''exploration succeeds; export needs explicit schema or explicit full-snapshot schema commitment'''

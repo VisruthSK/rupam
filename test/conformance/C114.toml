@@ -1,0 +1,4 @@
+id = "C114"
+status = "pending"
+case = '''random-dependent key or nonzero assertion after successful preview'''
+expected = '''no snapshot proof; necessary runtime check remains'''

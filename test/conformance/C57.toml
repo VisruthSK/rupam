@@ -1,0 +1,4 @@
+id = "C57"
+status = "pending"
+case = '''grouped mutate x `[2,9,4]`, key `[A,None,A]`, `m = mean(x), y = x + 1, missing = skip`'''
+expected = '''m `[3.0,None,3.0]`, y `[3,10,5]`; three rows'''

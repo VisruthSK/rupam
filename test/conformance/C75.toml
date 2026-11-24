@@ -1,0 +1,4 @@
+id = "C75"
+status = "pending"
+case = '''enum-derived levels Height, Weight, only Height observed'''
+expected = '''both output columns in declared order; missing Weight cell optional'''

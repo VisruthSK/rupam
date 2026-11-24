@@ -1,0 +1,4 @@
+id = "C41"
+status = "pending"
+case = '''`let inc(x) = x + 1; (inc(2), inc(2.5))`'''
+expected = '''`(3, 3.5) : (Int64, Float64)`'''

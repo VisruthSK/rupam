@@ -1,0 +1,4 @@
+id = "C73"
+status = "pending"
+case = '''filter after total ordering, project away sort column, then lag'''
+expected = '''order witness preserved; no redundant sorting'''

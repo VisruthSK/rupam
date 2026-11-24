@@ -1,0 +1,4 @@
+id = "C77"
+status = "pending"
+case = '''`across(starts_with("score_"), standardize)`'''
+expected = '''statically expanded columns; zero matches is a no-op; collisions rejected'''

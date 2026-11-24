@@ -1,0 +1,4 @@
+id = "C99"
+status = "pending"
+case = '''`let zero = 0.0; x == zero` versus `x == 0.0`, including signed zero and tiny nonzero'''
+expected = '''identical exact results and refinements'''

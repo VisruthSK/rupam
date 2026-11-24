@@ -1,0 +1,4 @@
+id = "C89"
+status = "pending"
+case = '''change source, input data, contract, dependency or compiler fingerprint'''
+expected = '''each invalidates the lock; old artifact remains bound to original lock and rejects changed runtime inputs'''

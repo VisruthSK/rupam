@@ -1,0 +1,4 @@
+id = "C126"
+status = "pending"
+case = '''`lookup(customers, customer_id = 7)` on a key, then on a non-key'''
+expected = '''a `{...}?` row; type error'''

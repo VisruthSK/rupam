@@ -1,0 +1,4 @@
+id = "C83"
+status = "pending"
+case = '''contracted entity keys patients.id and hospitals.id; visits.patient_id foreign key to patients'''
+expected = '''patient and hospital nominal domains incompatible; visits key shares patient domain'''

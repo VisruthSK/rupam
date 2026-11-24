@@ -1,0 +1,4 @@
+id = "C24"
+status = "pending"
+case = '''unfinished `mutate(z = fn(`'''
+expected = '''prefix checks and previews; unfinished stage never runs'''

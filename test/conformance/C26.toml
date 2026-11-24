@@ -1,0 +1,4 @@
+id = "C26"
+status = "pending"
+case = '''user function with `match` lifted over a column'''
+expected = '''native code, no callback'''

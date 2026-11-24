@@ -1,0 +1,4 @@
+id = "C02"
+status = "pending"
+case = '''`mutate(s = square(revenue))`'''
+expected = '''element-wise; `s : Float64`'''

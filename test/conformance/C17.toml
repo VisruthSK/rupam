@@ -1,0 +1,4 @@
+id = "C17"
+status = "pending"
+case = '''`distinct(x, missing = propagate)` with several `None`'''
+expected = '''one `None` row'''

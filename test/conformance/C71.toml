@@ -1,0 +1,4 @@
+id = "C71"
+status = "pending"
+case = '''sort tied date then lag; sort by date and unique visit_id then lag'''
+expected = '''first fails totality obligation; second succeeds'''

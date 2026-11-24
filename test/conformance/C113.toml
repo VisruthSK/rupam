@@ -1,0 +1,4 @@
+id = "C113"
+status = "pending"
+case = '''select no columns from a three-row table'''
+expected = '''zero columns, three rows, n() = 3'''

@@ -1,0 +1,4 @@
+id = "C27"
+status = "pending"
+case = '''`mutate(rate = cases / population)` on unknown population; locked population containing zero or all nonzero'''
+expected = '''pending domain obligation; zero fails; all nonzero accepted on explicit lock; filter or ratio works without snapshot proof'''

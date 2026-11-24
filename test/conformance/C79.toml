@@ -1,0 +1,4 @@
+id = "C79"
+status = "pending"
+case = '''`Table([{a = 1}, {a = 2.5}])`'''
+expected = '''table `{a:Float64}`; unordered, no inferred uniqueness solely from construction'''

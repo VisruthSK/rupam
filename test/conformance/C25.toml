@@ -1,0 +1,4 @@
+id = "C25"
+status = "pending"
+case = '''`if (x > 0.0) log(x) else None`'''
+expected = '''type-checks; `log` receives only positive values'''

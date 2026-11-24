@@ -1,0 +1,4 @@
+id = "C20"
+status = "pending"
+case = '''contracted source with `None` in a required column'''
+expected = '''validation fails before output'''

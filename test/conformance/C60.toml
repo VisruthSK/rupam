@@ -1,0 +1,4 @@
+id = "C60"
+status = "pending"
+case = '''`mean_active(data, x)` filters active then reduces x; call with `revenue - cost`, rows as `(active, revenue, cost)` = `(TRUE,100,60),(FALSE,200,20),(TRUE,300,250)`'''
+expected = '''`45.0`, not `90.0` or a length error'''

@@ -1,0 +1,4 @@
+id = "C63"
+status = "pending"
+case = '''mutate using an independently materialised vector of the same length, or two filtered table domains'''
+expected = '''reject positional attachment and cross-domain arithmetic'''

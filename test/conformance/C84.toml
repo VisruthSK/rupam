@@ -1,0 +1,4 @@
+id = "C84"
+status = "pending"
+case = '''two contract enums with equal labels; explicit shared enum annotation'''
+expected = '''independent domains initially incompatible; shared validated declaration permits combination'''

@@ -1,0 +1,4 @@
+id = "C104"
+status = "pending"
+case = '''`summarize(m = mean(x), by = region, missing = skip, group_missing = propagate)` with `(None,1),(None,None),(A,3)`'''
+expected = '''missing-region group retained with mean 1; A mean 3'''

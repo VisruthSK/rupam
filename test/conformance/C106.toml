@@ -1,0 +1,4 @@
+id = "C106"
+status = "pending"
+case = '''`mutate(across(where(is_number), standardize), by = year)`'''
+expected = '''implicit selection excludes year; generated expressions read entry snapshot; later arguments see outputs'''

@@ -1,0 +1,4 @@
+id = "C10"
+status = "pending"
+case = '''`let revenue = 3.0` then `mutate(a = revenue)` on a table with `revenue`'''
+expected = '''ambiguity error; `$revenue` and `^revenue` accepted'''

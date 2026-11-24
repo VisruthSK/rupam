@@ -1,0 +1,4 @@
+id = "C58"
+status = "pending"
+case = '''`standardize([2.0,None,4.0], missing = skip)`'''
+expected = '''`[-0.70710678,None,0.70710678]`'''

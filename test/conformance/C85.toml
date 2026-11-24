@@ -1,0 +1,4 @@
+id = "C85"
+status = "pending"
+case = '''restricted column renamed, copied, aggregated'''
+expected = '''derived restricted values omitted from viewer, diagnostics and output'''

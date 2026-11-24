@@ -1,0 +1,4 @@
+id = "C120"
+status = "pending"
+case = '''unknown domain in a generic helper instantiated on two different snapshots'''
+expected = '''successful proof for first cannot justify second; second rechecks'''

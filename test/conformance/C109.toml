@@ -1,0 +1,4 @@
+id = "C109"
+status = "pending"
+case = '''validate predicates `[TRUE,FALSE,None,None]`, `[None,None]`, empty under skip'''
+expected = '''counts 1/1/2 and fraction 0.5; all unknown and empty yield undefined fraction, thresholds not applied'''

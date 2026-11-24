@@ -1,0 +1,4 @@
+id = "C14"
+status = "pending"
+case = '''`summarize(n = n())` on an empty table'''
+expected = '''one row, `n = 0`; with `by =`, zero rows'''

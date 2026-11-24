@@ -1,0 +1,4 @@
+id = "C101"
+status = "pending"
+case = '''pass contextual `mean_by` through a higher-order forwarding helper'''
+expected = '''deferred expression, group scope and policy requirements preserved; mixed incompatible value/column role rejected with annotation or split-parameter diagnostic'''

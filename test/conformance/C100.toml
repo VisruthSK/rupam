@@ -1,0 +1,4 @@
+id = "C100"
+status = "pending"
+case = '''`use missing = skip; let avg(x) = mean(x)` called in a verb with `missing = propagate`, x `[1,None,3]`'''
+expected = '''lexical skip yields 2.0; helper with no lexical policy inherits propagate and yields None'''

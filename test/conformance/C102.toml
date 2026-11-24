@@ -1,0 +1,4 @@
+id = "C102"
+status = "pending"
+case = '''helper captures lexical `offset`; an earlier mutation adds column `offset`'''
+expected = '''captured reference remains lexical; explicit column reference sees added column; a genuinely ambiguous fresh name fails'''

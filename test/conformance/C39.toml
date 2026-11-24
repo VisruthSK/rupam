@@ -1,0 +1,4 @@
+id = "C39"
+status = "pending"
+case = '''`match bmi { ..<18.5 => Under, 18.5..<25.0 => Healthy, 25.0.. => Over }` on a column'''
+expected = '''enum column; exhaustive without `_`'''

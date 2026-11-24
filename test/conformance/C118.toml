@@ -1,0 +1,4 @@
+id = "C118"
+status = "pending"
+case = '''probe on incomplete pipeline and restricted derived data'''
+expected = '''completed prefix completion; no unfinished execution, restricted values hidden'''

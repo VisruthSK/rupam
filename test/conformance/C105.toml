@@ -1,0 +1,4 @@
+id = "C105"
+status = "pending"
+case = '''grouped mutate with required x, missing grouping key and `group_missing = skip`'''
+expected = '''group-dependent result optional and excluded row None; row count unchanged'''

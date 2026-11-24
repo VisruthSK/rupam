@@ -1,0 +1,4 @@
+id = "C119"
+status = "pending"
+case = '''`if (flag) mean(x) else 0.0` for group x `[2.0,4.0]`, flag `[TRUE,FALSE]`'''
+expected = '''`[3.0,0.0]`; full-group reduction, not selected subset'''

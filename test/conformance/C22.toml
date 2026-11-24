@@ -1,0 +1,4 @@
+id = "C22"
+status = "pending"
+case = '''source changed after validation'''
+expected = '''stale lock; old script rejects; relock validates and recompile'''

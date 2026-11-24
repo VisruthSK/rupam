@@ -1,0 +1,4 @@
+id = "C21"
+status = "pending"
+case = '''`range: [0, 100]` with a value of 101'''
+expected = '''no failure'''

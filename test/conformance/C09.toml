@@ -1,0 +1,4 @@
+id = "C09"
+status = "pending"
+case = '''`select(typo)`'''
+expected = '''unknown column, with suggestions'''

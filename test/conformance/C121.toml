@@ -1,0 +1,4 @@
+id = "C121"
+status = "pending"
+case = '''`mutate(group = id, previous = lag(value, order_by = month), by = group)` with unique `id`'''
+expected = '''`lag` is ordered within the entry groups; uniqueness of the new `group` does not discharge the ordering requirement'''

@@ -1,0 +1,4 @@
+id = "C66"
+status = "pending"
+case = '''`relationship = one_to_one` with duplicate matching keys'''
+expected = '''cardinality error before output'''
