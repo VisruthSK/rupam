@@ -4,23 +4,11 @@ All features below are deferred.
 
 ## Models and graphics
 
-`~` builds formula values, which are type errors until a library interprets
-them. Model and graphics libraries resolve formulas and aesthetics against a
+`~` is reserved; formula expressions are unsupported until a library
+interprets them. Model and graphics libraries resolve formulas and aesthetics against a
 table's schema as verbs resolve column names:
 `lm(y ~ x + (1 | site), data = visits)`, `aes(x = revenue, colour = region)`.
 Each library adds core nodes, dialect lowerings and preview handlers.
-
-## Foreign imports
-
-```text
-import r "stats" {
-  quantile(x: [Float64], probs: Float64): Float64?
-}
-```
-
-Available with `strict = false`. The declaration is trusted; the returned
-value's type is checked at the boundary. Recorded in the manifest; restricts
-the program to dialects of that language.
 
 ## Package export
 
@@ -35,6 +23,23 @@ Documentation is generated from types.
 ## Decimal
 
 A `Decimal` type for exact decimal arithmetic.
+
+## Dimensional analysis
+
+Units and dimensional arithmetic, meaningful nominal numeric derivation,
+and compound dimensions. For now nominal wrappers require explicit unwrapping
+for arithmetic; metadata units remain descriptive.
+
+## Observational grain
+
+Track duplication and aggregation locality after intentional one-to-many
+joins; this is distinct from key/cardinality checking.
+
+## Restricted aggregate release
+
+An explicit, auditable release of approved aggregates derived from restricted
+columns. Aggregation alone does not establish disclosure safety. Until a
+release policy is defined, these outputs remain restricted.
 
 ## Dialects
 

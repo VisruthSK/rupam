@@ -15,8 +15,8 @@ between them.
 | [Standard library](stdlib.md) | functions available in every dialect |
 | [Contracts](contracts.md) | data-dict contracts and validation |
 | [Dialects](dialects.md) | compilation and generated scripts |
-| [Tooling](tooling.md) | REPL, viewer, diagnostics, editor support, tests |
-| [Projects](projects.md) | `rupam.toml`, environments, command line |
+| [Tooling](tooling.md) | REPL, viewer, diagnostics, editor support |
+| [Projects](projects.md) | `rupam.toml`, environments, locks, command line |
 | [Guarantees](guarantees.md) | properties every rupam program has |
 | [Conformance](conformance.md) | required test cases |
 | [Future](future.md) | deferred features |

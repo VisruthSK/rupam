@@ -4,29 +4,43 @@
 
 The REPL is an incremental compiler. Each input is checked locally, compiled
 to the session dialect and run in a persistent worker in the project
-environment. `rupam compile` emits the same chunks in the same order.
+environment. `rupam compile` emits equivalent chunks in source order for
+the locked analysis.
 
 - The worker starts when the REPL starts.
 - Types and schemas print from the checker; values print from the worker.
 - Each table binding is a variable in the worker. A preview reads a bounded
   page of it.
-- Redefining a binding invalidates its dependents.
+- Entering a later `let` shadows the old binding; existing closures retain
+  captured values. Editing an earlier source item invalidates dependent
+  computations. Replay effects only as an explicit reload/reanalysis.
+- Inferred tables and discovered pivot schemas can be explored; strict export
+  needs an established or explicitly committed schema. Show proposed schemas
+  and snapshot-specific evidence on lock; never commit partial previews.
+- The REPL tracks lock status, checks for changed inputs and dependencies,
+  and marks stale results. It explains what changed and offers `:reload`,
+  `:lock`, and recompilation. Do not silently update a production lock.
 - Values print in rupam format in every dialect.
 - Worker errors are reported at the rupam source span.
-- An input that fails to parse or check does not change the session.
+- An input that fails to parse, check or execute does not install a binding
+  or corrupt existing values. External effects already performed are not
+  necessarily reversible.
 - An incomplete input waits for more lines; `:prefix` checks its longest
   complete prefix and prints that schema.
 
 | Command | Effect |
 | --- | --- |
-| `:type EXPR` | type, or schema of a table expression; runs nothing |
-| `:schema TABLE` | columns, types, refinements, keys, units, contract status |
+| `:type EXPR` | type, schema, or pending discovery; runs nothing |
+| `:schema TABLE` | columns, types, refinements, evidence (static, contractual, snapshot-specific), keys, order, units, contract and lock status |
 | `:preview TABLE` | first rows |
 | `:view TABLE` | the viewer |
 | `:explain TABLE` | plan, validation steps, adapters |
+| `:probe EXPR` | on-demand stage or expression statistics over its current snapshot |
 | `:code TABLE` | generated code |
-| `:target DIALECT` | session dialect |
-| `:validate TABLE` | contract validation |
+| `:target DIALECT` | change dialect; restart worker and reanalyse |
+| `:lock` | validate and lock the current complete analysis |
+| `:status` | current/stale lock and changed dependencies |
+| `:validate TABLE` | validate the whole source snapshot |
 | `:bindings`, `:reload`, `:help`, `:quit` | |
 
 The prompt highlights syntax as it is typed, completes from a menu, edits
@@ -51,44 +65,57 @@ and columns not shown.
 - **Sort, filter and search:** multi-column sort; filters by value, range,
   missingness or regex, with matches highlighted; global search.
 - **Pipeline:** every sort and filter is a rupam verb. The viewer shows the
-  resulting pipeline and inserts it at the REPL prompt.
+  resulting pipeline and inserts it at the REPL prompt. Display ordering
+  and ties without conferring an analytical order on unordered previews.
 - **Transposed view:** one row per column with sample values.
 - **Navigation:** keyboard-first with arrow and vi bindings, plus mouse.
 - **Restricted columns** are not shown.
 - Runs in the terminal on Windows, macOS and Linux.
 
+## Probes
+
+On demand, inspect a completed pipeline stage or subexpression without
+changing source or committing effects. Show filter retained/excluded/unknown
+counts; join match coverage on each side, multiplicities and row counts;
+summary present counts per reduction; pivot observed levels, absent and
+duplicate cells; mutation newly introduced missingness and lost refinements;
+and across expanded columns and names. A sampled probe is labelled as such
+and cannot establish a proof. Reuse worker computations where possible.
+Restricted values and derived restricted statistics remain hidden. Do not
+emit routine warnings for these observations.
+
 ## Diagnostics
 
-A diagnostic has a stable name, a source span, related spans, and fixes
-phrased as analysis steps:
+A diagnostic has a stable name, a source span, related spans, and concise code suggestions:
 
 ```text
 rates.rp:8:28  zero-divisor
   `cases / population` is undefined where population is 0.
   population: Float64, sign unknown (data-dict.yaml has no assertion on it)
 
-  Remove those rows first:     |> filter(population > 0)
-  Keep them as missing:        rate = ratio(cases, population)
+  |> filter(population != 0)
+  rate = ratio(cases, population)
 ```
 
 - Diagnostics refer to columns, rows, tables, missing values and contracts.
-  They never show inference variables.
+  They never show inference variables. Report code-level facts and offer
+  concise code fixes. Do not interpret research questions, statistical
+  validity, generalizability or substantive implications.
 - `rupam explain zero-divisor` prints the full explanation.
-- An unused table expression is a warning.
+- An unused table expression is a warning. Explicit missing policies and
+  ordinary loss of inferred key facts are not warnings. Hover, `:schema`
+  and `:explain` show lost keys, ordering, lifting and the reason for a
+  required declaration. Missing-group counts may appear in summaries.
+- Lock errors identify changed inputs and request relocking/recompilation.
 
 ## Editor support
 
-`rupam lsp` provides diagnostics, hover with types, shapes, refinements and
-lifting, schema-aware completion, and go-to-definition.
+`rupam lsp` provides diagnostics, hover with types, shapes, refinements,
+order, keys, lock status and lifting, schema-aware completion, and go-to-definition.
+Automatically check the longest complete pipeline prefix during editing and
+use its schema for completion in unfinished stages. Never execute an unfinished
+stage or implicitly replay effects. For a discovered schema, use cached full
+stage discovery or request an explicit probe; mark provisional schemas as such.
+Purely static `:type` runs nothing; if discovery is required it reports the
+pending schema until a probe or full exploration evaluates it.
 
-## Tests (experimental)
-
-```text
-test "regional totals" {
-  let t = tribble(region, total; "N", 4.0; "N", 6.0; "S", 5.0)
-  let r = t |> summarize(total = sum(total), by = region)
-  expect(r, rows = 2)
-}
-```
-
-`rupam test` runs every test in every dialect.
