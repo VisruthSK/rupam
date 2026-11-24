@@ -1,4 +1,4 @@
 (executable
  (name rupam_cli)
  (public_name rupam)
- (libraries rupam cmdliner linenoise unix))
+ (libraries rupam cmdliner lambda-term lwt lwt.unix zed react unix))

@@ -71,8 +71,6 @@ let start (runtime : Runtime.t) language =
 let stop w =
   close_out_noerr w.requests;
   close_in_noerr w.replies;
-  (try Unix.kill w.pid Sys.sigterm with
-   | Unix.Unix_error (Unix.ESRCH, _, _) -> ());
   ignore (Unix.waitpid [] w.pid)
 ;;
 

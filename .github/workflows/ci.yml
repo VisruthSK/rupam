@@ -23,7 +23,14 @@ jobs:
       - uses: ocaml/setup-ocaml/lint-fmt@v3
 
   test:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v7
       - run: scripts/fetch-duckdb

@@ -14,10 +14,10 @@ rupam> f(21)
 42 : Int64
 ```
 
-Arrow keys walk the history, which lives in `~/.local/state/rupam/history`
-(or under `$XDG_STATE_HOME`). Tab completes commands, your bindings and
-keywords. Typing a command name shows its arguments as a grey hint. Ctrl-C
-abandons the current line, Ctrl-D leaves, and Ctrl-L clears the screen.
+Arrow keys walk the history, which lives in `rupam/history` under
+`$XDG_STATE_HOME`, `~/.local/state` or, on Windows, `%LOCALAPPDATA%`. Tab
+completes commands, your bindings and keywords from a menu under the prompt.
+Ctrl-C abandons the current line, Ctrl-D leaves, and Ctrl-L clears the screen.
 
 ## Commands
 

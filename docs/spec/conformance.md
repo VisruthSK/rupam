@@ -48,7 +48,8 @@ fixture also compares the REPL preview with the compiled script's output.
 | C36 | `1:0` | empty vector |
 | C37 | `[1, 2, 3] + [1, 2]` | length error |
 | C38 | `arrange(name)` on mixed-case strings | byte order |
-| C39 | `cut(age, at = [18, 65], into = (Child, Adult, Senior))` | enum column with three bins |
+| C39 | `match bmi { ..<18.5 => Under, 18.5..<25.0 => Healthy, 25.0.. => Over }` on a column | enum column; exhaustive without `_` |
+| C40 | `Int64(x)` with `x : Float64`; `Int64(round(x))` | type error; accepted |
 
 ## Benchmarks
 

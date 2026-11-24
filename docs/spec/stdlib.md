@@ -17,6 +17,7 @@ in every dialect. Reductions take `missing =` when their input is optional.
 | `quantile(x, p)` | linear interpolation; `method =` selects another |
 | `mad(x)`, `iqr(x)` | robust spread |
 | `any(x)`, `all(x)` | over `Bool` |
+| `sum(b)`, `mean(b)` on `Bool` | count and proportion of `TRUE` |
 | `first(x)`, `last(x)` | ordered tables only |
 
 ## Transforms
@@ -31,7 +32,6 @@ Return a vector of the input's length. Under `by =` they apply per group.
 | `rescale(x)` | `(x - min(x)) / (max(x) - min(x))`; `to = (a, b)` sets the range |
 | `rank(x, ties = average)` | `ties` is `average`, `min`, `max` or `dense` |
 | `percent_rank(x)`, `ntile(x, n)` | relative rank, bucket |
-| `cut(x, at = [...], into = (...))` | the enum value of the bin containing `x`; `n` breakpoints give `n + 1` bins |
 | `cumsum(x)`, `cummean(x)`, `lag(x)`, `lead(x)` | ordered input |
 
 `scale`, `standardize` and `rescale` return `None` for every element when the
@@ -41,9 +41,14 @@ divisor is zero or undefined.
 
 `abs`, `sign`, `sqrt`, `exp`, `log`, `log2`, `log10`, `floor`, `ceiling`,
 `trunc`, `round(x, digits, ties = even)`, `pmin(a, b)`, `pmax(a, b)`,
-`clamp(x, lo, hi)`, `float`, `int`, `div`, `ratio`, `positive`,
-`nonnegative`, `nonzero`. `min` and `max` reduce; `pmin` and `pmax` are
-element-wise.
+`clamp(x, lo, hi)`, `div`, `ratio`, `positive`, `nonnegative`, `nonzero`.
+`min` and `max` reduce; `pmin` and `pmax` are element-wise.
+
+## Parsing
+
+`parse_int`, `parse_float`, `parse_bool`, `parse_date(s, format)`,
+`parse_datetime(s, format, zone)` and `parse_enum` return `T?`: `None` where
+the text does not parse.
 
 ## Missing values
 

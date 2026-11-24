@@ -73,9 +73,8 @@ particular table, or a table.
   are unspecified.
 - `/` returns `Float64`. `div(a, b)` is integer division. `%` is modulo with
   the sign of the divisor.
-- No implicit conversion between `Int64` and `Float64` except exactly
-  representable literals. `float(n)` and `int(x)` convert; `int` requires a
-  whole number.
+- No implicit conversion between numeric types except exactly representable
+  literals.
 - `==` is not defined on `Float64`. `a ~= b` (also `a ≈ b`) holds when
   `|a - b| <= sqrt(eps) * |b|`, or `|a - b| <= sqrt(eps)` when `|b| < sqrt(eps)`.
   In a file declaring `use float_equality = approximate`, `==` on `Float64`
@@ -116,6 +115,25 @@ Sources:
 
 An operation whose requirement is not established is a type error.
 
+### Conversions
+
+A conversion is written as the target type applied to a value, `T(x)`, and
+exists only where it is total and exact:
+
+| From | To | Result |
+| --- | --- | --- |
+| `Int64` | `Float64` | nearest `Float64` |
+| `Float64` known to be whole | `Int64` | same value |
+| `Bool` | `Int64`, `Float64` | `FALSE` is 0, `TRUE` is 1 |
+| any `showable` type | `String` | rupam display format |
+| newtype | its base type | unwrapped value |
+| base type | newtype | wrapped value |
+
+`floor`, `ceiling`, `round` and `trunc` return `Float64` known to be whole, so
+`Int64(round(x))` type-checks and `Int64(x)` on an arbitrary `Float64` does
+not. Conversions that can fail are parsers returning `T?`
+([Standard library](stdlib.md#parsing)).
+
 ## Records and rows
 
 Records are immutable and structurally typed. A row type
@@ -133,8 +151,9 @@ type Reading = | Measured(value: Float64) | Offline | Fault(reason: String)
   by declaration.
 - Variants may be stored in columns.
 - Exhaustiveness is decided by Maranget's usefulness algorithm. `Bool`,
-  `T?`, tuples, vectors by length and declared variants have finite heads;
-  other types require a catch-all. A missing case is reported as a concrete
+  `T?`, tuples, vectors by length and declared variants have finite heads.
+  Numeric patterns are exhaustive when their ranges cover every value. Other
+  types require a catch-all. A missing case is reported as a concrete
   pattern.
 
 ## Newtypes

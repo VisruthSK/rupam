@@ -163,6 +163,7 @@ type session =
   ; lexical : Check.env
   ; directory : string
   ; project : Project.t
+  ; editor : Line.t
   ; source_path : string option
   }
 
@@ -173,6 +174,7 @@ let empty =
   ; lexical = []
   ; directory = "."
   ; project = Project.standalone
+  ; editor = Line.ephemeral
   ; source_path = None
   }
 ;;
@@ -199,57 +201,24 @@ let names state =
   |> List.sort_uniq compare
 ;;
 
-let keywords = [ "let"; "match"; "type"; "fn"; "if"; "then"; "else"; "use"; "contract" ]
+let keywords = [ "let"; "match"; "type"; "fn"; "if"; "else"; "use"; "contract" ]
 
-let complete state line completions =
+let complete state line =
   let start =
     match String.rindex_opt line ' ' with
     | Some i -> i + 1
     | None -> 0
   in
-  let head = String.sub line 0 start
-  and word = String.sub line start (String.length line - start) in
+  let word = String.sub line start (String.length line - start) in
   let candidates =
     if start = 0 && String.starts_with ~prefix:":" word
     then command_names
     else names state @ keywords
   in
-  List.iter
-    (fun c ->
-       if String.starts_with ~prefix:word c && c <> word
-       then LNoise.add_completion completions (head ^ c))
-    candidates
+  start, List.filter (fun c -> String.starts_with ~prefix:word c && c <> word) candidates
 ;;
 
-let hint line =
-  List.find_map
-    (fun (usage, _) ->
-       match String.split_on_char ' ' usage with
-       | name :: args when name = String.trim line && args <> [] ->
-         Some (" " ^ String.concat " " args, LNoise.Cyan, false)
-       | _ -> None)
-    help
-;;
-
-let history_file =
-  let base =
-    match Sys.getenv_opt "XDG_STATE_HOME" with
-    | Some d -> d
-    | None -> Filename.concat (Sys.getenv "HOME") ".local/state"
-  in
-  Filename.concat (Filename.concat base "rupam") "history"
-;;
-
-let remember line =
-  ignore (LNoise.history_add line);
-  ignore (LNoise.history_save ~filename:history_file)
-;;
-
-let read prompt =
-  match LNoise.linenoise prompt with
-  | line -> line
-  | exception Sys.Break -> Some ""
-;;
+let read state prompt = Line.read state.editor ~complete:(complete state) prompt
 
 let show_prefix state source =
   match Frontend.valid_prefix source with
@@ -280,13 +249,13 @@ let rec continue state source =
   match Frontend.parse buf with
   | ds -> Result.value (diagnostic buf (fun () -> submit state ds)) ~default:state
   | exception Parser.Error when Lexing.lexeme buf = "" ->
-    (match read "  ... " with
+    (match read state "  ... " with
      | None | Some "" -> state
      | Some ":prefix" ->
        show_prefix state source;
        continue state source
      | Some more ->
-       remember more;
+       Line.remember state.editor more;
        continue state (source ^ "\n" ^ more))
   | exception (Parser.Error | Failure _) ->
     ignore (diagnostic buf (fun () -> Frontend.parse (Lexing.from_string source)));
@@ -321,7 +290,7 @@ let browse state view d =
       ~limit:page_size;
     match view with
     | Inspect ->
-      (match read "[n]ext [p]rev [l]eft [h] right [q]uit > " with
+      (match read state "[n]ext [p]rev [l]eft [h] right [q]uit > " with
        | Some "n" -> show (offset + page_size) column
        | Some "p" -> show (max 0 (offset - page_size)) column
        | Some "l" ->
@@ -351,7 +320,7 @@ let run state = function
     List.iter (fun (usage, text) -> Printf.printf "  %-24s %s\n" usage text) help;
     Some state
   | Clear ->
-    LNoise.clear_screen ();
+    Line.clear ();
     Some state
   | Target dialect ->
     Some { state with project = { state.project with dialect = Some dialect } }
@@ -417,11 +386,10 @@ let run state = function
 ;;
 
 let rec loop state =
-  LNoise.set_completion_callback (complete state);
-  match read "rupam> " with
+  match read state "rupam> " with
   | None -> ()
   | Some line ->
-    if String.trim line <> "" then remember line;
+    if String.trim line <> "" then Line.remember state.editor line;
     (match parse line with
      | Error message ->
        report message;
@@ -431,21 +399,10 @@ let rec loop state =
 
 let start ~project ?path () =
   Sys.catch_break true;
-  LNoise.catch_break true;
-  LNoise.set_multiline true;
-  LNoise.set_hints_callback hint;
-  let rec directory path =
-    if not (Sys.file_exists path)
-    then (
-      directory (Filename.dirname path);
-      Sys.mkdir path 0o755)
-  in
-  directory (Filename.dirname history_file);
-  ignore (LNoise.history_set ~max_length:1000);
-  ignore (LNoise.history_load ~filename:history_file);
+  let session = { empty with project; editor = Line.persistent () } in
   let state =
     match path with
-    | None -> Some { empty with project }
+    | None -> Some session
     | Some path ->
       let buf =
         Lexing.from_string (In_channel.with_open_text path In_channel.input_all)
@@ -453,11 +410,7 @@ let start ~project ?path () =
       Lexing.set_filename buf path;
       diagnostic buf (fun () ->
         submit
-          { empty with
-            project
-          ; directory = Filename.dirname path
-          ; source_path = Some path
-          }
+          { session with directory = Filename.dirname path; source_path = Some path }
           (Frontend.parse buf))
       |> Result.to_option
   in

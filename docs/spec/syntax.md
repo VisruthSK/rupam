@@ -102,7 +102,7 @@ field         = ident [ "=" expr ] ;
 
 pattern       = alternative { "|" alternative } ;
 alternative   = "_" | ident [ "@" alternative ] | literal
-              | literal "..=" literal | "..=" literal | literal ".."
+              | literal ( "..=" | "..<" ) literal | ( "..=" | "..<" ) literal | literal ".."
               | Ident [ "(" pattern { "," pattern } ")" ]
               | "(" pattern "," pattern { "," pattern } ")"
               | "[" [ pattern { "," pattern } ] [ "," ".." [ ident ] ] "]"
@@ -157,10 +157,17 @@ Tightest first:
 ## Patterns
 
 ```text
-match age {
-  ..=17 => Child,
-  18..=64 => Adult,
+let group = match age {
+  ..<18 => Child,
+  18..<65 => Adult,
   65.. => Senior,
+}
+
+let band = match bmi {
+  ..<18.5 => Under,
+  18.5..<25.0 => Healthy,
+  25.0..<30.0 => Over,
+  30.0.. => Obese,
 }
 
 match reading {
@@ -171,12 +178,14 @@ match reading {
 }
 ```
 
-- Patterns: `_`, names, literals except floats, inclusive ranges, constructors,
+- Patterns: `_`, names, literals except floats, ranges (`a..=b` inclusive,
+  `a..<b` half-open, `..<b`, `a..`), constructors,
   tuples, vector heads with `..rest`, records with optional `..`,
   alternatives, `@` bindings, guards.
 - `let pattern = e else fallback in body` is `fallback` when the pattern does
   not match.
-- A `match` must be exhaustive. Guards do not count toward exhaustiveness.
+- A `match` must be exhaustive. Ranges that together cover every number are
+  exhaustive. Guards do not count toward exhaustiveness.
 
 ## Formatting
 
