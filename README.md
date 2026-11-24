@@ -8,7 +8,7 @@ writes an explicitly ordered Parquet result.
 ## Build and run
 
 Install OCaml 5.3, Dune, Menhir, Yojson and Uucp. For Python execution install uv.
-The R target requires R, dplyr, bit64, jsonlite, nanoparquet and gmp. Both table
+The R target requires R, dplyr, bit64, jsonlite, nanoparquet, tidyr and gmp. Both table
 targets use the upstream data-dict CLI from the locked uv environment.
 
 ```sh
@@ -27,6 +27,12 @@ In the REPL, enter `:schema regional` to inspect the inferred fields,
 Use `:backend r` or `:backend python` to select a preview engine. Type
 `:help` to list commands and `:quit` to leave.
 
+## Windows REPL
+
+The installed Windows launcher runs the Debian build through WSL. In PowerShell,
+run `rupam` to start an empty session or `rupam repl .\examples\shop.rp` from
+the repository to explore the example. The launcher is on the user PATH.
+
 ## Standalone scripts
 
 Run the following commands from the repository root. The generated scripts
@@ -41,7 +47,7 @@ uv run Rscript shop.R
 ```
 
 Use `compile python examples/shop.rp -o shop.py` to write a script with a
-JSON dependency manifest and output-statement source map. The editor server
+JSON dependency manifest and source map for output statements and lowered expressions. The editor server
 runs with `dune exec rupam -- lsp` and uses standard LSP over stdin/stdout.
 
 ## Verification
@@ -56,4 +62,5 @@ reference evaluation. The integration suite invokes the compiler and both
 generated scripts, reads their Parquet outputs, and checks failure on invalid
 input. Release requirements and acceptance cases are in
 [the language brief](typed_polyglot_data_science_language_agent_brief.md).
+
 
