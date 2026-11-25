@@ -1,9 +1,12 @@
 type span = Lexing.position * Lexing.position
 
+val sexp_of_span : span -> Sexplib0.Sexp.t
+
 type reference =
   | Bare
   | Lexical
   | Column
+[@@deriving sexp_of]
 
 type literal =
   | Int of string
@@ -11,10 +14,12 @@ type literal =
   | Text of string
   | Bool of bool
   | Absent
+[@@deriving sexp_of]
 
 type unary =
   | Negate
   | Not
+[@@deriving sexp_of]
 
 type binary =
   | Add
@@ -31,6 +36,7 @@ type binary =
   | Not_equal
   | And
   | Or
+[@@deriving sexp_of]
 
 type pattern =
   | Precord of string list
@@ -42,6 +48,7 @@ type pattern =
   | Prange of range
   | Palt of pattern list
   | Pas of string * pattern
+[@@deriving sexp_of]
 
 and range =
   { low : literal option
@@ -55,13 +62,15 @@ type annotation =
   | Aarrow of annotation * annotation
   | Named of string * annotation list
   | Optional of annotation
+[@@deriving sexp_of]
 
-type variant = string * (string * annotation) list
+type variant = string * (string * annotation) list [@@deriving sexp_of]
 
 type expr =
   { form : form
   ; span : span
   }
+[@@deriving sexp_of]
 
 and arm =
   { pattern : pattern
@@ -108,6 +117,7 @@ type declaration =
   | Setting of string * string
   | Let of string * string list option * expr
   | Evaluate of expr
+[@@deriving sexp_of]
 
 val literal_text : literal -> string
 val unary_symbol : unary -> string

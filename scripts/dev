@@ -19,6 +19,7 @@ scripts/dev watch     rebuild and rerun tests on every change
 scripts/dev promote   accept the output of changed expect and cram tests
 scripts/dev fmt       format the code
 scripts/dev conformance   run conformance fixtures, including why pending ones fail
+scripts/dev stages STAGE FILE   print tokens, syntax, typed or code for a source file
 scripts/dev full      check, then the R and Python integration tests
 EOF
 }
@@ -39,6 +40,11 @@ case "${1:-}" in
   watch) dune build --watch @default @runtest ;;
   promote) dune promote ;;
   fmt) dune fmt || true ;;
+  stages)
+    shift
+    dune build dev/rupam_dev.exe
+    "$build/default/dev/rupam_dev.exe" "$@"
+    ;;
   conformance)
     dune build test/conformance.exe
     (cd test && "$build/default/test/conformance.exe" --pending)

@@ -1,9 +1,19 @@
+open Sexplib0.Sexp_conv
+
 type span = Lexing.position * Lexing.position
+
+let sexp_of_span ((start, finish) : span) =
+  let point (p : Lexing.position) =
+    Printf.sprintf "%d:%d" p.pos_lnum (p.pos_cnum - p.pos_bol + 1)
+  in
+  Sexplib0.Sexp.Atom (point start ^ "-" ^ point finish)
+;;
 
 type reference =
   | Bare
   | Lexical
   | Column
+[@@deriving sexp_of]
 
 type literal =
   | Int of string
@@ -11,10 +21,12 @@ type literal =
   | Text of string
   | Bool of bool
   | Absent
+[@@deriving sexp_of]
 
 type unary =
   | Negate
   | Not
+[@@deriving sexp_of]
 
 type binary =
   | Add
@@ -31,6 +43,7 @@ type binary =
   | Not_equal
   | And
   | Or
+[@@deriving sexp_of]
 
 type pattern =
   | Precord of string list
@@ -42,6 +55,7 @@ type pattern =
   | Prange of range
   | Palt of pattern list
   | Pas of string * pattern
+[@@deriving sexp_of]
 
 and range =
   { low : literal option
@@ -55,13 +69,15 @@ type annotation =
   | Aarrow of annotation * annotation
   | Named of string * annotation list
   | Optional of annotation
+[@@deriving sexp_of]
 
-type variant = string * (string * annotation) list
+type variant = string * (string * annotation) list [@@deriving sexp_of]
 
 type expr =
   { form : form
   ; span : span
   }
+[@@deriving sexp_of]
 
 and arm =
   { pattern : pattern
@@ -108,6 +124,7 @@ type declaration =
   | Setting of string * string
   | Let of string * string list option * expr
   | Evaluate of expr
+[@@deriving sexp_of]
 
 let literal_text = function
   | Int s | Float s -> s

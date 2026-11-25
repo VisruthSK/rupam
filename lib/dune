@@ -5,9 +5,9 @@
 
 (library
  (name rupam)
- (libraries unix yojson uucp toml astring digestif duckdb_static)
+ (libraries unix yojson uucp toml astring digestif sexplib0 duckdb_static)
  (preprocess
-  (pps ppx_enumerate ppx_yojson_conv))
+  (pps ppx_enumerate ppx_yojson_conv ppx_sexp_conv))
  (foreign_stubs
   (language c)
   (names duckdb_stubs)
