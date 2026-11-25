@@ -51,6 +51,7 @@ let run target strict path =
   targeted (Filename.dirname path) target strict
   @@ fun project ->
   with_program path (fun ds ->
+    Lock.require ~project ~source:path ds;
     let language = Runtime.of_dialect (Project.require_dialect project) in
     Runtime.run
       (Runtime.resolve project language)
@@ -58,10 +59,32 @@ let run target strict path =
       (fst (generate project path ds)))
 ;;
 
+let lock target strict path =
+  targeted (Filename.dirname path) target strict
+  @@ fun project ->
+  with_program path (fun ds ->
+    let entry = Lock.lock ~project ~source:path ds in
+    List.iter
+      (fun (file, columns) ->
+         Printf.printf "%s
+" file;
+         List.iter (fun (n, t) -> Printf.printf "  %s  %s
+" n t) columns)
+      entry.schemas;
+    Printf.printf
+      "Locked %s for %s: %d input%s
+"
+      entry.source
+      entry.dialect
+      (List.length entry.inputs)
+      (if List.length entry.inputs = 1 then "" else "s"))
+;;
+
 let compile target strict path output =
   targeted (Filename.dirname path) target strict
   @@ fun project ->
   with_program path (fun ds ->
+    Lock.require ~project ~source:path ds;
     let code, locations = generate project path ds in
     match output with
     | None -> print_string code
@@ -126,6 +149,10 @@ let commands =
         $ target
         $ strict
         $ Arg.(value & pos 0 (some file) None & info [] ~docv:"FILE.rp"))
+  ; command
+      "lock"
+      "Validate a program's inputs and record them, with any inferred schemas, in        rupam.lock."
+      Term.(const lock $ target $ strict $ program)
   ; command "fmt" "Print a program in canonical form." Term.(const fmt $ program)
   ; command
       "compile"

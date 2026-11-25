@@ -78,6 +78,36 @@ let import path =
   | _ -> failwith "data-dict export-spec failed"
 ;;
 
+let validate path =
+  List.iter
+    (fun level ->
+       let command = "data-dict" in
+       let channel = Unix.open_process_args_in command [| command; level; "--json"; path |] in
+       let report = In_channel.input_all channel in
+       ignore (Unix.close_process_in channel);
+       let json =
+         try Json.from_string report with
+         | Yojson.Json_error _ -> failwith ("data-dict " ^ level ^ " failed on " ^ path)
+       in
+       let problems =
+         list "problems" json
+         |> List.filter_map (fun p -> J.member "message" p |> J.to_string_option)
+       in
+       let failed =
+         list "steps" json
+         |> List.filter (fun s -> J.member "outcome" s <> `String "pass")
+         |> List.filter_map (fun s -> J.member "name" s |> J.to_string_option)
+       in
+       if J.member "status" json <> `String "ok" || failed <> []
+       then
+         failwith
+           (Printf.sprintf
+              "%s does not match its data: %s"
+              (Filename.basename path)
+              (String.concat "; " (problems @ failed))))
+    [ "validate-meta"; "validate-data" ]
+;;
+
 let describe_table (table : table) =
   print_endline table.name;
   let width =

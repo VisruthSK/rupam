@@ -64,6 +64,7 @@ Ctrl+L clears the screen and Ctrl+D leaves.
 | `:target [DIALECT]` | shows or switches the dialect |
 | `:bindings` | everything defined so far |
 | `:reload` | re-reads the file you started with |
+| `:lock` | validates the loaded file's inputs and records them in `rupam.lock` |
 | `:help` | this list |
 
 `TABLE` can be any table expression, not only a name:

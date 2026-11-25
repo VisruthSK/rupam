@@ -76,7 +76,8 @@ Previews and runs then use exactly the packages the project pins.
 ```sh
 rupam repl                               # REPL
 rupam repl examples/shop.rp              # REPL with a program loaded
-rupam run examples/shop.rp               # compile, validate and execute
+rupam lock examples/penguins.rp          # validate inputs and record them in rupam.lock
+rupam run examples/shop.rp               # compile and execute
 rupam compile examples/shop.rp           # print the standalone script
 rupam compile examples/shop.rp -o shop.R # script plus manifest and source map
 rupam fmt examples/shop.rp

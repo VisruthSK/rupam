@@ -34,6 +34,20 @@ let reader path =
   | Tsv -> "read_csv(" ^ literal path ^ ", delim = '\\t')"
 ;;
 
+let digests : (string * float * int, string) Hashtbl.t = Hashtbl.create 16
+
+let digest path =
+  let stats = Unix.stat path in
+  let identity = path, stats.st_mtime, stats.st_size in
+  match Hashtbl.find_opt digests identity with
+  | Some digest -> digest
+  | None ->
+    let _, rows = query ("SELECT sha256(content) FROM read_blob(" ^ literal path ^ ")") in
+    let digest = Option.get rows.(0).(0) in
+    Hashtbl.replace digests identity digest;
+    digest
+;;
+
 let columns path =
   if not (Sys.file_exists path) then failwith ("No such data file " ^ path);
   let names, rows = query ("DESCRIBE SELECT * FROM " ^ reader path) in

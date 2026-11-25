@@ -12,7 +12,7 @@ DIALECT = {"r": "r-dplyr", "python": "python-polars"}
 
 
 class ContractIntegration(unittest.TestCase):
-    def test_compiled_script_revalidates_before_filtering(self):
+    def test_compiled_script_refuses_data_changed_since_the_lock(self):
         subprocess.run(["dune", "build", "bin/rupam_cli.exe"], cwd=ROOT, check=True)
         with tempfile.TemporaryDirectory() as tmp:
             work = Path(tmp)
@@ -40,10 +40,19 @@ class ContractIntegration(unittest.TestCase):
             data = pl.read_parquet(source).with_columns(
                 pl.when(pl.col("revenue") == 0).then(None).otherwise(pl.col("revenue")).alias("revenue"))
             data.write_parquet(source)
-            failure = subprocess.run(["python", script], cwd=work, capture_output=True)
-            self.assertNotEqual(failure.returncode, 0)
-            self.assertIn(b"validate-data", failure.stderr)
-            self.assertFalse(output.exists())
+            for runner, path in [("python", script), ("Rscript", r_script)]:
+                failure = subprocess.run([runner, path], cwd=work, capture_output=True)
+                self.assertNotEqual(failure.returncode, 0)
+                self.assertIn(b"changed since rupam lock", failure.stderr)
+                self.assertFalse(output.exists())
+            stale = subprocess.run([compiler, "compile", "--target", "python-polars", "shop.rp"],
+                                   cwd=work, capture_output=True)
+            self.assertNotEqual(stale.returncode, 0)
+            self.assertIn(b"orders.parquet changed since rupam lock", stale.stderr)
+            relock = subprocess.run([compiler, "lock", "--target", "python-polars", "shop.rp"],
+                                    cwd=work, capture_output=True)
+            self.assertNotEqual(relock.returncode, 0)
+            self.assertIn(b"does not match its data", relock.stderr)
 
 
     def test_csv_analysis_agrees_across_dialects(self):
@@ -55,6 +64,8 @@ class ContractIntegration(unittest.TestCase):
                 for name in ("penguins.rp", "penguins.csv", "species.csv"):
                     shutil.copy(ROOT / "examples" / name, work)
                 script = work / ("penguins." + target)
+                subprocess.run([compiler, "lock", "--target", DIALECT[target], "penguins.rp"],
+                               cwd=work, check=True, capture_output=True)
                 script.write_bytes(subprocess.check_output(
                     [compiler, "compile", "--target", DIALECT[target], "penguins.rp"], cwd=work))
                 subprocess.run([runner, script], cwd=work, check=True, capture_output=True)
@@ -285,6 +296,8 @@ write_parquet(scores, "scores_out.parquet")
 """)
             for target in ("python-polars", "r-dplyr"):
                 with self.subTest(target=target):
+                    subprocess.run([compiler, "lock", "--target", target, "files.rp"], cwd=work,
+                                   check=True, capture_output=True)
                     subprocess.run([compiler, "run", "--target", target, "files.rp"], cwd=work,
                                    check=True, capture_output=True)
                     ids = pl.read_parquet(work / "ids.parquet").sort("site")

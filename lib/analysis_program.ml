@@ -43,17 +43,18 @@ type dataset =
 
 and origin =
   | Contracted of contracted
-  | File of file
+  | File of source
   | Joined of join
 
 and contracted =
   { dictionary : Contract.t
   ; table : Contract.table
-  ; physical_types : Yojson.Basic.t
+  ; source : source
   }
 
-and file =
+and source =
   { path : string
+  ; digest : string
   ; format : Data_file.format
   ; columns : (string * Shape.primitive * bool) list
   }
@@ -126,9 +127,7 @@ let physical path =
     (Data_file.columns path)
 ;;
 
-let rec kind t nullable = polars_name t ^ if nullable then "?" else ""
-
-and polars_name = function
+let kind = function
   | Shape.Int64 -> "Int64"
   | Float64 -> "Float64"
   | Bool -> "Boolean"
@@ -176,14 +175,8 @@ let rec dataset ~directory env scalars x =
         Contracted
           { dictionary = dict
           ; table
-          ; physical_types =
-              `Assoc
-                (List.map
-                   (fun (n, t) ->
-                      ( n
-                      , Option.fold ~none:`Null ~some:(fun t -> `String (polars_name t)) t
-                      ))
-                   types)
+          ; source =
+              { path; digest = Data_file.digest path; format = Parquet; columns = fields }
           }
     ; fields = List.map (fun (n, _, _) -> n) fields
     ; plan =
@@ -233,7 +226,7 @@ let rec dataset ~directory env scalars x =
         (try Data_file.columns path with
          | Failure message -> fail x message)
     in
-    { origin = File { path; format; columns }
+    { origin = File { path; digest = Data_file.digest path; format; columns }
     ; fields = List.map (fun (n, _, _) -> n) columns
     ; plan = Table.source 0 columns
     }
@@ -537,26 +530,13 @@ module P = Python_syntax
 let rec python_stages d =
   let base =
     match d.origin with
-    | File { path; format; columns } ->
+    | File source | Contracted { source; _ } ->
       P.call
-        "read_file"
-        [ P.Str path
-        ; P.Str (Data_file.format_name format)
-        ; P.Dict (List.map (fun (n, t, nullable) -> P.Str n, P.Str (kind t nullable)) columns)
-        ]
-    | Contracted { dictionary; table; physical_types } ->
-      P.call
-        "validated_source"
-        [ P.Str dictionary.path
-        ; P.Str (Yojson.Basic.to_string dictionary.metadata)
-        ; P.Str table.name
-        ; P.Dict
-            (Yojson.Basic.Util.to_assoc physical_types
-             |> List.map (fun (name, physical) ->
-               ( P.Str name
-               , match physical with
-                 | `String t -> P.Str t
-                 | _ -> P.Null )))
+        "read_locked"
+        [ P.Str source.path
+        ; P.Str source.digest
+        ; P.Str (Data_file.format_name source.format)
+        ; P.Dict (List.map (fun (n, t, _) -> P.Str n, P.Str (kind t)) source.columns)
         ]
     | Joined { left; right; key; kind; relationship; covered } ->
       P.Chain
@@ -682,13 +662,13 @@ let explain d =
      | Contracted { dictionary; table; _ } ->
        say
          (Printf.sprintf
-            "load %s from %s, validated against the contract first"
+            "load %s from %s, checking the bytes rupam lock validated"
             table.name
             (Filename.basename dictionary.path))
      | File { path; format; _ } ->
        say
          (Printf.sprintf
-            "read %s as %s, checking its schema first"
+            "read %s as %s, checking the bytes rupam lock recorded"
             (Filename.basename path)
             (Data_file.format_name format))
      | Joined { left; right; key; kind; _ } ->
@@ -720,22 +700,28 @@ let explain d =
   visit d
 ;;
 
-let validate ~runtime d =
-  let rec sources d =
-    match d.origin with
-    | Contracted { dictionary; _ } -> [ dictionary.path ]
-    | File _ -> []
-    | Joined { left; right; _ } -> sources left @ sources right
-  in
-  List.sort_uniq compare (sources d)
-  |> List.iter (fun path ->
-    Runtime.run
-      runtime
-      Runtime.Python
-      (fst
-         (P.program
-            [ P.Verbatim Adapters.polars
-            ; P.Expression (P.call "validate_contract" [ P.Str path ])
-            ])));
+let rec sources d =
+  match d.origin with
+  | Contracted { dictionary; source; _ } -> [ dictionary.path; source.path ]
+  | File source -> [ source.path ]
+  | Joined { left; right; _ } -> sources left @ sources right
+;;
+
+let rec files d =
+  match d.origin with
+  | File source -> [ source ]
+  | Contracted _ -> []
+  | Joined { left; right; _ } -> files left @ files right
+;;
+
+let rec contracts d =
+  match d.origin with
+  | Contracted { dictionary; _ } -> [ dictionary.path ]
+  | File _ -> []
+  | Joined { left; right; _ } -> contracts left @ contracts right
+;;
+
+let validate d =
+  List.iter Contract.validate (List.sort_uniq compare (contracts d));
   print_endline "The data matches its contract"
 ;;

@@ -11,6 +11,7 @@ type command =
   | Quit
   | Help
   | Reload
+  | Lock
   | Bindings
   | Target of Project.dialect option
   | Type of string
@@ -38,6 +39,7 @@ let help =
   ; ":target [DIALECT]", "show or set the dialect: r-dplyr or python-polars"
   ; ":bindings", "everything defined in this session"
   ; ":reload", "re-read the loaded file"
+  ; ":lock", "validate the loaded file's inputs and record them in rupam.lock"
   ; ":quit", "leave (or Ctrl+D)"
   ]
 ;;
@@ -75,6 +77,7 @@ let parse line =
     | "quit" | "q" -> Ok Quit
     | "help" | "h" -> Ok Help
     | "reload" -> Ok Reload
+    | "lock" -> Ok Lock
     | "bindings" -> Ok Bindings
     | "target" when rest = "" -> Ok (Target None)
     | "target" -> Result.map (fun d -> Target (Some d)) (dialect rest)
@@ -110,6 +113,9 @@ let diagnostic buf f =
   try Ok (f ()) with
   | Sys.Break ->
     prerr_endline "Cancelled";
+    Error ()
+  | Lock.Stale msg ->
+    report msg;
     Error ()
   | Infer.Error ((p, _), msg) ->
     report (position p ^ ": " ^ msg);
@@ -615,6 +621,20 @@ let run state = function
     Some state
   | Target (Some dialect) ->
     Some { state with project = { state.project with dialect = Some dialect } }
+  | Lock ->
+    (match state.source_path with
+     | None -> report "No file loaded. Start the REPL with a program to lock it."
+     | Some source ->
+       ignore
+         (diagnostic (Lexing.from_string "") (fun () ->
+            let entry = Lock.lock ~project:state.project ~source state.history in
+            List.iter
+              (fun (file, columns) ->
+                 print_endline file;
+                 List.iter (fun (n, t) -> Printf.printf "  %s  %s\n" n t) columns)
+              entry.schemas;
+            Printf.printf "Locked %s for %s\n" entry.source entry.dialect)));
+    Some state
   | Reload ->
     Some
       (Result.value
@@ -674,9 +694,7 @@ let run state = function
          | Schema -> Analysis_program.schema d
          | Contract -> print_endline (Analysis_program.origin d)
          | Validate ->
-           Analysis_program.validate
-             ~runtime:(Runtime.resolve state.project Runtime.Python)
-             d
+           Analysis_program.validate d
          | Explain -> Analysis_program.explain d
          | Preview -> preview state d));
     Some state

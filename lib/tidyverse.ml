@@ -287,22 +287,15 @@ let rec table d =
   let open Analysis_program in
   let base =
     match d.origin with
-    | File { path; format; columns } ->
+    | File source | Contracted { source; _ } ->
       R.call
         "rp_read"
-        [ R.String path
-        ; R.String (Data_file.format_name format)
+        [ R.String source.path
+        ; R.String source.digest
+        ; R.String (Data_file.format_name source.format)
         ; R.Call
             ( R.Name "c"
-            , List.map (fun (n, t, nullable) -> R.Named (n, R.String (kind t nullable))) columns )
-        ]
-    | Contracted { dictionary; table; physical_types } ->
-      R.call
-        "rp_source"
-        [ R.String dictionary.path
-        ; R.String (Yojson.Basic.to_string dictionary.metadata)
-        ; R.String table.name
-        ; R.String (Yojson.Basic.to_string physical_types)
+            , List.map (fun (n, t, _) -> R.Named (n, R.String (kind t))) source.columns )
         ]
     | Joined { left; right; key; kind; relationship; covered } ->
       let left =

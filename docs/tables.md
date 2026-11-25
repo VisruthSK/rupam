@@ -35,11 +35,24 @@ gaps. The `primary_key` columns together form the table's key, and each
 `unique` column is a key among its present values. `range`, `examples` and
 descriptions are documentation only and never become checks.
 
-Type checking needs only the contract and the Parquet footer. Before any
-preview, save or generated script touches values, the whole source is
-validated with `data-dict validate-data`, so a bad row fails the run even if a
-later `filter` would have dropped it. Columns marked `display: restricted` are
-left out of previews and generated output.
+Type checking needs only the contract and the Parquet footer. Columns marked
+`display: restricted` are left out of previews and generated output.
+
+## Locks
+
+An analysis is compiled for particular data. `rupam lock shop.rp` validates
+every contract with `data-dict validate-data`, so a bad row fails even if a
+later `filter` would have dropped it, and records the SHA-256 of the program
+and of every input in `rupam.lock`, together with the schemas rupam inferred
+for files without a contract. `compile` and `run` need a current lock. They
+create the first one themselves when nothing needs accepting, but a program
+that reads a CSV or Parquet file without a contract must be locked
+explicitly, after you have looked at the inferred schemas.
+
+Generated scripts read each input's bytes once, check them against the
+locked hash and parse those same bytes, so they need neither rupam nor the
+data-dict CLI. When an input changes, the script, `compile` and `run` all
+stop and ask you to run `rupam lock` again.
 
 ## Verbs
 
