@@ -5,9 +5,13 @@ type format =
   | Csv
   | Tsv
 
+type physical =
+  | Supported of Shape.primitive
+  | Unsupported of string
+
 type column =
   { name : string
-  ; physical : string
+  ; typ : physical
   ; nullable : bool
   }
 
@@ -73,8 +77,18 @@ let columns path =
        ^ " FROM "
        ^ reader path)
   in
+  let typ = function
+    | "BIGINT" | "INTEGER" -> Supported Shape.Int64
+    | "DOUBLE" -> Supported Float64
+    | "BOOLEAN" -> Supported Bool
+    | "VARCHAR" -> Supported String
+    | other -> Unsupported other
+  in
   List.mapi
     (fun i (name, physical) ->
-       { name; physical; nullable = Option.value counts.(0).(i) ~default:"0" <> "0" })
+       { name
+       ; typ = typ physical
+       ; nullable = Option.value counts.(0).(i) ~default:"0" <> "0"
+       })
     described
 ;;

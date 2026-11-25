@@ -115,23 +115,7 @@ let tabular =
 ;;
 
 let physical path =
-  List.map
-    (fun (c : Data_file.column) ->
-       ( c.name
-       , match c.physical with
-         | "BIGINT" -> Some Shape.Int64
-         | "DOUBLE" -> Some Float64
-         | "BOOLEAN" -> Some Bool
-         | "VARCHAR" -> Some String
-         | _ -> None ))
-    (Data_file.columns path)
-;;
-
-let kind = function
-  | Shape.Int64 -> "Int64"
-  | Float64 -> "Float64"
-  | Bool -> "Boolean"
-  | String -> "String"
+  List.map (fun (c : Data_file.column) -> c.name, c.typ) (Data_file.columns path)
 ;;
 
 let rec dataset ~directory env scalars x =
@@ -164,9 +148,12 @@ let rec dataset ~directory env scalars x =
         (fun (c : Contract.column) ->
            let t =
              match List.assoc_opt c.name types with
-             | Some (Some t) -> t
-             | Some None ->
-               fail x Unknown_column ("Unsupported physical type for " ^ c.name)
+             | Some (Supported t) -> t
+             | Some (Unsupported other) ->
+               fail
+                 x
+                 Unsupported_column_type
+                 (Printf.sprintf "Column %s has unsupported type %s" c.name other)
              | None ->
                fail
                  x
@@ -220,12 +207,9 @@ let rec dataset ~directory env scalars x =
       List.map
         (fun (c : Data_file.column) ->
            let primitive =
-             match c.physical with
-             | "BIGINT" | "INTEGER" -> Shape.Int64
-             | "DOUBLE" -> Float64
-             | "BOOLEAN" -> Bool
-             | "VARCHAR" -> String
-             | other ->
+             match c.typ with
+             | Supported t -> t
+             | Unsupported other ->
                fail
                  x
                  Unsupported_column_type

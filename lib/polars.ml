@@ -349,7 +349,10 @@ let rec python_stages d =
         [ P.Str source.path
         ; P.Str source.digest
         ; P.Str (Data_file.format_name source.format)
-        ; P.Dict (List.map (fun (n, t, _) -> P.Str n, P.Str (kind t)) source.columns)
+        ; P.Dict
+            (List.map
+               (fun (n, t, _) -> P.Str n, P.Str (Shape.primitive_name t))
+               source.columns)
         ]
     | Joined { left; right; key; kind; relationship; covered } ->
       P.Chain

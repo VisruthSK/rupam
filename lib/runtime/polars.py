@@ -7,7 +7,7 @@ import pyarrow as pa
 import pyarrow.csv as pacsv
 import pyarrow.parquet as pq
 
-ARROW_TYPES = {"Int64": pa.int64(), "Float64": pa.float64(), "Boolean": pa.bool_(), "String": pa.string()}
+ARROW_TYPES = {"Int64": pa.int64(), "Float64": pa.float64(), "Bool": pa.bool_(), "String": pa.string()}
 
 
 def read_locked(path, digest, format, columns):

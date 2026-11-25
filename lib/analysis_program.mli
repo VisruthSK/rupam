@@ -56,7 +56,6 @@ and environment = (string * binding) list
 
 val uses : (string -> bool) -> Syntax.expr -> bool
 val tabular : Syntax.declaration list -> bool
-val kind : Shape.primitive -> string
 
 val dataset
   :  directory:string

@@ -304,7 +304,9 @@ let rec table d =
         ; R.String (Data_file.format_name source.format)
         ; R.Call
             ( R.Name "c"
-            , List.map (fun (n, t, _) -> R.Named (n, R.String (kind t))) source.columns )
+            , List.map
+                (fun (n, t, _) -> R.Named (n, R.String (Shape.primitive_name t)))
+                source.columns )
         ]
     | Joined { left; right; key; kind; relationship; covered } ->
       let left =

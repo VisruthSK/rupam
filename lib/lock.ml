@@ -113,7 +113,7 @@ let analysis ~(project : Project.t) ~source declarations =
       ; columns =
           List.map
             (fun (name, t, nullable) ->
-               { name; type_ = (Analysis_program.kind t ^ if nullable then "?" else "") })
+               { name; type_ = (Shape.primitive_name t ^ if nullable then "?" else "") })
             file.columns
       })
   in

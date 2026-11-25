@@ -63,6 +63,7 @@ and expr =
   }
 
 val input : int -> typ -> expr
+val primitive_name : primitive -> string
 val type_name : typ -> string
 val broadcast : shape -> expr -> expr
 val exact_float : string -> float

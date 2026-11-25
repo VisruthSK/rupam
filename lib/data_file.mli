@@ -5,9 +5,13 @@ type format =
   | Csv
   | Tsv
 
+type physical =
+  | Supported of Shape.primitive
+  | Unsupported of string
+
 type column =
   { name : string
-  ; physical : string
+  ; typ : physical
   ; nullable : bool
   }
 
