@@ -31,6 +31,7 @@ type reduction =
   | Min
   | Max
   | Distinct
+  | Count
 
 type builtin =
   | Row of row
@@ -72,6 +73,7 @@ let reductions =
   ; "min", Min
   ; "max", Max
   ; "n_distinct", Distinct
+  ; "n", Count
   ]
 ;;
 

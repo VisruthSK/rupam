@@ -46,6 +46,29 @@ class ContractIntegration(unittest.TestCase):
             self.assertFalse(output.exists())
 
 
+    def test_csv_analysis_agrees_across_dialects(self):
+        compiler = ROOT / "_build/default/bin/rupam_cli.exe"
+        results = {}
+        for target, runner in [("python", "python"), ("r", "Rscript")]:
+            with tempfile.TemporaryDirectory() as tmp:
+                work = Path(tmp)
+                for name in ("penguins.rp", "penguins.csv", "species.csv"):
+                    shutil.copy(ROOT / "examples" / name, work)
+                script = work / ("penguins." + target)
+                script.write_bytes(subprocess.check_output(
+                    [compiler, "compile", "--target", DIALECT[target], "penguins.rp"], cwd=work))
+                subprocess.run([runner, script], cwd=work, check=True, capture_output=True)
+                results[target] = pl.read_parquet(work / "penguins-by-species.parquet").sort("species")
+        self.assertEqual(results["python"]["species"].to_list(), ["Adelie", "Chinstrap", "Gentoo"])
+        self.assertEqual(results["python"]["n"].to_list(), [7, 5, 5])
+        for column in results["python"].columns:
+            left, right = results["python"][column].to_list(), results["r"][column].to_list()
+            if results["python"][column].dtype == pl.Float64:
+                for a, b in zip(left, right):
+                    self.assertAlmostEqual(a, b, places=12)
+            else:
+                self.assertEqual(left, right)
+
     def test_join_uses_named_keys_and_preserves_unmatched_rows(self):
         with tempfile.TemporaryDirectory() as tmp:
             work = Path(tmp)
@@ -56,7 +79,7 @@ class ContractIntegration(unittest.TestCase):
 let orders = load(shop.orders)
 let lefts = orders |> select(customer_id, cost)
 let rights = orders |> select(cost, region)
-let joined = lefts |> join(rights, on = cost, how = left) |> arrange(customer_id)
+let joined = lefts |> left_join(rights, by = cost, relationship = many_to_one) |> arrange(customer_id)
 write_parquet(joined, "joined.parquet")
 """)
             compiler = ROOT / "_build/default/bin/rupam_cli.exe"
@@ -212,7 +235,7 @@ get(Just(9007199254740993))
             source.write_text("""use contract "data-dict.yaml" as shop
 let t = load(shop.orders) |> mutate(center = revenue - mean(revenue), by = region)
 let tall = t |> select(customer_id, revenue, center) |> pivot_longer(cols = (revenue, center), names_to = metric, values_to = reading)
-let wide = tall |> pivot_wider(names_from = metric, values_from = reading, levels = [revenue, center]) |> rename(center = centered) |> arrange(customer_id)
+let wide = tall |> pivot_wider(names_from = metric, values_from = reading, levels = [revenue, center]) |> rename(centered = center) |> arrange(customer_id)
 write_parquet(wide, "result.parquet")
 """)
             compiler = ROOT / "_build/default/bin/rupam_cli.exe"
@@ -234,7 +257,7 @@ write_parquet(wide, "result.parquet")
             }).write_parquet(work / "orders.parquet")
             source = work / "groups.rp"
             source.write_text("""use contract "data-dict.yaml" as shop
-let t = load(shop.orders) |> summarize(n=count(), by=cost)
+let t = load(shop.orders) |> summarize(n=n(), by=cost)
 write_parquet(t, "groups.parquet")
 """)
             compiler = ROOT / "_build/default/bin/rupam_cli.exe"

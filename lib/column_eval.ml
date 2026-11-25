@@ -84,6 +84,7 @@ let aggregate (reduction : Prelude.reduction) values =
   in
   match reduction, xs with
   | Distinct, _ -> I (Int64.of_int (List.length (List.sort_uniq compare xs)))
+  | Count, _ -> I (Int64.of_int (Array.length values))
   | _, [] -> Missing
   | (Var | Sd), [ _ ] -> Missing
   | Sum, I _ :: _ ->
@@ -188,7 +189,18 @@ let evaluate ~rows ~input expression =
        | _ -> raise (Error "Expected Bool"))
     | Polars_sqrt a | Apply (Sqrt, [ a ]) -> apply_row Sqrt [ at i a ]
     | Apply (row, args) -> apply_row row (List.map (at i) args)
-    | Reduce (r, e) -> aggregate r (Array.init rows (fun j -> at j e))
+    | Reduce (r, policy, e) ->
+      let values = Array.init rows (fun j -> at j e) in
+      (match policy with
+       | Propagate when Array.mem Missing values -> Missing
+       | Fail when Array.mem Missing values ->
+         raise (Error "a reduction met a missing value and missing = error")
+       | Skip | Propagate | Fail -> aggregate r values)
+    | Count -> I (Int64.of_int rows)
+    | Convert a ->
+      (match at i a with
+       | I v -> F (Int64.to_float v)
+       | v -> v)
     | Member (a, items) ->
       (match at i a with
        | Missing -> Missing

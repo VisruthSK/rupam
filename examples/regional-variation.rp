@@ -8,7 +8,7 @@ let margins = orders
 
 let measurements = margins
   |> select(customer_id, region, margin, deviation)
-  |> pivot_longer(cols = (margin, deviation), names_to = measure, values_to = amount)
+  |> pivot_longer(cols = [margin, deviation], names_to = measure, values_to = amount)
   |> arrange(region, customer_id, measure)
 
 write_parquet(measurements, "regional-variation.parquet")

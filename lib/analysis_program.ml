@@ -18,7 +18,21 @@ let join_name = function
 ;;
 
 let join_kinds =
-  List.map (fun k -> join_name k, k) [ Inner; Left; Right; Full; Semi; Anti ]
+  List.map (fun k -> join_name k ^ "_join", k) [ Inner; Left; Right; Full; Semi; Anti ]
+;;
+
+type relationship =
+  | One_to_one
+  | Many_to_one
+  | One_to_many
+  | Many_to_many
+
+let relationships =
+  [ "one_to_one", One_to_one
+  ; "many_to_one", Many_to_one
+  ; "one_to_many", One_to_many
+  ; "many_to_many", Many_to_many
+  ]
 ;;
 
 type dataset =
@@ -49,6 +63,7 @@ and join =
   ; right : dataset
   ; key : string
   ; kind : join_kind
+  ; relationship : relationship option
   }
 
 type binding =
@@ -194,29 +209,44 @@ let rec dataset ~directory env scalars x =
     ; fields = List.map fst columns
     ; plan = Table.source 0 (List.map (fun (n, t) -> n, t, true) columns)
     }
-  | Pipe (a, { form = Call ({ form = Name (Bare, "join"); _ }, (None, b) :: options); _ })
-    ->
+  | Pipe
+      ( a
+      , { form = Call ({ form = Name (Bare, verb); _ }, (None, b) :: options); _ } )
+    when List.mem_assoc verb join_kinds ->
     let left = dataset ~directory env scalars a
     and right = dataset ~directory env scalars b in
+    let kind = List.assoc verb join_kinds in
     let key, right_key =
-      match List.assoc_opt (Some "on") options with
-      | Some { form = Name (Bare, k); _ } -> k, k
+      match List.assoc_opt (Some "by") options with
+      | Some { form = Name (_, k); _ } -> k, k
       | Some
-          { form =
-              Binary
-                ( Equal
-                , { form = Field ({ form = Name (Bare, "left"); _ }, l); _ }
-                , { form = Field ({ form = Name (Bare, "right"); _ }, r); _ } )
+          { form = Binary (Equal, { form = Name (_, l); _ }, { form = Name (_, r); _ })
           ; _
           } -> l, r
-      | _ -> fail x "Expected a key name or left.key == right.key"
+      | _ -> fail x (verb ^ " needs by = key, or by = (left_key == right_key)")
     in
-    let kind =
-      match List.assoc_opt (Some "how") options with
-      | Some { form = Name (Bare, name); _ } when List.mem_assoc name join_kinds ->
-        List.assoc name join_kinds
-      | _ -> fail x "join expects how = inner, left, right, full, semi or anti"
+    let relationship =
+      match List.assoc_opt (Some "relationship") options, kind with
+      | Some { form = Name (_, name); _ }, _ when List.mem_assoc name relationships ->
+        Some (List.assoc name relationships)
+      | Some _, _ ->
+        fail x "relationship is one_to_one, many_to_one, one_to_many or many_to_many"
+      | None, (Semi | Anti) -> None
+      | None, _ ->
+        fail
+          x
+          (verb
+           ^ " needs relationship = one_to_one, many_to_one, one_to_many or \
+              many_to_many, because rupam cannot yet prove how many rows match")
     in
+    (match
+       List.find_opt
+         (fun (n, _) -> n <> Some "by" && n <> Some "relationship")
+         options
+     with
+     | Some (Some n, _) -> fail x (verb ^ " takes no option named " ^ n)
+     | Some (None, _) -> fail x (verb ^ " takes one table")
+     | None -> ());
     let nullable_left = kind = Right || kind = Full
     and nullable_right = kind = Left || kind = Full in
     let right =
@@ -232,7 +262,6 @@ let rec dataset ~directory env scalars x =
               [ Some right_key, { x with form = Name (Bare, key) } ]
         }
     in
-    if List.length options <> 2 then fail x "join expects exactly on and how";
     let lk = Check.lookup key left.plan.schema
     and rk = Check.lookup key right.plan.schema in
     if lk.typ.primitive <> rk.typ.primitive then fail x "Join key types differ";
@@ -254,7 +283,7 @@ let rec dataset ~directory env scalars x =
                Some (n, e.typ.primitive, e.typ.nullable || nullable_right)))
           right.plan.schema
     in
-    { origin = Joined { left; right; key; kind }
+    { origin = Joined { left; right; key; kind; relationship }
     ; fields = List.map (fun (n, _, _) -> n) fields
     ; plan = Table.source 0 fields
     }
@@ -368,7 +397,9 @@ let rec restrictions d =
     | Binary (_, l, r) | Coalesce (l, r) -> private_expr l || private_expr r
     | Apply (_, xs) -> List.exists private_expr xs
     | Member (x, xs) -> List.exists private_expr (x :: xs)
-    | Broadcast (_, x) | Reduce (_, x) | Polars_sqrt x | Unary (_, x) | Required x ->
+    | Convert x -> private_expr x
+    | Count -> false
+    | Broadcast (_, x) | Reduce (_, _, x) | Polars_sqrt x | Unary (_, x) | Required x ->
       private_expr x
   in
   let bind private_ =
@@ -443,17 +474,30 @@ let rec python_stages d =
                  | `String t -> P.Str t
                  | _ -> P.Null )))
         ]
-    | Joined { left; right; key; kind } ->
+    | Joined { left; right; key; kind; relationship } ->
       P.Chain
         ( python_table left
         , [ P.link
               "join"
-              [ P.Positional (python_table right)
-              ; P.Keyword ("on", P.Str key)
-              ; P.Keyword ("how", P.Str (join_name kind))
-              ; P.Keyword ("nulls_equal", P.Bool false)
-              ; P.Keyword ("coalesce", P.Bool true)
-              ]
+              ([ P.Positional (python_table right)
+               ; P.Keyword ("on", P.Str key)
+               ; P.Keyword ("how", P.Str (join_name kind))
+               ]
+               @ (match relationship with
+                  | None -> []
+                  | Some r ->
+                    [ P.Keyword
+                        ( "validate"
+                        , P.Str
+                            (match r with
+                             | One_to_one -> "1:1"
+                             | Many_to_one -> "m:1"
+                             | One_to_many -> "1:m"
+                             | Many_to_many -> "m:m") )
+                    ])
+               @ [ P.Keyword ("nulls_equal", P.Bool false)
+                 ; P.Keyword ("coalesce", P.Bool true)
+                 ])
           ; P.link "select" [ P.Positional (P.names d.fields) ]
           ] )
   in
@@ -494,7 +538,7 @@ let rec origin d =
   | Contracted { dictionary; table; _ } ->
     Printf.sprintf "%s in %s" table.name (Filename.basename dictionary.path)
   | File { path; _ } -> Filename.basename path ^ ", schema read from the file"
-  | Joined { left; right; key; kind } ->
+  | Joined { left; right; key; kind; _ } ->
     Printf.sprintf
       "%s join of %s and %s on %s"
       (join_name kind)
@@ -558,7 +602,7 @@ let explain d =
             "read %s as %s, checking its schema first"
             (Filename.basename path)
             (Data_file.format_name format))
-     | Joined { left; right; key; kind } ->
+     | Joined { left; right; key; kind; _ } ->
        visit left;
        visit right;
        say (Printf.sprintf "%s join on %s" (join_name kind) key));

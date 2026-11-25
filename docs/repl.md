@@ -42,7 +42,7 @@ menu:
 | `orders \|> ` | verbs and your table functions |
 | `orders \|> filter(` | the table's columns with their types, the verb's options, functions |
 | `filter(x, missing = ` | `skip`, `propagate`, `error` |
-| `join(..., how = ` | `inner`, `left`, `right`, `full`, `semi`, `anti` |
+| `left_join(..., relationship = ` | `one_to_one`, `many_to_one`, `one_to_many`, `many_to_many` |
 | `shop.` | the contract's tables |
 | `read_csv("` | files next to the program |
 

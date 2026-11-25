@@ -282,12 +282,18 @@ let verbs =
   [ "filter", "condition, missing = skip | propagate | error", [ "missing" ]
   ; "select", "columns to keep, in order", []
   ; "mutate", "name = value, ..., by = key", [ "by" ]
-  ; "rename", "old = new", []
+  ; "rename", "new = old", []
   ; "summarize", "name = reduction, ..., by = key", [ "by"; "missing"; "group_missing" ]
   ; "arrange", "key, desc(key)", []
-  ; "take", "n rows of an arranged table", []
+  ; "slice_head", "n = rows of an arranged table", [ "n" ]
+  ; "count", "columns to count rows by", []
   ; "distinct", "columns", []
-  ; "join", "other, on = key, how = left", [ "on"; "how" ]
+  ; "left_join", "other, by = key, relationship = many_to_one", [ "by"; "relationship" ]
+  ; "inner_join", "other, by = key, relationship = many_to_one", [ "by"; "relationship" ]
+  ; "right_join", "other, by = key, relationship = one_to_many", [ "by"; "relationship" ]
+  ; "full_join", "other, by = key, relationship = one_to_one", [ "by"; "relationship" ]
+  ; "semi_join", "other, by = key", [ "by" ]
+  ; "anti_join", "other, by = key", [ "by" ]
   ; ( "pivot_longer"
     , "cols = (a, b), names_to = k, values_to = v"
     , [ "cols"; "names_to"; "values_to" ] )
@@ -301,7 +307,7 @@ let verbs =
 
 let choices = function
   | "missing" | "group_missing" -> [ "skip"; "propagate"; "error" ]
-  | "how" -> [ "inner"; "left"; "right"; "full"; "semi"; "anti" ]
+  | "relationship" -> [ "one_to_one"; "many_to_one"; "one_to_many"; "many_to_many" ]
   | _ -> []
 ;;
 

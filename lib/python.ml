@@ -44,7 +44,9 @@ let compile ?(annotate = Source_map.plain) program =
     "v" ^ string_of_int !serial
   in
   let error x msg = raise (Infer.Error (x.span, msg)) in
-  let rec emit env x = annotate x.span (render env x)
+  let rec emit env x =
+    let code = render env x in
+    annotate x.span (if Infer.converted x then "float(" ^ code ^ ")" else code)
   and render env x =
     let expr = emit env in
     let apply f xs = f ^ "(" ^ String.concat ", " xs ^ ")" in
@@ -189,7 +191,7 @@ let compile ?(annotate = Source_map.plain) program =
             | op -> binary_symbol op
           in
           let v = "(" ^ a ^ " " ^ symbol ^ " " ^ b ^ ")" in
-          v
+          if op = Power then "float" ^ v else v
         | _ -> assert false)
     | Unary (op, v) ->
       operate [ v ] (function

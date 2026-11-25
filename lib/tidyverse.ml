@@ -81,6 +81,8 @@ let lower ~fields (plan : Table.t) base =
     | Polars_sqrt _ ->
       raise (Error "R target cannot execute the Python capability polars.sqrt")
     | Apply (row, args) -> apply row (List.map emit args)
+    | Convert a -> R.call "as.double" [ emit a ]
+    | Count -> R.qualified "bit64" "as.integer64" [ R.Positional (R.qualified "dplyr" "n" []) ]
     | Member (a, items) ->
       let a = emit a in
       R.qualified
@@ -112,14 +114,24 @@ let lower ~fields (plan : Table.t) base =
            | Or -> R.Either)
         , emit a
         , emit b )
-    | Reduce (Distinct, a) ->
-      R.qualified
-        "dplyr"
-        "n_distinct"
-        [ R.Positional (emit a); R.Named ("na.rm", R.Logical true) ]
-      |> fun n -> R.qualified "bit64" "as.integer64" [ R.Positional n ]
-    | Reduce (r, a) ->
-      let x = emit a in
+    | Reduce (r, policy, a) ->
+      let source = emit a in
+      let x =
+        match policy with
+        | Fail -> R.call "rp_present" [ source ]
+        | Skip | Propagate -> source
+      in
+      let guard value =
+        match policy with
+        | Propagate ->
+          R.qualified
+            "dplyr"
+            "if_else"
+            [ R.Positional (R.call "anyNA" [ source ]); R.Positional R.Na; R.Positional value ]
+        | Skip | Fail -> value
+      in
+      guard
+      @@
       let present f = R.Call (f, [ R.Positional x; R.Named ("na.rm", R.Logical true) ]) in
       let unless_empty value =
         R.qualified
@@ -142,7 +154,17 @@ let lower ~fields (plan : Table.t) base =
        | Sum -> unless_empty (present (R.Name "sum"))
        | Min -> unless_empty (present (R.Name "min"))
        | Max -> unless_empty (present (R.Name "max"))
-       | Distinct -> assert false)
+       | Distinct ->
+         R.qualified
+           "bit64"
+           "as.integer64"
+           [ R.Positional
+               (R.qualified
+                  "dplyr"
+                  "n_distinct"
+                  [ R.Positional x; R.Named ("na.rm", R.Logical true) ])
+           ]
+       | Count -> assert false)
   in
   let stage = function
     | Table.Pivot p ->
@@ -238,14 +260,27 @@ let rec table d =
         ; R.String table.name
         ; R.String (Yojson.Basic.to_string physical_types)
         ]
-    | Joined { left; right; key; kind } ->
+    | Joined { left; right; key; kind; relationship } ->
       R.Call
         ( R.Name (join_name kind ^ "_join")
         , [ R.Positional (table left)
           ; R.Positional (table right)
           ; R.Named ("by", R.String key)
           ; R.Named ("na_matches", R.String "never")
-          ] )
+          ]
+          @
+          match relationship with
+          | None -> []
+          | Some r ->
+            [ R.Named
+                ( "relationship"
+                , R.String
+                    (match r with
+                     | One_to_one -> "one-to-one"
+                     | Many_to_one -> "many-to-one"
+                     | One_to_many -> "one-to-many"
+                     | Many_to_many -> "many-to-many") )
+            ] )
   in
   lower ~fields:d.fields d.plan base
 ;;

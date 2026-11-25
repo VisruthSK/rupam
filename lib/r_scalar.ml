@@ -55,7 +55,9 @@ let compile ?(annotate = Source_map.plain) ds =
     "v" ^ string_of_int !next
   in
   let q = Polars.quoted in
-  let rec emit env x = annotate x.span (render env x)
+  let rec emit env x =
+    let code = render env x in
+    annotate x.span (if Infer.converted x then "as.numeric(" ^ code ^ ")" else code)
   and render env x =
     let exp = emit env in
     let call f args = "(" ^ f ^ ")(" ^ String.concat ", " args ^ ")" in

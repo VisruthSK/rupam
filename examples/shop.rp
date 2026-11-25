@@ -19,7 +19,7 @@ let cleaned = clean(orders)
 let regional =
     cleaned
     |> summarize(
-         transactions = count(),
+         transactions = n(),
          total_margin = sum(margin),
          by = region
        )

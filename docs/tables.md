@@ -44,15 +44,16 @@ left out of previews and generated output.
 | Verb | What it does |
 | --- | --- |
 | `filter(pred, missing = skip)` | keeps rows where `pred` is `TRUE`; `missing` says what happens where `pred` is missing |
-| `select(a, b)` | keeps and orders columns; also `a:c`, `-a`, `starts_with("x_")`, `where(is_numeric)` |
+| `select(a, b, new = old)` | keeps, orders and renames columns; also `a:c`, `-a`, `starts_with("x_")`, `where(is_numeric)` |
 | `mutate(x = e, y = e2)` | adds or replaces columns in order; `y` can use the new `x` |
-| `rename(old = new)` | renames columns |
+| `rename(new = old)` | renames columns |
 | `summarize(n = n(), s = sum(x), by = k)` | one row per group with the keys and the summaries |
 | `arrange(k, desc(v))` | an explicitly ordered view |
-| `take(n)` | first `n` rows of an ordered view; on an unordered table it is an error |
+| `slice_head(n = 5)` | the first rows of an arranged table; on an unordered table it is an error |
+| `count(a, b)` | `summarize(n = n(), by = [a, b])` |
 | `distinct(a, b)` | one row per distinct key |
-| `join(other, on = k, how = left)` | `inner`, `left`, `right`, `full`, `semi` or `anti`; `on = left.a == right.b` for differing names |
-| `pivot_longer(cols = (a, b), names_to = k, values_to = v)` | columns into key/value rows |
+| `left_join(other, by = k, relationship = many_to_one)` | also `inner_join`, `right_join`, `full_join`, `semi_join` and `anti_join`; `by = (a == b)` for differing names |
+| `pivot_longer(cols = [a, b], names_to = k, values_to = v)` | columns into key/value rows |
 | `pivot_wider(names_from = k, values_from = v, levels = [a, b])` | the reverse; the output columns must be listed |
 | `print(t)` | shows the table; in a script, prints it |
 | `write_parquet(t, "out.parquet")` | writes the result |
@@ -99,7 +100,7 @@ language, so anything you can write at the top level works on columns:
 `square` is scalar, so it is applied row by row. `standardize` calls the
 aggregates `mean` and `sd`, so it sees the whole column (or the whole group
 under `by`), and their results are broadcast back to each row. Columns from two
-unrelated tables cannot be combined without a `join`, even if they happen to
+unrelated tables cannot be combined without a join, even if they happen to
 have the same length.
 
 ## Missing values
@@ -107,16 +108,26 @@ have the same length.
 Missing is `None`. It is distinct from `NaN`, from zero and from the empty
 string, and rupam never fills it in for you.
 
-- Arithmetic on a `T?` gives a `T?`. A scalar function applied to a nullable
-  column is skipped on missing rows.
-- `coalesce(x, default)` gives a non-optional result.
-- `sum`, `mean` and `sd` skip missing values and return `None` when nothing is
-  left (or fewer than two values for `sd`). `n()` counts rows and is never
-  missing.
-- Missing values in a grouping key form one group, and `NaN` keys form another.
-- A `filter` whose condition can be missing needs a policy:
-  `filter(cost > 0.0, missing = skip)` drops those rows, `missing = propagate`
-  keeps them and `missing = error` stops the run.
+Arithmetic, comparisons and function calls on a `T?` give a `T?` that is
+missing where the input is. `coalesce(x, default)` gives a non-optional
+result, and `filter(some(x))` makes `x` non-optional in the rows that remain.
+
+Wherever a missing value would change the answer, you choose what happens:
+
+```text
+orders |> filter(cost > 0.0, missing = skip)
+orders |> summarize(average = mean(cost), by = region, missing = skip)
+orders |> summarize(average = mean(cost, missing = propagate), by = region)
+```
+
+`skip` leaves missing values out, `propagate` makes the result missing, and
+`error` stops the run. A verb's `missing =` applies to every reduction in it,
+and a call's own `missing =` wins. Without one, a filter or a reduction on a
+column that can be missing is a type error.
+
+`sum`, `mean`, `median`, `min` and `max` return `None` when there are no
+values left, and `var` and `sd` when there are fewer than two. `n()` counts
+rows and is never missing. Missing values in a grouping key form one group.
 
 ## Generated code
 

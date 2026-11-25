@@ -54,7 +54,16 @@ let rec types env =
 
 let unsupported what = raise (Error (what ^ " is not available inside a table verb yet"))
 
-let rec elaborate env columns source =
+let policy (x : Syntax.expr) =
+  match x.form with
+  | Name (_, "skip") -> Skip
+  | Name (_, "propagate") -> Propagate
+  | Name (_, "error") -> Fail
+  | _ -> raise (Error "missing must be skip, propagate or error")
+;;
+
+let rec elaborate ?missing env columns source =
+  let elaborate = elaborate ?missing in
   let go = elaborate env columns in
   match source.form with
   | Literal (Bool b) -> constant (`Bool b)
@@ -82,7 +91,7 @@ let rec elaborate env columns source =
   | Pipe (x, { form = Call (f, args); _ }) ->
     go { source with form = Call (f, (None, x) :: args) }
   | Pipe (x, f) -> go { source with form = Call (f, [ None, x ]) }
-  | Match (subject, branches) -> choice env columns (go subject) branches
+  | Match (subject, branches) -> choice ?missing env columns (go subject) branches
   | Call ({ form = Name (Bare, "Some"); _ }, [ (None, x) ]) ->
     let x = go x in
     { x with typ = { x.typ with nullable = true } }
@@ -94,6 +103,12 @@ let rec elaborate env columns source =
     let v = go arg in
     { v with node = Polars_sqrt v }
   | Call ({ form = Name (Bare, name); _ }, args) ->
+    let missing =
+      match List.assoc_opt (Some "missing") args with
+      | Some p -> Some (policy p)
+      | None -> missing
+    in
+    let args = List.filter (fun (label, _) -> label <> Some "missing") args in
     let values =
       List.map
         (function
@@ -108,7 +123,8 @@ let rec elaborate env columns source =
      | Some _, _, _ -> raise (Error (name ^ " is not a function"))
      | None, Some Coalesce, [ x; fallback ] -> coalesce x fallback
      | None, Some (Row row), _ -> apply row values
-     | None, Some (Reduction r), [ x ] -> reduce r x
+     | None, Some (Reduction Count), [] -> count
+     | None, Some (Reduction r), [ x ] -> reduce ?policy:missing r x
      | _ -> raise (Error ("Wrong arguments to " ^ name)))
   | Call ({ form = Lambda (params, body); _ }, args)
     when List.length params = List.length args ->
@@ -125,7 +141,8 @@ let rec elaborate env columns source =
   | Member (x, { form = List items; _ }) -> member (go x) (List.map go items)
   | Member _ -> unsupported "%in% with a computed set"
 
-and choice env columns subject arms =
+and choice ?missing env columns subject arms =
+  let elaborate = elaborate ?missing in
   let known e = coalesce e (constant (`Bool false)) in
   let both a b =
     match a, b with
@@ -191,10 +208,10 @@ and choice env columns subject arms =
       earlier
 ;;
 
-let expression env columns source =
+let expression ?missing env columns source =
   let fields = List.map (fun (n, (x : Shape.expr)) -> n, typ x.typ) columns in
   ignore (Infer.expression (Infer.rows (types env) fields) 1 source);
-  elaborate env columns source
+  elaborate ?missing env columns source
 ;;
 
 let define env = function

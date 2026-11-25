@@ -54,6 +54,9 @@ module Decisions = Hashtbl.Make (struct
 
 let decisions : decision Decisions.t = Decisions.create 256
 let decide x d = Decisions.replace decisions x d
+let conversions : unit Decisions.t = Decisions.create 64
+let convert x = Decisions.replace conversions x ()
+let converted x = Decisions.mem conversions x
 
 let promoted x =
   match Decisions.find_opt decisions x with
@@ -301,6 +304,7 @@ let signature builtin =
     | Reduction (Mean | Median | Var | Sd) ->
       Arrow ([ Option (var Numeric) ], Option Float)
     | Reduction Distinct -> Arrow ([ Option (var Any) ], Int)
+    | Reduction Count -> Arrow ([], Int)
   in
   !vars, t
 ;;
@@ -485,16 +489,30 @@ let rec expression env level source =
     let args = List.map check arguments in
     match repr f with
     | Arrow (ps, r) when List.length ps = List.length args ->
+      let integer t =
+        match repr t with
+        | Int -> true
+        | _ -> false
+      in
       let flags =
         List.map2
-          (fun p a ->
+          (fun p (x, a) ->
              match repr p, repr a with
              | Option _, Option _ | Var { contents = Free (_, Any) }, _ ->
                equal p a;
                false
+             | Option inner, Int when repr inner = Float ->
+               convert x;
+               false
              | Option inner, _ ->
                equal inner a;
                false
+             | Float, Int ->
+               convert x;
+               false
+             | Float, Option inner when integer inner ->
+               convert x;
+               true
              | _, Option inner ->
                equal p inner;
                true
@@ -502,7 +520,7 @@ let rec expression env level source =
                equal p a;
                false)
           ps
-          args
+          (List.combine arguments args)
       in
       decide source (Lifted (flags, r));
       if List.mem true flags then optional r else r
@@ -521,9 +539,20 @@ let rec expression env level source =
   let operands a b =
     let ta, la = strip (check a)
     and tb, lb = strip (check b) in
-    equal ta tb;
-    decide source (Lifted ([ la; lb ], ta));
-    ta, la || lb
+    let common =
+      match repr ta, repr tb with
+      | Int, Float ->
+        convert a;
+        tb
+      | Float, Int ->
+        convert b;
+        ta
+      | _ ->
+        equal ta tb;
+        ta
+    in
+    decide source (Lifted ([ la; lb ], common));
+    common, la || lb
   in
   let lift lifted t = if lifted then optional t else t in
   match source.form with
@@ -648,7 +677,9 @@ let rec expression env level source =
     let ts = List.map (fun _ -> fresh level Any) ps in
     let locals = List.map2 (fun p t -> p, ([], t)) ps ts in
     Arrow (ts, expression (extend env locals) level body)
-  | Call (f, args) -> call (check f) (List.map snd args)
+  | Call (f, args) ->
+    let configuration (label, _) = label = Some "missing" in
+    call (check f) (List.map snd (List.filter (fun a -> not (configuration a)) args))
   | Pipe (x, f) ->
     (match f.form with
      | Call (g, args) -> call (check g) (x :: List.map snd args)
@@ -674,11 +705,16 @@ let rec expression env level source =
           | String -> ()
           | t -> equal (fresh level Numeric) t);
          Bool
-       | Add | Sub | Mul | Power | Mod ->
+       | Add | Sub | Mul | Mod ->
          equal (fresh level Numeric) t;
          t
-       | Div ->
-         equal Float t;
+       | Div | Power ->
+         equal (fresh level Numeric) t;
+         (match repr t with
+          | Int ->
+            convert a;
+            convert b
+          | _ -> ());
          Float)
   | If (c, a, b) ->
     (match repr (check c) with

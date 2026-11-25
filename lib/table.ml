@@ -138,8 +138,8 @@ let grouping table groups =
   let rec keys x =
     match x.Syntax.form with
     | Name ((Bare | Column), n) -> [ n, Check.lookup n table.schema ]
-    | Tuple xs -> List.concat_map keys xs
-    | _ -> raise (Error "Expected named grouping columns")
+    | Tuple xs | List xs -> List.concat_map keys xs
+    | _ -> raise (Error "by takes a column or a list of columns")
   in
   match groups with
   | [] -> []
@@ -162,12 +162,12 @@ let transform env table verb arguments =
     let mapping =
       List.map
         (function
-          | Some a, { Syntax.form = Name (Bare, b); _ } ->
+          | Some b, { Syntax.form = Name ((Bare | Column), a); _ } ->
             let x = Check.lookup a table.schema in
             (match x.node with
              | Input i -> a, b, i
              | _ -> assert false)
-          | _ -> raise (Error "Expected rename(old = new)"))
+          | _ -> raise (Error "rename takes new = old"))
         arguments
     in
     let changes = List.map (fun (a, b, _) -> a, b) mapping in
@@ -183,15 +183,16 @@ let transform env table verb arguments =
       || List.length old <> List.length (List.sort_uniq compare old)
     then raise (Error "Duplicate rename field");
     { table with schema; steps = Rename mapping :: table.steps }
-  | "take", [ (None, { Syntax.form = Literal (Int n); _ }) ] ->
+  | "slice_head", [ (Some "n", { Syntax.form = Literal (Int n); _ }) ] ->
     if not table.ordered
-    then raise (Error "take requires arrange with explicit ordering keys");
+    then raise (Error "slice_head needs an order: arrange the table first");
     let count =
       match int_of_string_opt n with
       | Some i when i >= 0 -> i
-      | _ -> raise (Error "Invalid take count")
+      | _ -> raise (Error "slice_head needs a nonnegative n")
     in
     { table with steps = Take count :: table.steps }
+  | "slice_head", _ -> raise (Error "slice_head takes n = count")
   | "distinct", _ ->
     let projected = if arguments = [] then table else select table arguments in
     { table with
@@ -208,6 +209,10 @@ let transform env table verb arguments =
     in
     { table with ordered = true; steps = Arrange (List.map key arguments) :: table.steps }
   | "summarize", _ ->
+    let missing, arguments =
+      List.partition (fun (label, _) -> label = Some "missing") arguments
+    in
+    let missing = Option.map (fun (_, p) -> Check.policy p) (List.nth_opt missing 0) in
     let groups, values = List.partition (fun (label, _) -> label = Some "by") arguments in
     let keys = grouping table groups in
     let measures =
@@ -217,7 +222,7 @@ let transform env table verb arguments =
             , { Syntax.form = Call ({ form = Name (Bare, ("count" | "n")); _ }, []); _ } )
             -> n, None
           | Some n, x ->
-            let value = Check.expression env table.schema x in
+            let value = Check.expression ?missing env table.schema x in
             if value.typ.shape <> Scalar then raise (Error "Summary must yield a scalar");
             n, Some value
           | _ -> raise (Error "Summary requires named expressions"))
@@ -254,19 +259,36 @@ let transform env table verb arguments =
     let policy =
       match options with
       | [] -> None
-      | [ (Some "missing", { Syntax.form = Name (_, "skip"); _ }) ] -> Some Shape.Skip
-      | [ (Some "missing", { Syntax.form = Name (_, "propagate"); _ }) ] -> Some Propagate
-      | [ (Some "missing", { Syntax.form = Name (_, "error"); _ }) ] -> Some Fail
-      | [ (Some "missing", _) ] ->
-        raise (Error "missing must be skip, propagate or error")
+      | [ (Some "missing", p) ] -> Some (Check.policy p)
       | _ -> raise (Error "filter takes one condition and an optional missing =")
     in
     let predicate =
       Shape.filter table.context policy (Check.expression env table.schema x)
     in
-    { table with ordered = false; steps = Filter predicate :: table.steps }
+    let rec present (x : Syntax.expr) =
+      match x.form with
+      | Call
+          ( { form = Name (Bare, "some"); _ }
+          , [ (None, { form = Name ((Bare | Column), n); _ }) ] ) -> [ n ]
+      | Binary (And, a, b) -> present a @ present b
+      | _ -> []
+    in
+    let refined = present x in
+    let schema =
+      List.map
+        (fun ((n, (e : Shape.expr)) as field) ->
+           if List.mem n refined
+           then n, { e with typ = { e.typ with nullable = false } }
+           else field)
+        table.schema
+    in
+    { table with schema; ordered = false; steps = Filter predicate :: table.steps }
   | "filter", _ -> raise (Error "filter takes one condition and an optional missing =")
   | "mutate", _ ->
+    let missing, arguments =
+      List.partition (fun (label, _) -> label = Some "missing") arguments
+    in
+    let missing = Option.map (fun (_, p) -> Check.policy p) (List.nth_opt missing 0) in
     let by, arguments = List.partition (fun (n, _) -> n = Some "by") arguments in
     let keys = grouping table by in
     List.fold_left
@@ -278,7 +300,9 @@ let transform env table verb arguments =
          in
          let exists = List.mem_assoc n table.schema in
          let value =
-           broadcast (Column table.context) (Check.expression env table.schema x)
+           broadcast
+             (Column table.context)
+             (Check.expression ?missing env table.schema x)
          in
          let field = n, input table.next value.typ in
          let schema =
@@ -299,6 +323,21 @@ let transform env table verb arguments =
 ;;
 
 let stage ?span env table verb arguments =
+  let verb, arguments =
+    match verb with
+    | "count" ->
+      let span =
+        match arguments with
+        | (_, x) :: _ -> x.Syntax.span
+        | [] -> Option.value span ~default:(Lexing.dummy_pos, Lexing.dummy_pos)
+      in
+      let at form = { Syntax.form; span } in
+      ( "summarize"
+      , [ Some "n", at (Call (at (Name (Bare, "n")), []))
+        ; Some "by", at (List (List.map snd arguments))
+        ] )
+    | _ -> verb, arguments
+  in
   let result = transform env table verb arguments in
   let location = function
     | Bind (n, _) | Window (n, _, _) ->

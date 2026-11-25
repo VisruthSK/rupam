@@ -113,6 +113,8 @@ let lower ~fields (table : Table.t) =
     | Coalesce (a, b) -> P.Call (pl "coalesce", positional [ emit a; emit b ])
     | Polars_sqrt a -> P.meth (emit a) "sqrt" []
     | Apply (row, args) -> apply row (List.map emit args)
+    | Convert a -> P.meth (emit a) "cast" [ P.Positional (pl "Float64") ]
+    | Count -> P.meth (P.Call (pl "len", [])) "cast" [ P.Positional (pl "Int64") ]
     | Member (a, items) ->
       P.meth (emit a) "is_in" [ P.Positional (P.List (List.map emit_value items)) ]
     | Unary (Not, a) -> P.Unary (P.Invert, emit a)
@@ -141,10 +143,26 @@ let lower ~fields (table : Table.t) =
            | Or -> P.Either)
         , emit a
         , emit b )
-    | Reduce (reduction, a) ->
-      let a = emit a in
+    | Reduce (reduction, policy, a) ->
+      let source = emit a in
+      let a =
+        match policy with
+        | Fail ->
+          P.meth
+            source
+            "map_batches"
+            [ P.Positional (P.Name "rp_present"); P.Keyword ("return_dtype", dtype x.typ) ]
+        | Skip | Propagate -> source
+      in
       let ddof = [ P.Keyword ("ddof", P.Int "1") ] in
-      (match reduction with
+      let guard value =
+        match policy with
+        | Propagate ->
+          choose (P.Binary (P.Equal, P.meth source "null_count" [], P.Int "0")) value P.Null
+        | Skip | Fail -> value
+      in
+      guard
+      @@ (match reduction with
        | Sum ->
          choose
            (P.Binary (P.Greater, P.meth a "count" [], P.Int "0"))
@@ -156,6 +174,7 @@ let lower ~fields (table : Table.t) =
        | Sd -> P.meth a "std" ddof
        | Min -> P.meth a "min" []
        | Max -> P.meth a "max" []
+       | Count -> P.meth (P.Call (pl "len", [])) "cast" [ P.Positional (pl "Int64") ]
        | Distinct ->
          P.meth
            (P.meth (P.meth a "drop_nulls" []) "n_unique" [])

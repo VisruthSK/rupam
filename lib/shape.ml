@@ -47,8 +47,10 @@ type node =
   | Input of int
   | Broadcast of int * expr
   | Binary of operator * expr * expr
-  | Reduce of Prelude.reduction * expr
+  | Reduce of Prelude.reduction * policy * expr
   | Member of expr * expr list
+  | Convert of expr
+  | Count
 
 and expr =
   { node : node
@@ -113,8 +115,23 @@ let constant value =
   { node = Constant value; typ = { primitive; nullable = false; shape = Scalar } }
 ;;
 
+let to_float x =
+  match x.typ.primitive, x.node with
+  | Int64, Constant (`Int i) ->
+    { node = Constant (`Float (Int64.to_float i)); typ = { x.typ with primitive = Float64 } }
+  | Int64, _ -> { node = Convert x; typ = { x.typ with primitive = Float64 } }
+  | _ -> x
+;;
+
 let binary op left right =
   let left, right = common left right in
+  let left, right =
+    match op, left.typ.primitive, right.typ.primitive with
+    | (Div | Power), _, _ -> to_float left, to_float right
+    | _, Int64, Float64 -> to_float left, right
+    | _, Float64, Int64 -> left, to_float right
+    | _ -> left, right
+  in
   let a = left.typ
   and b = right.typ in
   if a.primitive <> b.primitive
@@ -129,10 +146,6 @@ let binary op left right =
   let primitive =
     match op with
     | Less | Greater | Less_equal | Greater_equal | Equal | Not_equal | And | Or -> Bool
-    | Div when a.primitive = Int64 ->
-      raise (Error "Dividing Int64 columns needs an explicit conversion to Float64")
-    | Power when a.primitive = Int64 ->
-      raise (Error "^ on Int64 columns is not supported yet")
     | Add | Sub | Mul | Div | Mod | Power -> a.primitive
   in
   let shape = align a.shape b.shape in
@@ -169,19 +182,30 @@ let apply (row : Prelude.row) args =
   { node = Apply (row, args); typ = { primitive; nullable; shape } }
 ;;
 
-let reduce (reduction : Prelude.reduction) x =
+let reduce ?policy (reduction : Prelude.reduction) x =
+  let name = Prelude.name (Reduction reduction) in
   match x.typ.shape with
-  | Scalar ->
-    raise
-      (Error (Prelude.name (Reduction reduction) ^ " needs a column, not a single value"))
+  | Scalar -> raise (Error (name ^ " needs a column, not a single value"))
   | Column _ ->
+    let policy =
+      match policy, x.typ.nullable with
+      | Some p, true -> p
+      | _, false -> Skip
+      | None, true ->
+        raise
+          (Error
+             (name
+              ^ " reads a column that can be missing. Say what to do with missing values: \
+                 missing = skip ignores them, missing = propagate makes the result \
+                 missing, missing = error stops the run"))
+    in
     let primitive, nullable =
       match reduction with
       | Sum | Min | Max -> x.typ.primitive, true
       | Mean | Median | Var | Sd -> Float64, true
-      | Distinct -> Int64, false
+      | Distinct | Count -> Int64, policy = Propagate
     in
-    { node = Reduce (reduction, x); typ = { primitive; nullable; shape = Scalar } }
+    { node = Reduce (reduction, policy, x); typ = { primitive; nullable; shape = Scalar } }
 ;;
 
 let coalesce x fallback =
@@ -224,3 +248,5 @@ let member x items =
   then raise (Error "%in% needs a list of values");
   { node = Member (x, items); typ = { x.typ with primitive = Bool } }
 ;;
+
+let count = { node = Count; typ = { primitive = Int64; nullable = false; shape = Scalar } }

@@ -108,7 +108,7 @@ let () =
     | [ Syntax.Evaluate x ] -> Table.pipeline [] [ "t", s ] x
     | _ -> assert false
   in
-  rejects (fun () -> plan "t |> take(1)");
+  rejects (fun () -> plan "t |> slice_head(n = 1)");
   let rows, _ =
     Table.execute
       (plan "t |> distinct(x)")
@@ -118,7 +118,7 @@ let () =
   assert (rows = 3);
   assert (
     Table.execute
-      (plan "t |> arrange(desc(x)) |> take(1)")
+      (plan "t |> arrange(desc(x)) |> slice_head(n = 1)")
       ~rows:3
       [ [| F 1.; Missing; F 5. |] ]
     = (1, [ "x", [| F 5. |] ]))
@@ -200,7 +200,10 @@ let () =
   in
   let p = plan "sales |> mutate(a=revenue+1,b=a*2) |> select(b)" in
   assert (Table.execute p ~rows:1 [ [| F 3. |]; [| I 1L |] ] = (1, [ "b", [| F 8. |] ]));
-  rejects (fun () -> plan "sales |> mutate(b=revenue+id)");
+  assert (
+    Table.execute (plan "sales |> mutate(b=revenue+id) |> select(b)") ~rows:1
+      [ [| F 3. |]; [| I 1L |] ]
+    = (1, [ "b", [| F 4. |] ]));
   rejects (fun () -> plan "sales |> mutate(b=revenue+9007199254740993)")
 ;;
 
