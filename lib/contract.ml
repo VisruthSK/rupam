@@ -71,18 +71,28 @@ let import path =
   | _ -> failwith "data-dict export-spec failed"
 ;;
 
-let describe t =
+let describe_table (table : table) =
+  print_endline table.name;
+  let width =
+    List.fold_left (fun w (c : column) -> max w (String.length c.name)) 0 table.columns
+  in
   List.iter
-    (fun (table : table) ->
-       Printf.printf "%s (values pending)\n" table.name;
-       List.iter
-         (fun (column : column) ->
-            Printf.printf
-              "  %s : %s%s%s\n"
-              column.name
-              column.logical_type
-              (if column.required then "" else "?")
-              (if column.restricted then " [restricted]" else ""))
-         table.columns)
+    (fun (column : column) ->
+       Printf.printf
+         "  %-*s  %s%s%s\n"
+         width
+         column.name
+         column.logical_type
+         (if column.required then "" else "?")
+         (if column.restricted then "  restricted" else ""))
+    table.columns
+;;
+
+let describe t =
+  Printf.printf "contract %s\n" (Filename.basename t.path);
+  List.iter
+    (fun table ->
+       print_newline ();
+       describe_table table)
     t.tables
 ;;

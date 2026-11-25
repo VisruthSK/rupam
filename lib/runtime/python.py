@@ -1,23 +1,6 @@
 import json
 import math
-
-
-def rp_div(a, b):
-    if b != 0.0:
-        return a / b
-    if a == 0.0 or math.isnan(a):
-        return math.nan
-    return math.copysign(math.inf, math.copysign(1.0, a) * math.copysign(1.0, b))
-
-
-def rp_int(x):
-    if x < -(1 << 63) or x >= (1 << 63):
-        raise OverflowError("Int64 overflow")
-    return x
-
-
-def rp_num(x):
-    return rp_int(x) if type(x) is int else x
+import re
 
 
 def rp_float(x):
@@ -70,7 +53,7 @@ def rp_format(v, shape):
     if kind == "list":
         return "[" + ", ".join(rp_format(x, shape[1]) for x in v) + "]"
     if kind == "option":
-        return "None" if v is None else "Some(" + rp_format(v[1], shape[1]) + ")"
+        return "None" if v is None else "Some(" + rp_format(v, shape[1]) + ")"
     if kind == "tuple":
         return "(" + ", ".join(rp_format(x, s) for x, s in zip(v, shape[1:])) + ")"
     if kind == "record":

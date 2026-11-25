@@ -3,6 +3,51 @@ module R = R_syntax
 
 let all_of names = R.call "all_of" [ R.strings names ]
 
+let apply (row : Prelude.row) args =
+  let call f = R.call f args in
+  match row, args with
+  | Abs, _ -> call "abs"
+  | Sign, [ x ] ->
+    R.qualified "bit64" "as.integer64" [ R.Positional (R.call "sign" [ x ]) ]
+  | Sqrt, _ -> call "sqrt"
+  | Exp, _ -> call "exp"
+  | Log, _ -> call "log"
+  | Log2, _ -> call "log2"
+  | Log10, _ -> call "log10"
+  | Floor, [ x ] -> R.call "floor" [ R.call "as.double" [ x ] ]
+  | Ceiling, [ x ] -> R.call "ceiling" [ R.call "as.double" [ x ] ]
+  | Trunc, [ x ] -> R.call "trunc" [ R.call "as.double" [ x ] ]
+  | Round, [ x ] -> R.call "round" [ R.call "as.double" [ x ] ]
+  | Pmin, _ -> call "pmin"
+  | Pmax, _ -> call "pmax"
+  | Present, [ x ] -> R.Not (R.call "is.na" [ x ])
+  | Absent, _ -> call "is.na"
+  | Length, [ x ] ->
+    R.qualified
+      "bit64"
+      "as.integer64"
+      [ R.Positional
+          (R.Call (R.Name "nchar", [ R.Positional x; R.Named ("type", R.String "chars") ]))
+      ]
+  | Lower, _ -> call "tolower"
+  | Upper, _ -> call "toupper"
+  | Trim, _ -> call "trimws"
+  | Starts, [ x; p ] -> R.call "startsWith" [ x; p ]
+  | Ends, [ x; p ] -> R.call "endsWith" [ x; p ]
+  | Detect, [ x; p ] ->
+    R.qualified
+      "dplyr"
+      "if_else"
+      [ R.Positional (R.call "is.na" [ x ])
+      ; R.Positional R.Na
+      ; R.Positional
+          (R.Call
+             ( R.Name "grepl"
+             , [ R.Positional p; R.Positional x; R.Named ("perl", R.Logical true) ] ))
+      ]
+  | _ -> raise (Error ("Wrong arguments to " ^ Prelude.name (Row row)))
+;;
+
 let lower ~fields (plan : Table.t) base =
   let names = Array.make plan.next "" in
   List.iteri (fun i n -> names.(i) <- n) fields;
@@ -19,15 +64,26 @@ let lower ~fields (plan : Table.t) base =
       R.qualified "bit64" "as.integer64" [ R.Positional (R.String (Int64.to_string i)) ]
     | Constant (`Float f) -> R.Number (R.number f)
     | Constant (`Bool b) -> R.Logical b
+    | Constant (`String s) -> R.String s
+    | Null ->
+      (match e.typ.primitive with
+       | Int64 -> R.Namespaced ("bit64", "NA_integer64_")
+       | Float64 -> R.Name "NA_real_"
+       | Bool -> R.Na
+       | String -> R.Name "NA_character_")
     | Choose (c, t, f) ->
       R.qualified
         "dplyr"
         "if_else"
         [ R.Positional (emit c); R.Positional (emit t); R.Positional (emit f) ]
-    | Coalesce (a, b) -> R.call "rp_coalesce" [ emit a; emit b ]
+    | Coalesce (a, b) ->
+      R.qualified "dplyr" "coalesce" [ R.Positional (emit a); R.Positional (emit b) ]
     | Polars_sqrt _ ->
       raise (Error "R target cannot execute the Python capability polars.sqrt")
-    | Abs a -> R.call "abs" [ emit a ]
+    | Apply (row, args) -> apply row (List.map emit args)
+    | Unary (Not, a) -> R.Not (emit a)
+    | Unary (Negate, a) -> R.Negate (emit a)
+    | Required a -> R.call "rp_present" [ emit a ]
     | Binary (op, a, b) ->
       R.Binary
         ( (match op with
@@ -35,19 +91,49 @@ let lower ~fields (plan : Table.t) base =
            | Sub -> R.Subtract
            | Mul -> R.Multiply
            | Div -> R.Divide
-           | Greater -> R.Greater)
+           | Mod -> R.Modulo
+           | Power -> R.Power
+           | Less -> R.Less
+           | Greater -> R.Greater
+           | Less_equal -> R.Less_equal
+           | Greater_equal -> R.Greater_equal
+           | Equal -> R.Equal
+           | Not_equal -> R.Not_equal
+           | And -> R.Both
+           | Or -> R.Either)
         , emit a
         , emit b )
+    | Reduce (Distinct, a) ->
+      R.qualified
+        "dplyr"
+        "n_distinct"
+        [ R.Positional (emit a); R.Named ("na.rm", R.Logical true) ]
+      |> fun n -> R.qualified "bit64" "as.integer64" [ R.Positional n ]
     | Reduce (r, a) ->
-      R.call
-        "rp_fold"
-        [ emit a
-        ; R.Name
-            (match r with
-             | Mean -> "mean"
-             | Sd -> "sd"
-             | Sum -> "sum")
-        ]
+      let x = emit a in
+      let present f = R.Call (f, [ R.Positional x; R.Named ("na.rm", R.Logical true) ]) in
+      let unless_empty value =
+        R.qualified
+          "dplyr"
+          "if_else"
+          [ R.Positional (R.call "all" [ R.call "is.na" [ x ] ])
+          ; R.Positional R.Na
+          ; R.Positional value
+          ]
+      in
+      (match r with
+       | Mean ->
+         R.qualified
+           "dplyr"
+           "na_if"
+           [ R.Positional (present (R.Name "mean")); R.Positional (R.Name "NaN") ]
+       | Median -> present (R.Namespaced ("stats", "median"))
+       | Var -> present (R.Namespaced ("stats", "var"))
+       | Sd -> present (R.Namespaced ("stats", "sd"))
+       | Sum -> unless_empty (present (R.Name "sum"))
+       | Min -> unless_empty (present (R.Name "min"))
+       | Max -> unless_empty (present (R.Name "max"))
+       | Distinct -> assert false)
   in
   let stage = function
     | Table.Pivot p ->
@@ -158,11 +244,12 @@ let rec table d =
 let compile ?strict ~directory declarations =
   R.Verbatim Adapters.dplyr
   :: List.map
-       (fun (d, path) ->
+       (fun (d, output) ->
+          let t = table (Analysis_program.public_view d) in
           R.Expression
-            (R.pipe
-               (table (Analysis_program.public_view d))
-               (R.call "rp_write" [ R.String path ])))
+            (match (output : Analysis_program.output) with
+             | Write path -> R.pipe t (R.call "rp_write" [ R.String path ])
+             | Print -> R.call "print" [ R.call "as_tibble" [ t ] ]))
        (Analysis_program.compile ?strict ~directory declarations)
 ;;
 

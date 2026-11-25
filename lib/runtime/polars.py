@@ -13,6 +13,12 @@ import pyarrow.parquet as pq
 
 
 
+def rp_present(series):
+    if series.null_count() > 0:
+        raise ValueError("filter condition is missing and missing = error")
+    return series
+
+
 def rp_wider(data, ids, key, value, labels):
     frame = data.collect()
     if frame.filter(pl.col(key).is_null() | ~pl.col(key).is_in(labels)).height:

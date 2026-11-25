@@ -27,9 +27,9 @@ type env =
   { values : (string * scheme) list
   ; types : (string * scheme) list
   ; variants : (string * (string * scheme) list) list
+  ; columns : (string * typ) list
   }
 
-let empty = { values = []; types = []; variants = [] }
 let extend env xs = { env with values = xs @ env.values }
 
 exception Error of span * string
@@ -39,6 +39,44 @@ let fresh level c = Var (ref (Free (level, c)))
 let rec repr = function
   | Var { contents = Link t } -> repr t
   | t -> t
+;;
+
+type decision =
+  | Integer of typ
+  | Lifted of bool list * typ
+
+module Decisions = Hashtbl.Make (struct
+    type t = Syntax.expr
+
+    let equal = ( == )
+    let hash = Hashtbl.hash
+  end)
+
+let decisions : decision Decisions.t = Decisions.create 256
+let decide x d = Decisions.replace decisions x d
+
+let promoted x =
+  match Decisions.find_opt decisions x with
+  | Some (Integer t) ->
+    (match repr t with
+     | Float -> true
+     | _ -> false)
+  | _ -> false
+;;
+
+let lifted x =
+  match Decisions.find_opt decisions x with
+  | Some (Lifted (flags, _)) when List.mem true flags -> Some flags
+  | _ -> None
+;;
+
+let generic x =
+  match Decisions.find_opt decisions x with
+  | Some (Lifted (_, t)) ->
+    (match repr t with
+     | Var _ -> true
+     | _ -> false)
+  | _ -> false
 ;;
 
 let rec variables f t =
@@ -53,8 +91,50 @@ let rec variables f t =
   | _ -> ()
 ;;
 
-let unify span =
-  let fail () = raise (Error (span, "Incompatible types")) in
+let display t =
+  let vars = ref [] in
+  let rec show t =
+    match repr t with
+    | Variant (n, []) -> n
+    | Variant (n, ts) -> n ^ "<" ^ String.concat ", " (List.map show ts) ^ ">"
+    | List t -> "List<" ^ show t ^ ">"
+    | Option t -> show t ^ "?"
+    | Tuple ts -> "(" ^ String.concat ", " (List.map show ts) ^ ")"
+    | Record (fs, tail) ->
+      "{"
+      ^ String.concat
+          ", "
+          (List.map (fun (n, t) -> n ^ ": " ^ show t) fs
+           @ Option.to_list (Option.map (fun t -> ".." ^ show t) tail))
+      ^ "}"
+    | Int -> "Int64"
+    | Float -> "Float64"
+    | Bool -> "Bool"
+    | String -> "String"
+    | Arrow (ps, r) -> "(" ^ String.concat ", " (List.map show ps) ^ ") -> " ^ show r
+    | Var ({ contents = Free (_, c) } as v) ->
+      (match List.find_opt (fun (k, _) -> k == v) !vars with
+       | Some (_, (_, s)) -> s
+       | None ->
+         let same = List.length (List.filter (fun (_, (k, _)) -> k = c) !vars) in
+         let s =
+           match c, same with
+           | Numeric, 0 -> "Num"
+           | Numeric, n -> "Num" ^ string_of_int (n + 1)
+           | Any, n when n < 4 -> String.make 1 "TUVW".[n]
+           | Any, n -> "T" ^ string_of_int (n + 1)
+         in
+         vars := (v, (c, s)) :: !vars;
+         s)
+    | Var _ -> assert false
+  in
+  show t
+;;
+
+exception Mismatch
+
+let unify span expected actual =
+  let fail () = raise Mismatch in
   let rec equal x y =
     match repr x, repr y with
     | Var a, Var b when a == b -> ()
@@ -108,7 +188,11 @@ let unify span =
     | Int, Int | Float, Float | Bool, Bool | String, String -> ()
     | _ -> fail ()
   in
-  equal
+  try equal expected actual with
+  | Mismatch ->
+    raise
+      (Error
+         (span, Printf.sprintf "Expected %s, found %s" (display expected) (display actual)))
 ;;
 
 let generalize level t =
@@ -184,6 +268,55 @@ let rec annotation env params level = function
              result
            | _ -> failwith ("Wrong type arity: " ^ n))
         | _ -> failwith ("Unknown type or wrong arity: " ^ n)))
+;;
+
+let signature builtin =
+  let vars = ref [] in
+  let var c =
+    let v = ref (Free (max_int, c)) in
+    vars := v :: !vars;
+    Var v
+  in
+  let t =
+    match (builtin : Prelude.builtin) with
+    | Coalesce ->
+      let a = var Any in
+      Arrow ([ Option a; a ], a)
+    | Row Abs ->
+      let a = var Numeric in
+      Arrow ([ a ], a)
+    | Row Sign -> Arrow ([ var Numeric ], Int)
+    | Row (Sqrt | Exp | Log | Log2 | Log10 | Floor | Ceiling | Trunc | Round) ->
+      Arrow ([ var Numeric ], Float)
+    | Row (Pmin | Pmax) ->
+      let a = var Numeric in
+      Arrow ([ a; a ], a)
+    | Row (Present | Absent) -> Arrow ([ Option (var Any) ], Bool)
+    | Row Length -> Arrow ([ String ], Int)
+    | Row (Lower | Upper | Trim) -> Arrow ([ String ], String)
+    | Row (Starts | Ends | Detect) -> Arrow ([ String; String ], Bool)
+    | Reduction (Sum | Min | Max) ->
+      let a = var Numeric in
+      Arrow ([ Option a ], Option a)
+    | Reduction (Mean | Median | Var | Sd) ->
+      Arrow ([ Option (var Numeric) ], Option Float)
+    | Reduction Distinct -> Arrow ([ Option (var Any) ], Int)
+  in
+  !vars, t
+;;
+
+let builtins xs = List.map (fun (n, b) -> n, signature b) xs
+let empty = { values = builtins Prelude.scalar; types = []; variants = []; columns = [] }
+
+let rows env columns =
+  let reductions = List.map (fun (n, r) -> n, Prelude.Reduction r) Prelude.reductions in
+  { env with columns; values = builtins reductions @ env.values }
+;;
+
+let optional t =
+  match repr t with
+  | Option _ -> t
+  | t -> Option t
 ;;
 
 let literal level = function
@@ -282,11 +415,56 @@ let rec expression env level source =
   let check = expression env level
   and equal = unify source.span in
   let fail m = raise (Error (source.span, m)) in
-  let call f args =
-    let r = fresh level Any in
-    equal f (Arrow (args, r));
-    r
+  let strip t =
+    match repr t with
+    | Option inner -> inner, true
+    | t -> t, false
   in
+  let call f arguments =
+    let args = List.map check arguments in
+    match repr f with
+    | Arrow (ps, r) when List.length ps = List.length args ->
+      let flags =
+        List.map2
+          (fun p a ->
+             match repr p, repr a with
+             | Option _, Option _ | Var { contents = Free (_, Any) }, _ ->
+               equal p a;
+               false
+             | Option inner, _ ->
+               equal inner a;
+               false
+             | _, Option inner ->
+               equal p inner;
+               true
+             | _ ->
+               equal p a;
+               false)
+          ps
+          args
+      in
+      decide source (Lifted (flags, r));
+      if List.mem true flags then optional r else r
+    | Arrow (ps, _) ->
+      fail
+        (Printf.sprintf
+           "Expected %d argument%s, got %d"
+           (List.length ps)
+           (if List.length ps = 1 then "" else "s")
+           (List.length args))
+    | _ ->
+      let r = fresh level Any in
+      equal f (Arrow (args, r));
+      r
+  in
+  let operands a b =
+    let ta, la = strip (check a)
+    and tb, lb = strip (check b) in
+    equal ta tb;
+    decide source (Lifted ([ la; lb ], ta));
+    ta, la || lb
+  in
+  let lift lifted t = if lifted then optional t else t in
   match source.form with
   | Annotated (x, a) ->
     let t = annotation env [] level a in
@@ -334,12 +512,27 @@ let rec expression env level source =
      | Some p -> fail ("Non-exhaustive match. Missing case " ^ Format.pattern p)
      | None -> ());
     result
-  | Name (Bare, n) ->
+  | Name (Column, n) ->
+    (match List.assoc_opt n env.columns with
+     | Some t -> t
+     | None -> fail ("No column named " ^ n))
+  | Name (Bare, n) when List.mem_assoc n env.columns -> List.assoc n env.columns
+  | Name (_, n) ->
     (match List.assoc_opt n env.values with
      | Some s -> instantiate level s
-     | None -> fail ("Unknown name: " ^ n))
+     | None ->
+       let names = List.map fst env.columns @ List.map fst env.values in
+       (match
+          List.filter (fun m -> Distance.between m n <= 2) names |> List.sort_uniq compare
+        with
+        | [] -> fail ("Unknown name: " ^ n)
+        | m :: _ -> fail ("Unknown name: " ^ n ^ ". Did you mean " ^ m ^ "?")))
+  | Literal (Int _) ->
+    let t = fresh level Numeric in
+    decide source (Integer t);
+    t
   | Literal l -> literal level l
-  | Call ({ form = Name (Bare, "Some"); _ }, [ (None, x) ]) -> Option (check x)
+  | Call ({ form = Name (Bare, "Some"); _ }, [ (None, x) ]) -> optional (check x)
   | List xs ->
     let t = fresh level Any in
     List.iter (fun x -> equal t (check x)) xs;
@@ -361,40 +554,69 @@ let rec expression env level source =
     let ts = List.map (fun _ -> fresh level Any) ps in
     let locals = List.map2 (fun p t -> p, ([], t)) ps ts in
     Arrow (ts, expression (extend env locals) level body)
-  | Call (f, args) -> call (check f) (List.map (fun (_, x) -> check x) args)
+  | Call (f, args) -> call (check f) (List.map snd args)
   | Pipe (x, f) ->
     (match f.form with
-     | Call (g, args) -> call (check g) (check x :: List.map (fun (_, a) -> check a) args)
-     | _ -> call (check f) [ check x ])
-  | Unary (Not, x) ->
-    equal (check x) Bool;
-    Bool
-  | Unary (Negate, x) ->
-    let t = fresh level Numeric in
-    equal t (check x);
-    t
-  | Binary ((And | Or), a, b) ->
-    equal (check a) Bool;
-    equal (check b) Bool;
-    Bool
-  | Binary (op, a, b) ->
-    let t = fresh level Numeric in
-    equal t (check a);
-    equal t (check b);
+     | Call (g, args) -> call (check g) (x :: List.map snd args)
+     | _ -> call (check f) [ x ])
+  | Unary (op, x) ->
+    let t, lifted = strip (check x) in
+    decide source (Lifted ([ lifted ], t));
     (match op with
-     | op when comparison op -> Bool
-     | Add | Sub | Mul | Power -> t
-     | Div ->
-       equal t Float;
-       Float
-     | op -> fail ("Unsupported operator: " ^ binary_symbol op))
+     | Not -> equal Bool t
+     | Negate -> equal (fresh level Numeric) t);
+    lift lifted t
+  | Binary (op, a, b) ->
+    let t, lifted = operands a b in
+    lift
+      lifted
+      (match op with
+       | And | Or ->
+         equal Bool t;
+         Bool
+       | Equal | Not_equal -> Bool
+       | Less | Greater | Less_equal | Greater_equal ->
+         (match repr t with
+          | String -> ()
+          | t -> equal (fresh level Numeric) t);
+         Bool
+       | Add | Sub | Mul | Power | Mod ->
+         equal (fresh level Numeric) t;
+         t
+       | Div ->
+         equal Float t;
+         Float)
   | If (c, a, b) ->
-    equal (check c) Bool;
-    let t = check a in
-    equal t (check b);
-    t
+    (match repr (check c) with
+     | Option _ ->
+       fail
+         "This condition is missing where its inputs are missing. Wrap it in \
+          coalesce(condition, FALSE) or coalesce(condition, TRUE)"
+     | t -> equal Bool t);
+    let ta = check a
+    and tb = check b in
+    (match repr ta, repr tb with
+     | Option inner, (Int | Float | Bool | String) ->
+       equal inner tb;
+       ta
+     | (Int | Float | Bool | String), Option inner ->
+       equal ta inner;
+       tb
+     | _ ->
+       equal ta tb;
+       ta)
   | Formula _ -> fail "Formulas (y ~ x) are reserved for the model and graphics libraries"
   | _ -> fail "Unsupported scalar expression"
+;;
+
+let settle t =
+  variables
+    (fun v ->
+       match !v with
+       | Free (_, Numeric) -> v := Link Int
+       | _ -> ())
+    t;
+  t
 ;;
 
 let declaration env = function
@@ -428,51 +650,14 @@ let declaration env = function
       | Some ps -> { body with form = Lambda (ps, body) }
     in
     let t = expression env 1 x in
+    let t = if ps = None then settle t else t in
     extend env [ name, generalize 0 t ], t
-  | Evaluate x -> env, expression env 1 x
+  | Evaluate x -> env, settle (expression env 1 x)
   | Import (n, _) -> failwith ("Module " ^ n ^ " requires a table backend")
   | Contract _ -> failwith "Contract loading is unavailable"
 ;;
 
 let program env ds = List.fold_left (fun env d -> fst (declaration env d)) env ds
-
-let display t =
-  let vars = ref [] in
-  let rec show t =
-    match repr t with
-    | Variant (n, []) -> n
-    | Variant (n, ts) -> n ^ "<" ^ String.concat ", " (List.map show ts) ^ ">"
-    | List t -> "List<" ^ show t ^ ">"
-    | Option t -> show t ^ "?"
-    | Tuple ts -> "(" ^ String.concat ", " (List.map show ts) ^ ")"
-    | Record (fs, tail) ->
-      "{"
-      ^ String.concat
-          ", "
-          (List.map (fun (n, t) -> n ^ ": " ^ show t) fs
-           @ Option.to_list (Option.map (fun t -> ".." ^ show t) tail))
-      ^ "}"
-    | Int -> "Int64"
-    | Float -> "Float64"
-    | Bool -> "Bool"
-    | String -> "String"
-    | Arrow (ps, r) -> "(" ^ String.concat ", " (List.map show ps) ^ ") -> " ^ show r
-    | Var ({ contents = Free (_, c) } as v) ->
-      (match List.find_opt (fun (k, _) -> k == v) !vars with
-       | Some (_, s) -> s
-       | None ->
-         let prefix =
-           match c with
-           | Numeric -> "num"
-           | Any -> "a"
-         in
-         let s = "'" ^ prefix ^ string_of_int (List.length !vars) in
-         vars := (v, s) :: !vars;
-         s)
-    | Var _ -> assert false
-  in
-  show t
-;;
 
 let rec descriptor t =
   match repr t with

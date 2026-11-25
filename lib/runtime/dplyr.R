@@ -7,17 +7,12 @@ rp_wider <- function(data, ids, key, value, labels) {
   tidyr::pivot_wider(data, id_cols = all_of(ids), names_from = all_of(key),
                      values_from = all_of(value), names_expand = TRUE)
 }
-rp_coalesce <- function(x, y) {
-  n <- max(length(x), length(y))
-  x <- rep_len(x, n)
-  missing <- is.na(x)
-  x[missing] <- rep_len(y, n)[missing]
+
+rp_present <- function(x) {
+  if (anyNA(x)) stop("filter condition is missing and missing = error", call. = FALSE)
   x
 }
-rp_fold <- function(x, f) {
-  x <- x[!is.na(x)]
-  if (!length(x)) NA_real_ else f(x)
-}
+
 rp_report <- function(args, path) {
   output <- suppressWarnings(system2("data-dict", c(args, shQuote(path)), stdout = TRUE, stderr = FALSE))
   if (!is.null(attr(output, "status"))) stop("data-dict validation failed")

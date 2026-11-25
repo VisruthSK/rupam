@@ -213,8 +213,9 @@ let transform env table verb arguments =
     let measures =
       List.map
         (function
-          | Some n, { Syntax.form = Call ({ form = Name (Bare, "count"); _ }, []); _ } ->
-            n, None
+          | ( Some n
+            , { Syntax.form = Call ({ form = Name (Bare, ("count" | "n")); _ }, []); _ } )
+            -> n, None
           | Some n, x ->
             let value = Check.expression env table.schema x in
             if value.typ.shape <> Scalar then raise (Error "Summary must yield a scalar");
@@ -249,10 +250,22 @@ let transform env table verb arguments =
     ; steps = Summarize (keys, measures) :: table.steps
     }
   | "select", _ -> select table arguments
-  | "filter", [ (None, x) ] ->
-    let predicate = Check.expression env table.schema x in
-    Shape.filter table.context predicate;
+  | "filter", (None, x) :: options ->
+    let policy =
+      match options with
+      | [] -> None
+      | [ (Some "missing", { Syntax.form = Name (_, "skip"); _ }) ] -> Some Shape.Skip
+      | [ (Some "missing", { Syntax.form = Name (_, "propagate"); _ }) ] -> Some Propagate
+      | [ (Some "missing", { Syntax.form = Name (_, "error"); _ }) ] -> Some Fail
+      | [ (Some "missing", _) ] ->
+        raise (Error "missing must be skip, propagate or error")
+      | _ -> raise (Error "filter takes one condition and an optional missing =")
+    in
+    let predicate =
+      Shape.filter table.context policy (Check.expression env table.schema x)
+    in
     { table with ordered = false; steps = Filter predicate :: table.steps }
+  | "filter", _ -> raise (Error "filter takes one condition and an optional missing =")
   | "mutate", _ ->
     let by, arguments = List.partition (fun (n, _) -> n = Some "by") arguments in
     let keys = grouping table by in

@@ -24,127 +24,173 @@ let combine f x y =
 ;;
 
 let arithmetic op a b =
-  match a, b with
-  | Missing, _ | _, Missing -> Missing
-  | I a, I b ->
-    (match op with
-     | Add -> I (Integer.add a b)
-     | Sub -> I (Integer.sub a b)
-     | Mul -> I (Integer.mul a b)
-     | Greater -> B (a > b)
-     | Div -> raise (Error "Expected checked conversion to Float64"))
-  | F a, F b ->
-    (match op with
-     | Add -> F (a +. b)
-     | Sub -> F (a -. b)
-     | Mul -> F (a *. b)
-     | Div -> F (a /. b)
-     | Greater -> B (a > b))
-  | _ -> raise (Error "Unexpected operands in numeric expression")
+  let order c =
+    match op with
+    | Less -> B (c < 0)
+    | Greater -> B (c > 0)
+    | Less_equal -> B (c <= 0)
+    | Greater_equal -> B (c >= 0)
+    | Equal -> B (c = 0)
+    | Not_equal -> B (c <> 0)
+    | _ -> raise (Error "Unexpected operator")
+  in
+  match op, a, b with
+  | And, B false, _ | And, _, B false -> B false
+  | Or, B true, _ | Or, _, B true -> B true
+  | _, Missing, _ | _, _, Missing -> Missing
+  | And, B a, B b -> B (a && b)
+  | Or, B a, B b -> B (a || b)
+  | Add, I a, I b -> I (Integer.add a b)
+  | Sub, I a, I b -> I (Integer.sub a b)
+  | Mul, I a, I b -> I (Integer.mul a b)
+  | Mod, I a, I b -> I (Int64.rem a b)
+  | Add, F a, F b -> F (a +. b)
+  | Sub, F a, F b -> F (a -. b)
+  | Mul, F a, F b -> F (a *. b)
+  | Div, F a, F b -> F (a /. b)
+  | Mod, F a, F b -> F (Float.rem a b)
+  | Power, F a, F b -> F (Float.pow a b)
+  | (Less | Greater | Less_equal | Greater_equal | Equal | Not_equal), _, _ ->
+    order (compare a b)
+  | _ -> raise (Error "Unexpected operands in expression")
 ;;
 
-let aggregate reducer values =
-  let count = ref 0
-  and sum = ref 0.
-  and mean = ref 0.
-  and m2 = ref 0. in
-  Array.iter
-    (function
-      | Missing -> ()
-      | F x ->
-        incr count;
-        sum := !sum +. x;
-        let delta = x -. !mean in
-        mean := !mean +. (delta /. float_of_int !count);
-        m2 := !m2 +. (delta *. (x -. !mean))
-      | _ -> raise (Error "Expected a Float64 column"))
-    values;
-  match reducer, !count with
-  | _, 0 | Sd, 1 -> Missing
-  | Sum, _ -> F !sum
-  | Mean, _ -> F (!sum /. float_of_int !count)
-  | Sd, n -> F (sqrt (!m2 /. float_of_int (n - 1)))
+let apply op v =
+  match op, v with
+  | _, Missing -> Missing
+  | Syntax.Not, B b -> B (not b)
+  | Negate, I i -> I (Integer.sub 0L i)
+  | Negate, F f -> F (-.f)
+  | _ -> raise (Error "Unexpected operand")
+;;
+
+let present values = List.filter (fun v -> v <> Missing) (Array.to_list values)
+
+let number = function
+  | F f -> f
+  | I i -> Int64.to_float i
+  | _ -> raise (Error "Expected a number")
+;;
+
+let aggregate (reduction : Prelude.reduction) values =
+  let xs = present values in
+  let floats = List.map number xs in
+  let n = List.length xs in
+  let mean () = List.fold_left ( +. ) 0. floats /. float_of_int n in
+  let variance () =
+    let m = mean () in
+    List.fold_left (fun acc x -> acc +. ((x -. m) *. (x -. m))) 0. floats
+    /. float_of_int (n - 1)
+  in
+  match reduction, xs with
+  | Distinct, _ -> I (Int64.of_int (List.length (List.sort_uniq compare xs)))
+  | _, [] -> Missing
+  | (Var | Sd), [ _ ] -> Missing
+  | Sum, I _ :: _ ->
+    I
+      (List.fold_left
+         (fun acc v ->
+            match v with
+            | I i -> Integer.add acc i
+            | _ -> acc)
+         0L
+         xs)
+  | Sum, _ -> F (List.fold_left ( +. ) 0. floats)
+  | Mean, _ -> F (mean ())
+  | Median, _ ->
+    let sorted = Array.of_list (List.sort compare floats) in
+    F
+      (if n mod 2 = 1
+       then sorted.(n / 2)
+       else (sorted.((n / 2) - 1) +. sorted.(n / 2)) /. 2.)
+  | Var, _ -> F (variance ())
+  | Sd, _ -> F (sqrt (variance ()))
+  | Min, x :: rest -> List.fold_left min x rest
+  | Max, x :: rest -> List.fold_left max x rest
+;;
+
+let round_even f =
+  let r = Float.round f in
+  if Float.abs (f -. Float.trunc f) = 0.5 && Float.rem r 2. <> 0.
+  then r -. Float.copy_sign 1. f
+  else r
+;;
+
+let apply_row (row : Prelude.row) args =
+  let text = function
+    | S s -> s
+    | _ -> raise (Error "Expected a string")
+  in
+  match row, args with
+  | Present, [ v ] -> B (v <> Missing)
+  | Absent, [ v ] -> B (v = Missing)
+  | _, args when List.mem Missing args -> Missing
+  | Abs, [ I i ] -> I (if i < 0L then Integer.sub 0L i else i)
+  | Abs, [ v ] -> F (Float.abs (number v))
+  | Sign, [ v ] ->
+    I (Int64.of_float (Float.copy_sign (if number v = 0. then 0. else 1.) (number v)))
+  | Sqrt, [ v ] -> F (sqrt (number v))
+  | Exp, [ v ] -> F (exp (number v))
+  | Log, [ v ] -> F (log (number v))
+  | Log2, [ v ] -> F (Float.log2 (number v))
+  | Log10, [ v ] -> F (log10 (number v))
+  | Floor, [ v ] -> F (floor (number v))
+  | Ceiling, [ v ] -> F (ceil (number v))
+  | Trunc, [ v ] -> F (Float.trunc (number v))
+  | Round, [ v ] -> F (round_even (number v))
+  | Pmin, [ a; b ] -> if compare a b <= 0 then a else b
+  | Pmax, [ a; b ] -> if compare a b >= 0 then a else b
+  | Length, [ v ] ->
+    let s = text v in
+    let rec count i n =
+      if i >= String.length s
+      then n
+      else count (i + Uchar.utf_decode_length (String.get_utf_8_uchar s i)) (n + 1)
+    in
+    I (Int64.of_int (count 0 0))
+  | Lower, [ v ] -> S (String.lowercase_ascii (text v))
+  | Upper, [ v ] -> S (String.uppercase_ascii (text v))
+  | Trim, [ v ] -> S (String.trim (text v))
+  | Starts, [ v; p ] -> B (String.starts_with ~prefix:(text p) (text v))
+  | Ends, [ v; p ] -> B (String.ends_with ~suffix:(text p) (text v))
+  | _ -> raise (Error "Unexpected arguments")
+;;
+
+let present_or_fail = function
+  | Missing -> raise (Error "filter condition is missing and missing = error")
+  | v -> v
 ;;
 
 let evaluate ~rows ~input expression =
-  let rec eval expr =
-    match expr.node with
-    | Constant (`Bool b) -> One (B b)
-    | Constant (`Float f) -> One (F f)
-    | Constant (`Int n) -> One (I n)
-    | Input id -> input id
-    | Broadcast (_, e) ->
-      (match eval e with
-       | One v -> Many (Array.make rows v)
-       | Many _ -> raise (Error "Expected scalar"))
-    | Binary (op, a, b) -> combine (arithmetic op) (eval a) (eval b)
-    | Choose (c, t, f) ->
-      let branch = function
-        | B true -> t
-        | B false -> f
-        | _ -> raise (Error "Expected Bool")
-      in
-      (match eval c with
-       | One v -> eval (branch v)
-       | Many vs ->
-         let rec row i x =
-           match x.node with
-           | Broadcast (_, v) ->
-             (match eval v with
-              | One v -> v
-              | _ -> assert false)
-           | Input id ->
-             (match input id with
-              | Many xs -> xs.(i)
-              | One v -> v)
-           | Binary (op, a, b) -> arithmetic op (row i a) (row i b)
-           | Coalesce (a, b) ->
-             (match row i a with
-              | Missing -> row i b
-              | v -> v)
-           | Choose (c, t, f) ->
-             (match row i c with
-              | B true -> row i t
-              | B false -> row i f
-              | _ -> assert false)
-           | Polars_sqrt a ->
-             (match row i a with
-              | Missing -> Missing
-              | F f -> F (sqrt f)
-              | _ -> assert false)
-           | Abs a ->
-             (match row i a with
-              | Missing -> Missing
-              | F v -> F (Float.abs v)
-              | I v -> I (if v < 0L then Integer.sub 0L v else v)
-              | _ -> assert false)
-           | Reduce _ | Constant _ ->
-             (match eval x with
-              | One v -> v
-              | _ -> assert false)
-         in
-         Many (Array.mapi (fun i v -> row i (branch v)) vs))
+  let rec at i x =
+    match x.node with
+    | Constant (`Bool b) -> B b
+    | Constant (`Float f) -> F f
+    | Constant (`Int n) -> I n
+    | Constant (`String s) -> S s
+    | Null -> Missing
+    | Input id ->
+      (match input id with
+       | Many xs -> xs.(i)
+       | One v -> v)
+    | Broadcast (_, e) -> at i e
+    | Binary (op, a, b) -> arithmetic op (at i a) (at i b)
+    | Unary (op, a) -> apply op (at i a)
+    | Required a -> present_or_fail (at i a)
     | Coalesce (a, b) ->
-      combine (fun x y -> if x = Missing then y else x) (eval a) (eval b)
-    | Polars_sqrt e ->
-      map
-        (function
-          | Missing -> Missing
-          | F f -> F (sqrt f)
-          | _ -> assert false)
-        (eval e)
-    | Abs e ->
-      map
-        (function
-          | Missing -> Missing
-          | F x -> F (Float.abs x)
-          | I x -> I (if x < 0L then Integer.sub 0L x else x)
-          | B _ | S _ -> raise (Error "Expected number"))
-        (eval e)
-    | Reduce (r, e) ->
-      (match eval e with
-       | Many vs -> One (aggregate r vs)
-       | One _ -> raise (Error "Expected column"))
+      (match at i a with
+       | Missing -> at i b
+       | v -> v)
+    | Choose (c, t, f) ->
+      (match at i c with
+       | B true -> at i t
+       | B false -> at i f
+       | _ -> raise (Error "Expected Bool"))
+    | Polars_sqrt a | Apply (Sqrt, [ a ]) -> apply_row Sqrt [ at i a ]
+    | Apply (row, args) -> apply_row row (List.map (at i) args)
+    | Reduce (r, e) -> aggregate r (Array.init rows (fun j -> at j e))
   in
-  eval expression
+  match expression.typ.shape with
+  | Scalar -> One (at 0 expression)
+  | Column _ -> Many (Array.init rows (fun i -> at i expression))
 ;;

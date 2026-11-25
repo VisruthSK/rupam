@@ -256,10 +256,10 @@ let rec dataset ~directory env scalars x =
     ; fields = List.map (fun (n, _, _) -> n) fields
     ; plan = Table.source 0 fields
     }
-  | Pipe (a, { form = Call ({ form = Name (Bare, verb); _ }, args); _ }) ->
+  | Pipe (a, ({ form = Call ({ form = Name (Bare, verb); _ }, args); _ } as stage)) ->
     let t = dataset ~directory env scalars a in
     (try { t with plan = Table.stage ~span:x.span scalars t.plan verb args } with
-     | Shape.Error message -> fail x message)
+     | Shape.Error message -> fail stage message)
   | Call ({ form = Name (Bare, f); _ }, [ (None, arg) ]) ->
     (match List.assoc_opt f env with
      | Some (Function ([ p ], body, closure, captured)) ->
@@ -270,6 +270,20 @@ let rec dataset ~directory env scalars x =
          body
      | _ -> fail x ("Unsupported table function " ^ f))
   | _ -> fail x "Expected table expression"
+;;
+
+type output =
+  | Write of string
+  | Print
+
+let printed = function
+  | Syntax.Evaluate
+      { form =
+          ( Call ({ form = Name (Bare, "print"); _ }, [ (None, x) ])
+          | Pipe (x, { form = Call ({ form = Name (Bare, "print"); _ }, []); _ }) )
+      ; _
+      } -> Some x
+  | _ -> None
 ;;
 
 let extend ?(strict = true) ~directory env scalars declarations =
@@ -304,10 +318,18 @@ let extend ?(strict = true) ~directory env scalars declarations =
               , [ (None, x); (None, { form = Literal (Text path); _ }) ] )
         ; _
         }
-      :: ds -> loop env scalars ((dataset ~directory env scalars x, path) :: outputs) ds
+      :: ds ->
+      loop env scalars ((dataset ~directory env scalars x, Write path) :: outputs) ds
+    | d :: ds when Option.is_some (printed d) ->
+      let x = Option.get (printed d) in
+      loop env scalars ((dataset ~directory env scalars x, Print) :: outputs) ds
     | Alias _ :: ds -> loop env scalars outputs ds
     | Type _ :: _ -> failwith "Table backend does not support variant declarations"
-    | Evaluate x :: _ -> fail x "Expected write_parquet"
+    | Evaluate x :: _ ->
+      fail
+        x
+        "A table program's top-level expressions are print(table) or \
+         write_parquet(table, path)"
   in
   loop env scalars [] declarations
 ;;
@@ -340,8 +362,11 @@ let rec restrictions d =
     | Input i -> private_ids.(i)
     | Constant _ -> false
     | Choose (c, l, r) -> private_expr c || private_expr l || private_expr r
+    | Null -> false
     | Binary (_, l, r) | Coalesce (l, r) -> private_expr l || private_expr r
-    | Broadcast (_, x) | Reduce (_, x) | Abs x | Polars_sqrt x -> private_expr x
+    | Apply (_, xs) -> List.exists private_expr xs
+    | Broadcast (_, x) | Reduce (_, x) | Polars_sqrt x | Unary (_, x) | Required x ->
+      private_expr x
   in
   let bind private_ =
     private_ids.(!next) <- private_;
@@ -439,15 +464,19 @@ and python_table d =
 let python ?strict ~directory declarations =
   P.Verbatim Adapters.polars
   :: List.map
-       (fun (d, path) ->
+       (fun (d, output) ->
+          let base, links = python_stages (public_view d) in
+          let collected = P.Chain (base, links @ [ P.link "collect" [] ]) in
           P.Expression
-            (let base, links = python_stages (public_view d) in
-             P.Chain
-               ( base
-               , links
-                 @ [ P.link "collect" []
-                   ; P.link "write_parquet" [ P.Positional (P.Str path) ]
-                   ] )))
+            (match output with
+             | Write path ->
+               P.Chain
+                 ( base
+                 , links
+                   @ [ P.link "collect" []
+                     ; P.link "write_parquet" [ P.Positional (P.Str path) ]
+                     ] )
+             | Print -> P.call "print" [ collected ]))
        (compile ?strict ~directory declarations)
 ;;
 
@@ -457,19 +486,32 @@ let bound env name =
   | _ -> failwith ("Unknown bound table " ^ name)
 ;;
 
+let rec origin d =
+  match d.origin with
+  | Contracted { dictionary; table; _ } ->
+    Printf.sprintf "%s in %s" table.name (Filename.basename dictionary.path)
+  | File { path; _ } -> Filename.basename path ^ ", schema read from the file"
+  | Joined { left; right; key; kind } ->
+    Printf.sprintf
+      "%s join of %s and %s on %s"
+      (join_name kind)
+      (origin left)
+      (origin right)
+      key
+;;
+
 let schema d =
-  Table.names d.plan
-  |> List.iter (fun n ->
-    let t = (List.assoc n d.plan.schema).typ in
-    let primitive =
-      match t.primitive with
-      | Shape.Float64 -> "Float64"
-      | Int64 -> "Int64"
-      | Bool -> "Bool"
-      | String -> "String"
-    in
-    Printf.printf "%s : %s%s\n" n primitive (if t.nullable then "?" else ""));
-  print_endline "Contract valid; values pending"
+  let names = Table.names d.plan in
+  let width = List.fold_left (fun w n -> max w (String.length n)) 0 names in
+  List.iter
+    (fun n ->
+       Printf.printf
+         "%-*s  %s\n"
+         width
+         n
+         (Shape.type_name (List.assoc n d.plan.schema).typ))
+    names;
+  Printf.printf "%d columns from %s\n" (List.length names) (origin d)
 ;;
 
 let preview_page ~runtime d ~offset ~limit =
@@ -494,30 +536,49 @@ let preview_page ~runtime d ~offset ~limit =
 ;;
 
 let explain d =
-  print_endline "Validate a private snapshot before materialization (full source scan)";
+  let line = ref 0 in
+  let say text =
+    incr line;
+    Printf.printf "%2d  %s\n" !line text
+  in
   let rec visit d =
     (match d.origin with
-     | Contracted { table; _ } -> Printf.printf "load %s\n" table.name
+     | Contracted { dictionary; table; _ } ->
+       say
+         (Printf.sprintf
+            "load %s from %s, validated against the contract first"
+            table.name
+            (Filename.basename dictionary.path))
      | File { path; format; _ } ->
-       Printf.printf "read %s %s\n" (Data_file.format_name format) path
+       say
+         (Printf.sprintf
+            "read %s as %s, checking its schema first"
+            (Filename.basename path)
+            (Data_file.format_name format))
      | Joined { left; right; key; kind } ->
        visit left;
        visit right;
-       Printf.printf "%s join on %s\n" (join_name kind) key);
+       say (Printf.sprintf "%s join on %s" (join_name kind) key));
     List.rev d.plan.steps
     |> List.iter (fun step ->
-      print_endline
+      say
         (match step with
          | Table.Pivot p -> if p.wider then "pivot wider" else "pivot longer"
-         | Table.Window (n, _, _) -> "grouped binding " ^ n
-         | Rename _ -> "rename"
-         | Table.Filter _ -> "filter"
-         | Bind (n, _) -> "bind " ^ n
+         | Window (n, _, keys) ->
+           Printf.sprintf "mutate %s by %s" n (String.concat ", " (List.map fst keys))
+         | Rename changes ->
+           "rename "
+           ^ String.concat ", " (List.map (fun (a, b, _) -> a ^ " to " ^ b) changes)
+         | Filter _ -> "filter rows"
+         | Bind (n, _) -> "mutate " ^ n
          | Select ns -> "select " ^ String.concat ", " ns
-         | Take n -> Printf.sprintf "take %d" n
-         | Summarize _ -> "summarize"
+         | Take n -> Printf.sprintf "take the first %d rows" n
+         | Summarize (keys, measures) ->
+           "summarize "
+           ^ String.concat ", " (List.map fst measures)
+           ^ if keys = [] then "" else " by " ^ String.concat ", " (List.map fst keys)
          | Arrange _ -> "arrange"
-         | Distinct _ -> "distinct"))
+         | Distinct _ -> "distinct rows"))
   in
   visit d
 ;;
@@ -539,5 +600,5 @@ let validate ~runtime d =
             [ P.Verbatim Adapters.polars
             ; P.Expression (P.call "validate_contract" [ P.Str path ])
             ])));
-  print_endline "Validation passed. Materialization will validate its own snapshot."
+  print_endline "The data matches its contract"
 ;;

@@ -52,6 +52,6 @@ jobs:
           use-public-rspm: true
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
-          packages: any::dplyr, any::tidyr, any::bit64, any::gmp, any::jsonlite, any::arrow
+          packages: any::dplyr, any::tidyr, any::bit64, any::jsonlite, any::arrow
 
       - run: opam exec -- uv run --locked python -m unittest discover -s test -v

@@ -102,7 +102,7 @@ write_parquet(orders, "result.parquet")
         completed = subprocess.run([compiler, "repl", "--target", "python-polars", ROOT / "examples/shop.rp"],
                                    input=commands, text=True, capture_output=True, check=True)
         self.assertEqual(completed.stdout.count("North"), 3, completed.stderr)
-        self.assertIn("total_margin : Float64?", completed.stdout)
+        self.assertIn("total_margin  Float64?", completed.stdout)
 
     def test_polars_checked_branch_and_artifacts(self):
         import json
@@ -146,7 +146,7 @@ write_parquet(t, "sqrt.parquet")
             source.write_text(body)
             denied = subprocess.run([compiler, "compile", "--target", "python-polars", source], cwd=work, capture_output=True)
             self.assertNotEqual(denied.returncode, 0)
-            self.assertIn(b"import polars", denied.stderr)
+            self.assertIn(b"Unknown name: polars", denied.stderr)
             source.write_text("import polars\n" + body)
             strict = subprocess.run([compiler, "compile", "--target", "python-polars", source], cwd=work, capture_output=True)
             self.assertNotEqual(strict.returncode, 0)

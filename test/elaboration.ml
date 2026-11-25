@@ -2,7 +2,7 @@ open Rupam.Shape
 
 let rejects f =
   match f () with
-  | exception Error _ -> ()
+  | exception (Error _ | Rupam.Infer.Error _) -> ()
   | _ -> failwith "expected an elaboration error"
 ;;
 
@@ -16,8 +16,9 @@ let () =
    | _ -> failwith "mean must broadcast over its input rows");
   let z = binary Div centered (reduce Sd x) in
   assert (z.typ = { x.typ with nullable = true });
-  rejects (fun () -> filter 1 (binary Greater z x));
-  filter 1 (binary Greater square x);
+  rejects (fun () -> filter 1 None (binary Greater z x));
+  assert (not (filter 1 (Some Skip) (binary Greater z x)).typ.nullable);
+  ignore (filter 1 None (binary Greater square x));
   rejects (fun () -> binary Mul x (input 1 { x.typ with shape = Column 2 }))
 ;;
 

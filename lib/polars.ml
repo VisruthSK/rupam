@@ -15,6 +15,70 @@ let choose condition yes no =
     [ P.Positional no ]
 ;;
 
+let dtype (t : Shape.typ) =
+  pl
+    (match t.primitive with
+     | Int64 -> "Int64"
+     | Float64 -> "Float64"
+     | Bool -> "Boolean"
+     | String -> "String")
+;;
+
+let apply (row : Prelude.row) args =
+  let on x name = P.meth x name [] in
+  let text x name args = P.meth (P.Attribute (x, "str")) name (positional args) in
+  match row, args with
+  | Abs, [ x ] -> on x "abs"
+  | Sign, [ x ] -> P.meth (on x "sign") "cast" [ P.Positional (pl "Int64") ]
+  | Sqrt, [ x ] -> on x "sqrt"
+  | Exp, [ x ] -> on x "exp"
+  | Log, [ x ] -> on x "log"
+  | Log2, [ x ] -> P.meth x "log" [ P.Positional (P.Int "2") ]
+  | Log10, [ x ] -> on x "log10"
+  | Floor, [ x ] -> on (P.meth x "cast" [ P.Positional (pl "Float64") ]) "floor"
+  | Ceiling, [ x ] -> on (P.meth x "cast" [ P.Positional (pl "Float64") ]) "ceil"
+  | Trunc, [ x ] ->
+    let x = P.meth x "cast" [ P.Positional (pl "Float64") ] in
+    choose (P.Binary (P.Greater_equal, x, P.Int "0")) (on x "floor") (on x "ceil")
+  | Round, [ x ] ->
+    P.meth
+      (P.meth x "cast" [ P.Positional (pl "Float64") ])
+      "round"
+      [ P.Positional (P.Int "0"); P.Keyword ("mode", P.Str "half_to_even") ]
+  | Pmin, [ a; b ] ->
+    P.meth
+      (P.meth
+         (P.meth
+            (P.Call (pl "when", positional [ P.Binary (P.Less_equal, a, b) ]))
+            "then"
+            [ P.Positional a ])
+         "when"
+         [ P.Positional (P.Binary (P.Greater, a, b)) ])
+      "then"
+      [ P.Positional b ]
+  | Pmax, [ a; b ] ->
+    P.meth
+      (P.meth
+         (P.meth
+            (P.Call (pl "when", positional [ P.Binary (P.Greater_equal, a, b) ]))
+            "then"
+            [ P.Positional a ])
+         "when"
+         [ P.Positional (P.Binary (P.Less, a, b)) ])
+      "then"
+      [ P.Positional b ]
+  | Present, [ x ] -> on x "is_not_null"
+  | Absent, [ x ] -> on x "is_null"
+  | Length, [ x ] -> P.meth (text x "len_chars" []) "cast" [ P.Positional (pl "Int64") ]
+  | Lower, [ x ] -> text x "to_lowercase" []
+  | Upper, [ x ] -> text x "to_uppercase" []
+  | Trim, [ x ] -> text x "strip_chars" []
+  | Starts, [ x; p ] -> text x "starts_with" [ p ]
+  | Ends, [ x; p ] -> text x "ends_with" [ p ]
+  | Detect, [ x; p ] -> text x "contains" [ p ]
+  | _ -> raise (Error ("Wrong arguments to " ^ Prelude.name (Row row)))
+;;
+
 let lower ~fields (table : Table.t) =
   let symbols = Array.make table.next "" in
   List.iteri (fun i n -> symbols.(i) <- n) fields;
@@ -33,10 +97,19 @@ let lower ~fields (table : Table.t) =
         , [ P.Positional (P.Int (Int64.to_string i)); P.Keyword ("dtype", pl "Int64") ] )
     | Constant (`Float f) -> lit (P.Float (P.float f))
     | Constant (`Bool b) -> lit (P.Bool b)
+    | Constant (`String s) -> lit (P.Str s)
+    | Null -> P.Call (pl "lit", [ P.Positional P.Null; P.Keyword ("dtype", dtype x.typ) ])
     | Choose (c, t, f) -> choose (emit c) (emit t) (emit f)
     | Coalesce (a, b) -> P.Call (pl "coalesce", positional [ emit a; emit b ])
     | Polars_sqrt a -> P.meth (emit a) "sqrt" []
-    | Abs a -> P.meth (emit a) "abs" []
+    | Apply (row, args) -> apply row (List.map emit args)
+    | Unary (Not, a) -> P.Unary (P.Invert, emit a)
+    | Unary (Negate, a) -> P.Unary (P.Negate, emit a)
+    | Required a ->
+      P.meth
+        (emit a)
+        "map_batches"
+        [ P.Positional (P.Name "rp_present"); P.Keyword ("return_dtype", pl "Boolean") ]
     | Binary (op, a, b) ->
       P.Binary
         ( (match op with
@@ -44,17 +117,38 @@ let lower ~fields (table : Table.t) =
            | Sub -> P.Subtract
            | Mul -> P.Multiply
            | Div -> P.Divide
-           | Greater -> P.Greater)
+           | Mod -> P.Modulo
+           | Power -> P.Power
+           | Less -> P.Less
+           | Greater -> P.Greater
+           | Less_equal -> P.Less_equal
+           | Greater_equal -> P.Greater_equal
+           | Equal -> P.Equal
+           | Not_equal -> P.Not_equal
+           | And -> P.Both
+           | Or -> P.Either)
         , emit a
         , emit b )
-    | Reduce (Mean, a) -> P.meth (emit a) "mean" []
-    | Reduce (Sd, a) -> P.meth (emit a) "std" [ P.Keyword ("ddof", P.Int "1") ]
-    | Reduce (Sum, a) ->
+    | Reduce (reduction, a) ->
       let a = emit a in
-      choose
-        (P.Binary (P.Greater, P.meth a "count" [], P.Int "0"))
-        (P.meth a "sum" [])
-        P.Null
+      let ddof = [ P.Keyword ("ddof", P.Int "1") ] in
+      (match reduction with
+       | Sum ->
+         choose
+           (P.Binary (P.Greater, P.meth a "count" [], P.Int "0"))
+           (P.meth a "sum" [])
+           P.Null
+       | Mean -> P.meth a "mean" []
+       | Median -> P.meth a "median" []
+       | Var -> P.meth a "var" ddof
+       | Sd -> P.meth a "std" ddof
+       | Min -> P.meth a "min" []
+       | Max -> P.meth a "max" []
+       | Distinct ->
+         P.meth
+           (P.meth (P.meth a "drop_nulls" []) "n_unique" [])
+           "cast"
+           [ P.Positional (pl "Int64") ])
   in
   let stage = function
     | Table.Pivot p ->

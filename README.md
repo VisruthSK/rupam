@@ -37,7 +37,7 @@ CSV and TSV files.
 Previews and `rupam run` execute the generated script, so they need the target
 language installed, plus the data-dict CLI for contract validation. The
 `python-polars` dialect needs `polars` and `data-dict`. The `r-dplyr` dialect
-needs `dplyr`, `tidyr`, `bit64`, `gmp`, `jsonlite` and `arrow`.
+needs `dplyr`, `tidyr`, `bit64`, `jsonlite` and `arrow`.
 
 ### From source
 

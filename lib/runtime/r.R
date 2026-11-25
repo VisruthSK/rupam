@@ -1,10 +1,6 @@
-rp_int <- function(x) {
-  value <- gmp::as.bigz(x)
-  if (value < gmp::as.bigz("-9223372036854775808") || value > gmp::as.bigz("9223372036854775807"))
-    stop("Int64 overflow")
-  value
+rp_mixed <- function(f, a, b) {
+  if (is.double(a) || is.double(b)) f(as.numeric(a), as.numeric(b)) else f(a, b)
 }
-rp_numeric <- function(x) if (inherits(x, "bigz")) rp_int(x) else x
 rp_variant <- function(tag, ...) structure(list(...), tag = tag)
 
 rp_float <- function(x) {
@@ -20,7 +16,7 @@ rp_dynamic <- function(v) {
   if (!is.null(tag))
     return(if (length(v) == 0) tag else paste0(tag, "(", paste(vapply(v, rp_dynamic, ""), collapse = ", "), ")"))
   if (is.null(v)) return("None")
-  if (inherits(v, "bigz")) return(as.character(v))
+  if (bit64::is.integer64(v)) return(as.character(v))
   if (is.logical(v)) return(if (v) "true" else "false")
   if (is.double(v)) return(rp_float(v))
   if (is.character(v)) return(encodeString(v, quote = '"'))
@@ -43,7 +39,7 @@ rp_format <- function(v, shape) {
   }
   switch(shape[[1]],
     list = paste0("[", paste(vapply(v, rp_format, "", shape[[2]]), collapse = ", "), "]"),
-    option = if (is.null(v)) "None" else paste0("Some(", rp_format(v[[1]], shape[[2]]), ")"),
+    option = if (is.null(v)) "None" else paste0("Some(", rp_format(v, shape[[2]]), ")"),
     tuple = paste0("(", paste(mapply(rp_format, v, shape[-1]), collapse = ", "), ")"),
     record = paste0("{", paste(vapply(shape[[2]], function(f)
       paste0(f[[1]], " = ", rp_format(v[[f[[1]]]], f[[2]])), ""), collapse = ", "), "}"),
