@@ -140,6 +140,7 @@ type session =
   ; project : Project.t
   ; source_path : string option
   ; definitions : Syntax.declaration list
+  ; show : Page.t -> unit
   }
 
 let empty =
@@ -151,6 +152,7 @@ let empty =
   ; project = Project.standalone
   ; source_path = None
   ; definitions = []
+  ; show = (fun page -> List.iter print_endline (Page.plain page))
   }
 ;;
 
@@ -161,10 +163,10 @@ let dataset state x =
 let preview state d =
   let dialect = Project.require_dialect state.project in
   let runtime = Runtime.resolve state.project (Runtime.of_dialect dialect) in
-  let d = Analysis_program.public_view d in
-  match dialect with
-  | R_dplyr -> Tidyverse.preview_page ~runtime d ~offset:0 ~limit:20
-  | Python_polars -> Analysis_program.preview_page ~runtime d ~offset:0 ~limit:20
+  state.show
+    (match dialect with
+     | R_dplyr -> Tidyverse.preview ~runtime d ~offset:0 ~limit:20
+     | Python_polars -> Analysis_program.preview ~runtime d ~offset:0 ~limit:20)
 ;;
 
 let compute state d =

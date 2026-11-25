@@ -117,6 +117,8 @@ time unless captured as explicit inputs. A preview and compiled script agree
 for the same effect inputs, not necessarily for independently drawn values.
 
 Native floating-point algorithms can differ in rounding and reduction order.
+Polars, for example, divides a column by a scalar through its reciprocal, so
+`x / 3.0` can differ from R in the last place.
 The portable semantics define types, domains, structural rules and numerical
 operations, not bitwise equality of arbitrary calculations. Small numeric
 differences may affect downstream comparisons, selection, ranks or branches.

@@ -1,121 +1,58 @@
-let write ~locations ~target ~source ~output ~code declarations =
-  let extension =
-    match target with
-    | "r" -> "R"
-    | "python" -> "py"
-    | _ -> invalid_arg "target"
+let write ~(entry : Lock.entry) ~locations ~(dialect : Project.dialect) ~output ~code declarations =
+  let extension, dependencies =
+    match dialect, Analysis_program.tabular declarations with
+    | R_dplyr, true -> "R", [ "dplyr"; "tidyr"; "bit64"; "jsonlite"; "arrow" ]
+    | R_dplyr, false -> "R", [ "bit64"; "jsonlite" ]
+    | Python_polars, true -> "py", [ "polars"; "pyarrow" ]
+    | Python_polars, false -> "py", []
   in
   if not (Filename.check_suffix output ("." ^ extension))
-  then failwith ("Expected ." ^ extension ^ " output file");
-  let print path body =
-    Out_channel.with_open_text path (fun ch -> output_string ch body)
-  in
-  let json path value = print path (Yojson.Basic.pretty_to_string value ^ "\n") in
-  let lines = String.split_on_char '\n' code in
-  let indexed = List.mapi (fun i s -> i + 1, s) lines in
-  let contains s needle =
-    let rec loop i =
-      i + String.length needle <= String.length s
-      && (String.sub s i (String.length needle) = needle || loop (i + 1))
-    in
-    loop 0
-  in
-  let contracted =
-    List.exists
-      (function
-        | Syntax.Contract _ -> true
-        | _ -> false)
-      declarations
-  in
+  then failwith ("Expected a ." ^ extension ^ " output file");
   let strings xs = `List (List.map (fun s -> `String s) xs) in
-  let outputs =
-    List.filter_map
-      (function
-        | Syntax.Evaluate
-            { form = Call ({ form = Name (Bare, "write_parquet"); _ }, _); span; _ } ->
-          Some span
-        | _ -> None)
-      declarations
-  in
-  let emitted =
-    List.filter_map
-      (fun (i, line) ->
-         if contains line (if target = "r" then "rp_write(" else ".write_parquet(")
-         then Some i
-         else None)
-      indexed
-  in
   let point (p : Lexing.position) =
     `Assoc [ "line", `Int p.pos_lnum; "column", `Int (1 + p.pos_cnum - p.pos_bol) ]
   in
-  let maps =
-    if not contracted
-    then []
-    else
-      List.map2
-        (fun line (start, finish) ->
-           `Assoc
-             [ "generated_line", `Int line
-             ; "source", `String source
-             ; "start", point start
-             ; "end", point finish
-             ])
-        emitted
-        outputs
+  let mappings =
+    List.map
+      (fun (location : Document.location) ->
+         let start, finish = location.source in
+         `Assoc
+           [ "generated_line", `Int location.line
+           ; "generated_column", `Int location.column
+           ; "source", `String entry.source
+           ; "start", point start
+           ; "end", point finish
+           ])
+      locations
   in
-  let maps =
-    maps
-    @ List.map
-        (fun (entry : Document.location) ->
-           let start, finish = entry.source in
-           `Assoc
-             [ "generated_line", `Int entry.line
-             ; "generated_column", `Int entry.column
-             ; "source", `String source
-             ; "start", point start
-             ; "end", point finish
-             ])
-        locations
-  in
-  let callback = List.exists (fun (_, s) -> contains s ").map_elements(") indexed in
   let nonportable =
-    if List.exists (fun (_, s) -> contains s ".sqrt()") indexed
-    then [ "polars.sqrt" ]
-    else []
-  in
-  let dependencies =
-    match target, contracted with
-    | "python", true -> [ "polars"; "pyarrow"; "data-dict-yaml==0.0.3" ]
-    | "r", true ->
-      [ "dplyr"; "tidyr"; "bit64"; "jsonlite"; "arrow"; "data-dict-yaml==0.0.3" ]
-    | "r", false -> [ "gmp" ]
-    | _ -> []
-  in
-  let warnings =
-    (if contracted then [ "Contract validation scans all source rows" ] else [])
-    @
-    if callback
-    then [ "Checked scalar fallback executes a Python callback per row" ]
-    else []
+    List.filter_map
+      (function
+        | Syntax.Import ("polars", _) -> Some "polars.sqrt"
+        | _ -> None)
+      declarations
   in
   let manifest =
     `Assoc
-      [ "language", `String "rupam"
-      ; "language_version", `String "0.1"
-      ; "compiler_version", `String "0.1"
-      ; "target", `String target
+      [ "compiler", `String entry.compiler
+      ; "dialect", `String entry.dialect
+      ; "source", `String entry.source
+      ; "program", `String entry.program
+      ; ( "inputs"
+        , `List
+            (List.map
+               (fun (i : Lock.input) ->
+                  `Assoc [ "path", `String i.path; "sha256", `String i.sha256 ])
+               entry.inputs) )
       ; "dependencies", strings dependencies
-      ; ( "validation"
-        , strings (if contracted then [ "validate-meta"; "validate-data" ] else []) )
-      ; ( "fidelity"
-        , strings
-            ((if contracted then [ "guarded" ] else [ "exact" ])
-             @ if callback then [ "fallback" ] else []) )
-      ; "warnings", strings warnings
       ; "nonportable", strings nonportable
       ]
   in
-  print output code;
-  json (output ^ ".map.json") (`Assoc [ "mappings", `List maps ]);
+  let json path value =
+    Out_channel.with_open_text path (fun channel ->
+      output_string channel (Yojson.Basic.pretty_to_string value ^ "\n"))
+  in
+  Out_channel.with_open_text output (fun channel -> output_string channel code);
+  json (output ^ ".map.json") (`Assoc [ "mappings", `List mappings ]);
   json (output ^ ".manifest.json") manifest
 ;;

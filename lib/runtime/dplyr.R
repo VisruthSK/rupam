@@ -50,6 +50,11 @@ rp_read <- function(path, digest, format, columns) {
   data
 }
 
+rp_preview <- function(data, offset, limit, path) {
+  arrow::write_parquet(dplyr::slice(data, seq.int(offset + 1, length.out = limit)), path)
+  nrow(data)
+}
+
 rp_write <- function(data, path) {
   arrow::write_parquet(data, path)
   invisible(data)

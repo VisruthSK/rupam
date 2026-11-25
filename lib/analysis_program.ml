@@ -630,25 +630,39 @@ let schema d =
   Printf.printf "%d columns from %s\n" (List.length names) (origin d)
 ;;
 
-let preview_page ~runtime d ~offset ~limit =
+let page d ~path ~total ~offset =
+  Page.read
+    ~path
+    ~total:(int_of_string (String.trim total))
+    ~ordered:(d.plan.order <> None)
+    ~offset
+    (List.map (fun n -> n, (List.assoc n d.plan.schema).typ) (Table.names d.plan))
+;;
+
+let preview ~runtime d ~offset ~limit =
   let d = public_view d in
-  let page =
-    P.meth
-      (P.meth
-         (python_table d)
-         "slice"
-         [ P.Positional (P.Int (string_of_int offset))
-         ; P.Positional (P.Int (string_of_int limit))
-         ])
-      "collect"
-      []
+  let path = Filename.temp_file "rupam" ".parquet" in
+  let total =
+    Worker.evaluate
+      runtime
+      Runtime.Python
+      (fst
+         (P.program
+            [ P.Verbatim Adapters.polars
+            ; P.Expression
+                (P.call
+                   "print"
+                   [ P.call
+                       "rp_preview"
+                       [ python_table d
+                       ; P.Int (string_of_int offset)
+                       ; P.Int (string_of_int limit)
+                       ; P.Str path
+                       ]
+                   ])
+            ]))
   in
-  print_endline (if d.plan.order <> None then "Ordered preview" else "Unordered preview");
-  Worker.run
-    runtime
-    Runtime.Python
-    (fst
-       (P.program [ P.Verbatim Adapters.polars; P.Expression (P.call "print" [ page ]) ]))
+  Fun.protect ~finally:(fun () -> Sys.remove path) (fun () -> page d ~path ~total ~offset)
 ;;
 
 let explain d =

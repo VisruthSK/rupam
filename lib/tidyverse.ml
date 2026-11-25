@@ -342,26 +342,30 @@ let compile ?strict ~directory declarations =
        (Analysis_program.compile ?strict ~directory declarations)
 ;;
 
-let preview_page ~runtime d ~offset ~limit =
+let preview ~runtime d ~offset ~limit =
   let d = Analysis_program.public_view d in
-  let rows =
-    R.Call
-      ( R.Name "seq.int"
-      , [ R.Positional (R.Number (string_of_int (offset + 1)))
-        ; R.Named ("length.out", R.Number (string_of_int limit))
-        ] )
+  let path = Filename.temp_file "rupam" ".parquet" in
+  let total =
+    Worker.evaluate
+      runtime
+      Runtime.R
+      (fst
+         (R.program
+            [ R.Verbatim Adapters.dplyr
+            ; R.Expression
+                (R.call
+                   "cat"
+                   [ R.call
+                       "rp_preview"
+                       [ table d
+                       ; R.Number (string_of_int offset)
+                       ; R.Number (string_of_int limit)
+                       ; R.String path
+                       ]
+                   ])
+            ]))
   in
-  let page = R.pipe (R.call "as_tibble" [ table d ]) (R.call "slice" [ rows ]) in
-  print_endline (if d.plan.order <> None then "Ordered preview" else "Unordered preview");
-  Worker.run
-    runtime
-    Runtime.R
-    (fst
-       (R.program
-          [ R.Verbatim Adapters.dplyr
-          ; R.Expression
-              (R.Call
-                 ( R.Name "print"
-                 , [ R.Positional page; R.Named ("n", R.Number (string_of_int limit)) ] ))
-          ]))
+  Fun.protect
+    ~finally:(fun () -> Sys.remove path)
+    (fun () -> Analysis_program.page d ~path ~total ~offset)
 ;;

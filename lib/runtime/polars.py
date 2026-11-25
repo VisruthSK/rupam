@@ -29,6 +29,11 @@ def read_locked(path, digest, format, columns):
     return pl.from_arrow(table).with_columns(pl.col(pl.Float64).fill_nan(None)).lazy()
 
 
+def rp_preview(frame, offset, limit, path):
+    frame.slice(offset, limit).collect().write_parquet(path)
+    return frame.select(pl.len()).collect().item()
+
+
 def rp_finite(series):
     if (series.is_infinite() | series.is_nan()).any():
         raise ArithmeticError("arithmetic overflow: a result is not finite")

@@ -51,7 +51,7 @@ let run target strict path =
   targeted (Filename.dirname path) target strict
   @@ fun project ->
   with_program path (fun ds ->
-    Lock.require ~project ~source:path ds;
+    ignore (Lock.require ~project ~source:path ds);
     let language = Runtime.of_dialect (Project.require_dialect project) in
     Runtime.run
       (Runtime.resolve project language)
@@ -84,17 +84,18 @@ let compile target strict path output =
   targeted (Filename.dirname path) target strict
   @@ fun project ->
   with_program path (fun ds ->
-    Lock.require ~project ~source:path ds;
+    let entry = Lock.require ~project ~source:path ds in
     let code, locations = generate project path ds in
     match output with
     | None -> print_string code
     | Some output ->
-      let target =
-        match Project.require_dialect project with
-        | R_dplyr -> "r"
-        | Python_polars -> "python"
-      in
-      Artifact.write ~locations ~target ~source:path ~output ~code ds)
+      Artifact.write
+        ~entry
+        ~locations
+        ~dialect:(Project.require_dialect project)
+        ~output
+        ~code
+        ds)
 ;;
 
 let fmt path = with_program path (fun ds -> print_endline (Format.program ds))

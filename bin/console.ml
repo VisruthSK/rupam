@@ -17,6 +17,7 @@ type model =
   ; history : string list
   ; recalled : int option
   ; menu : menu option
+  ; pages : Rupam.Page.t list ref
   }
 
 and menu =
@@ -85,7 +86,19 @@ let output_line line =
     | _ -> text line)
 ;;
 
-let transcript source output =
+let page_view page =
+  let open Rupam.Page in
+  let styled (part, text) =
+    match part with
+    | Plain -> Mosaic.text text
+    | Heading -> Mosaic.text ~style:(style ~bold:true typed) text
+    | Types | Index | Missing -> Mosaic.text ~style:(style faint) text
+    | Note -> Mosaic.text ~style:(style subtle) text
+  in
+  List.map (fun line -> box ~flex_direction:Row (List.map styled line)) (lines page)
+;;
+
+let transcript source output pages =
   let lines = String.split_on_char '\n' source in
   let echoed =
     List.mapi
@@ -102,7 +115,11 @@ let transcript source output =
     |> List.filter (fun l -> String.trim l <> "")
     |> List.map output_line
   in
-  box ~flex_direction:Column ~size:full ~margin:(margin_lrtb 0 0 0 1) (echoed @ results)
+  box
+    ~flex_direction:Column
+    ~size:full
+    ~margin:(margin_lrtb 0 0 0 1)
+    (echoed @ results @ List.concat_map page_view pages)
 ;;
 
 let status session =
@@ -211,6 +228,7 @@ let evaluate model source =
   else (
     let history = entry :: model.history in
     Line.save_history history;
+    model.pages := [];
     let next, output =
       capture (fun () ->
         match Repl.parse entry with
@@ -219,7 +237,7 @@ let evaluate model source =
           Some model.session
         | Ok command -> Repl.run model.session command)
     in
-    let committed = Cmd.static_commit (transcript entry output) in
+    let committed = Cmd.static_commit (transcript entry output (List.rev !(model.pages))) in
     match next with
     | None -> model, Cmd.batch [ committed; Cmd.quit ]
     | Some session ->
@@ -229,6 +247,7 @@ let evaluate model source =
         ; history
         ; recalled = None
         ; menu = None
+        ; pages = model.pages
         }
       , committed ))
 ;;
@@ -319,6 +338,8 @@ let start ~project ?path () =
   match Repl.open_session ~project ?path () with
   | None -> ()
   | Some session ->
+    let pages = ref [] in
+    let session = { session with show = (fun page -> pages := page :: !pages) } in
     let config = Matrix.config ~mode:`Primary ~mouse:`Off () in
     run
       ~config
@@ -330,6 +351,7 @@ let start ~project ?path () =
               ; history = Line.load_history ()
               ; recalled = None
               ; menu = None
+              ; pages
               }
             , banner session ))
       ; update

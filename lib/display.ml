@@ -30,3 +30,12 @@ let float x =
 ;;
 
 let bool b = if b then "TRUE" else "FALSE"
+
+let width text =
+  let rec count i n =
+    if i >= String.length text
+    then n
+    else count (i + Uchar.utf_decode_length (String.get_utf_8_uchar text i)) (n + 1)
+  in
+  count 0 0
+;;

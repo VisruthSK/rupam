@@ -155,7 +155,7 @@ write_parquet(result, "checked.parquet")
             subprocess.run(["python", "checked.py"], cwd=work, check=True)
             self.assertEqual(pl.read_parquet(work / "checked.parquet")["x"].to_list(), [1, 2, 3, 4])
             manifest = json.loads((work / "checked.py.manifest.json").read_text())
-            self.assertNotIn("fallback", manifest["fidelity"])
+            self.assertEqual(manifest["inputs"][0]["path"], "data-dict.yaml")
             generated = (work / "checked.py").read_text()
             self.assertNotIn("map_elements", generated)
             mappings = json.loads((work / "checked.py.map.json").read_text())["mappings"]

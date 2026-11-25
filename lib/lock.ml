@@ -169,7 +169,7 @@ let require ~project ~source declarations =
   with
   | Some locked ->
     (match differences locked current with
-     | [] -> ()
+     | [] -> locked
      | changed ->
        raise
        @@ Stale
@@ -179,7 +179,8 @@ let require ~project ~source declarations =
             current.source))
   | None when current.schemas = [] ->
     List.iter Contract.validate contracts;
-    write root current
+    write root current;
+    current
   | None ->
     raise
     @@ Stale
