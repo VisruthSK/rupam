@@ -16,7 +16,13 @@ type model =
   ; pending : string list
   ; history : string list
   ; recalled : int option
-  ; suggestions : string list
+  ; menu : menu option
+  }
+
+and menu =
+  { before : string
+  ; items : Repl.suggestion list
+  ; selected : int option
   }
 
 let accent = Color.of_rgb 120 180 255
@@ -139,9 +145,37 @@ let view model =
       ]
   in
   let suggestions =
-    match model.suggestions with
-    | [] -> []
-    | xs -> [ text ~style:(style subtle) ("  " ^ String.concat "   " xs) ]
+    match model.menu with
+    | None -> []
+    | Some menu ->
+      let width =
+        List.fold_left
+          (fun w (s : Repl.suggestion) -> max w (String.length s.text))
+          0
+          menu.items
+      in
+      let first =
+        match menu.selected with
+        | Some i when i >= 8 -> i - 7
+        | _ -> 0
+      in
+      let shown = List.filteri (fun i _ -> i >= first && i < first + 8) menu.items in
+      List.mapi
+        (fun i (s : Repl.suggestion) ->
+           let chosen = menu.selected = Some (first + i) in
+           box
+             ~flex_direction:Row
+             [ text
+                 ~style:(if chosen then style ~bold:true accent else style typed)
+                 (Printf.sprintf "  %s %-*s" (if chosen then "âº" else " ") width s.text)
+             ; text ~style:(style faint) ("  " ^ s.detail)
+             ])
+        shown
+      @
+      let rest = List.length menu.items - first - List.length shown in
+      if rest > 0
+      then [ text ~style:(style faint) (Printf.sprintf "    â¦ %d more" rest) ]
+      else []
   in
   box
     ~flex_direction:Column
@@ -194,7 +228,7 @@ let evaluate model source =
         ; pending = []
         ; history
         ; recalled = None
-        ; suggestions = []
+        ; menu = None
         }
       , committed ))
 ;;
@@ -216,24 +250,55 @@ let recall model step =
   | _ -> { model with recalled = None; input = Editor.empty }
 ;;
 
+let common_prefix = function
+  | [] -> ""
+  | (first : Repl.suggestion) :: rest ->
+    List.fold_left
+      (fun prefix (s : Repl.suggestion) ->
+         let n = min (String.length prefix) (String.length s.text) in
+         let rec go i = if i < n && prefix.[i] = s.text.[i] then go (i + 1) else i in
+         String.sub prefix 0 (go 0))
+      first.text
+      rest
+;;
+
 let complete model =
-  let line = Editor.text model.input in
-  let start, candidates = Repl.complete model.session line in
-  match candidates with
-  | [ only ] ->
+  match model.menu with
+  | Some ({ items; _ } as menu) when items <> [] ->
+    let next =
+      match menu.selected with
+      | None -> 0
+      | Some i -> (i + 1) mod List.length items
+    in
+    let item = List.nth items next in
     { model with
-      input = Editor.of_string (String.sub line 0 start ^ only)
-    ; suggestions = []
+      input = Editor.of_string (menu.before ^ item.text)
+    ; menu = Some { menu with selected = Some next }
     }
-  | [] -> { model with suggestions = [] }
-  | many -> { model with suggestions = many }
+  | _ ->
+    let line = Editor.text model.input in
+    let start, candidates = Repl.complete model.session line in
+    let before = String.sub line 0 start in
+    (match candidates with
+     | [] -> { model with menu = None }
+     | [ only ] ->
+       { model with input = Editor.of_string (before ^ only.text); menu = None }
+     | many ->
+       let prefix = common_prefix many in
+       let typed = String.sub line start (String.length line - start) in
+       let input =
+         if String.length prefix > String.length typed
+         then Editor.of_string (before ^ prefix)
+         else model.input
+       in
+       { model with input; menu = Some { before; items = many; selected = None } })
 ;;
 
 let update msg model =
   match msg with
-  | Edit input -> { model with input; suggestions = [] }, Cmd.none
+  | Edit input -> { model with input; menu = None }, Cmd.none
   | Submit source -> evaluate model source
-  | Recall step -> recall model step, Cmd.none
+  | Recall step -> { (recall model step) with menu = None }, Cmd.none
   | Complete -> complete model, Cmd.none
   | Clear -> { model with input = Editor.empty; pending = [] }, Cmd.static_clear
   | Quit -> model, Cmd.quit
@@ -264,7 +329,7 @@ let start ~project ?path () =
               ; pending = []
               ; history = Line.load_history ()
               ; recalled = None
-              ; suggestions = []
+              ; menu = None
               }
             , banner session ))
       ; update

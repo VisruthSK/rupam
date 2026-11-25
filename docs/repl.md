@@ -1,37 +1,67 @@
 # The REPL
 
 ```sh
-rupam                          # empty session
-rupam repl examples/shop.rp    # session with a program loaded
+rupam repl                     # uses the dialect from rupam.toml
+rupam repl shop.rp             # loads a program first
+rupam repl --target r-dplyr    # overrides rupam.toml
 ```
 
-Type a definition or an expression and rupam prints its type:
+The REPL needs a dialect, from `[target] dialect` in `rupam.toml` or from
+`--target`. Everything you type is checked by rupam, compiled to that dialect,
+and run in a persistent R or Python session, so what you see is what the
+generated script computes.
+
+Type a definition or an expression. rupam prints the value with its type:
 
 ```text
-rupam> let f(x) = x * 2
+rupam ❯ let f(x) = x ^ 2
 f : (Int64) -> Int64
-rupam> f(21)
-42 : Int64
+rupam ❯ f(10)
+100 : Int64
 ```
 
+Type a name to look at it. A table prints its first rows, a contract lists its
+tables and columns, and a function shows its parameters:
+
+```text
+rupam ❯ orders
+rupam ❯ orders |> filter(cost > 1.0, missing = skip) |> print()
+rupam ❯ shop
+```
+
+## Completion
+
+Tab completes from what the cursor is in, and a second Tab cycles through the
+menu:
+
+| Where | Completes |
+| --- | --- |
+| `:` | commands |
+| `:target ` | dialects |
+| `:schema `, `:preview `, ... | tables and contracts |
+| `orders \|> ` | verbs and your table functions |
+| `orders \|> filter(` | the table's columns with their types, the verb's options, functions |
+| `filter(x, missing = ` | `skip`, `propagate`, `error` |
+| `join(..., how = ` | `inner`, `left`, `right`, `full`, `semi`, `anti` |
+| `shop.` | the contract's tables |
+| `read_csv("` | files next to the program |
+
 Arrow keys walk the history, which lives in `rupam/history` under
-`$XDG_STATE_HOME`, `~/.local/state` or, on Windows, `%LOCALAPPDATA%`. Tab
-completes commands, your bindings and keywords from a menu under the prompt.
-Ctrl-C abandons the current line, Ctrl-D leaves, and Ctrl-L clears the screen.
+`$XDG_STATE_HOME`, `~/.local/state` or, on Windows, `%LOCALAPPDATA%`.
+Ctrl+L clears the screen and Ctrl+D leaves.
 
 ## Commands
 
 | Command | |
 | --- | --- |
-| `:type EXPR` | inferred type, or the schema for a table expression; runs nothing |
-| `:schema TABLE` | fields, types, nullability and contract status |
-| `:preview TABLE` | the first 20 rows and 8 columns, after validation |
-| `:inspect TABLE` | the same, with `n`/`p` for rows and `l`/`h` for columns |
-| `:explain TABLE` | the plan, including validation and any callback fallbacks |
-| `:contract TABLE` | which contract and table a value comes from |
+| `:type EXPR` | type, or the schema of a table expression; runs nothing |
+| `:schema [TABLE]` | columns and types; every table when no name is given |
+| `:preview TABLE` | the first 20 rows, after validation |
+| `:explain TABLE` | the plan from source to result |
+| `:contract TABLE` | which contract and table the rows come from |
 | `:validate TABLE` | runs data-dict validation now |
-| `:code DIALECT TABLE` | the generated script for one table |
-| `:target r-dplyr`, `:target python-polars` | the dialect behind `:preview` and `:inspect`; starts from `rupam.toml` or `--target` |
+| `:code [DIALECT] TABLE` | the generated code for one table |
+| `:target [DIALECT]` | shows or switches the dialect |
 | `:bindings` | everything defined so far |
 | `:reload` | re-reads the file you started with |
 | `:help` | this list |
@@ -39,25 +69,8 @@ Ctrl-C abandons the current line, Ctrl-D leaves, and Ctrl-L clears the screen.
 `TABLE` can be any table expression, not only a name:
 `:schema orders |> filter(revenue > 10.0) |> select(region)`.
 
-## Unfinished input
-
-When a line is incomplete (an open parenthesis, a trailing `|>`), the prompt
-changes to `...` and waits for more. An empty line abandons it. Typing
-`:prefix` at the `...` prompt checks the longest complete part of what you have
-so far and prints its schema, so you can see what the next stage will receive
-before you finish writing it:
-
-```text
-rupam> let t = orders |> filter(revenue > 0.0) |> mutate(z = standardize(
-  ... :prefix
-let t = orders |> filter(revenue > 0.0)
-customer_id : Int64
-region : String
-...
-```
-
-A definition that fails to check leaves the session as it was. Earlier
-bindings stay usable.
+An unfinished line (an open parenthesis, a trailing `|>`) continues on the
+next one. A definition that fails to check leaves the session as it was.
 
 ## Editors
 

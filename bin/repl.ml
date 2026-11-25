@@ -115,7 +115,10 @@ let diagnostic buf f =
     report (position p ^ ": " ^ msg);
     Error ()
   | Parser.Error ->
-    report (position buf.Lexing.lex_curr_p ^ ": syntax error");
+    let token = Lexing.lexeme buf in
+    report
+      (position buf.Lexing.lex_start_p
+       ^ if token = "" then ": the input ends too early" else ": unexpected " ^ token);
     Error ()
   | Failure msg | Shape.Error msg ->
     report (position buf.Lexing.lex_curr_p ^ ": " ^ msg);
@@ -227,6 +230,17 @@ let observe state name =
 let declare ~announce state d =
   let state = { state with history = state.history @ [ d ] } in
   match d with
+  | Syntax.Evaluate { form = Field ({ form = Name (Bare, owner); _ }, name); _ }
+    when match List.assoc_opt owner state.tables with
+         | Some (Analysis_program.Dictionary contract) ->
+           List.exists (fun (t : Contract.table) -> t.name = name) contract.tables
+         | _ -> false ->
+    (match List.assoc owner state.tables with
+     | Analysis_program.Dictionary contract ->
+       Contract.describe_table
+         (List.find (fun (t : Contract.table) -> t.name = name) contract.tables)
+     | _ -> ());
+    state
   | Syntax.Evaluate { form = Name (Bare, name); _ } when observe state name -> state
   | Syntax.Let (name, Some params, _) ->
     let state = extend state [ d ] in
@@ -235,6 +249,13 @@ let declare ~announce state d =
      | exception Infer.Error _ ->
        if announce then Printf.printf "%s : fn(%s)\n" name (String.concat ", " params);
        state)
+  | d when Option.is_some (Analysis_program.printed d) ->
+    let x = Option.get (Analysis_program.printed d) in
+    if tabular state (Syntax.Evaluate x)
+    then (
+      preview state (dataset state x);
+      state)
+    else echo ~announce state (Syntax.Evaluate x)
   | Evaluate x when tabular state d && not (writes d) ->
     preview state (dataset state x);
     state
@@ -245,25 +266,289 @@ let declare ~announce state d =
 
 let submit ?(announce = true) state ds = List.fold_left (declare ~announce) state ds
 
-let names state =
-  List.map fst state.tables @ List.map fst state.scalar.values |> List.sort_uniq compare
+let user_values state =
+  let builtins = List.length Infer.empty.values in
+  List.filteri
+    (fun i _ -> i < List.length state.scalar.values - builtins)
+    state.scalar.values
+;;
+
+type suggestion =
+  { text : string
+  ; detail : string
+  }
+
+let verbs =
+  [ "filter", "condition, missing = skip | propagate | error", [ "missing" ]
+  ; "select", "columns to keep, in order", []
+  ; "mutate", "name = value, ..., by = key", [ "by" ]
+  ; "rename", "old = new", []
+  ; "summarize", "name = reduction, ..., by = key", [ "by"; "missing"; "group_missing" ]
+  ; "arrange", "key, desc(key)", []
+  ; "take", "n rows of an arranged table", []
+  ; "distinct", "columns", []
+  ; "join", "other, on = key, how = left", [ "on"; "how" ]
+  ; ( "pivot_longer"
+    , "cols = (a, b), names_to = k, values_to = v"
+    , [ "cols"; "names_to"; "values_to" ] )
+  ; ( "pivot_wider"
+    , "names_from = k, values_from = v, levels = [..]"
+    , [ "names_from"; "values_from"; "levels" ] )
+  ; "print", "show the table", []
+  ; "write_parquet", "path", []
+  ]
+;;
+
+let choices = function
+  | "missing" | "group_missing" -> [ "skip"; "propagate"; "error" ]
+  | "how" -> [ "inner"; "left"; "right"; "full"; "semi"; "anti" ]
+  | _ -> []
 ;;
 
 let keywords = [ "let"; "match"; "type"; "fn"; "if"; "else"; "use"; "contract" ]
 
+let identifier c =
+  c = '_'
+  || c = '$'
+  || c = '^'
+  || Char.lowercase_ascii c <> Char.uppercase_ascii c
+  || (c >= '0' && c <= '9')
+;;
+
+let word_start line =
+  let rec go i = if i > 0 && identifier line.[i - 1] then go (i - 1) else i in
+  go (String.length line)
+;;
+
+let backward line from stop =
+  let rec go i depth =
+    if i < 0
+    then None
+    else (
+      match line.[i] with
+      | ')' | ']' | '}' -> go (i - 1) (depth + 1)
+      | ('(' | '[' | '{') when depth > 0 -> go (i - 1) (depth - 1)
+      | c when depth = 0 && stop line i c -> Some i
+      | _ -> go (i - 1) depth)
+  in
+  go from 0
+;;
+
+let opening line from = backward line from (fun _ _ c -> c = '(' || c = '[' || c = '{')
+
+let expression_start line from =
+  match
+    backward line from (fun line i c ->
+      match c with
+      | '(' | '[' | '{' | ',' -> true
+      | '=' ->
+        let before = if i > 0 then line.[i - 1] else ' ' in
+        let after = if i + 1 < String.length line then line.[i + 1] else ' ' in
+        after <> '=' && not (String.contains "=!<>" before)
+      | _ -> false)
+  with
+  | Some i -> i + 1
+  | None -> 0
+;;
+
+let trim_right s =
+  let rec go n =
+    if n > 0 && (s.[n - 1] = ' ' || s.[n - 1] = '\n') then go (n - 1) else n
+  in
+  String.sub s 0 (go (String.length s))
+;;
+
+let ends_with_pipe s =
+  let s = trim_right s in
+  String.ends_with ~suffix:"|>" s
+;;
+
+let piped state line pipe =
+  let start = expression_start line (pipe - 1) in
+  let source = String.trim (String.sub line start (pipe - start)) in
+  match Frontend.parse (Lexing.from_string source) with
+  | [ Syntax.Evaluate x ] ->
+    (try Some (dataset state x) with
+     | _ -> None)
+  | _ -> None
+  | exception _ -> None
+;;
+
+let columns (d : Analysis_program.dataset) =
+  List.map
+    (fun n -> { text = n; detail = Shape.type_name (List.assoc n d.plan.schema).typ })
+    (Table.names d.plan)
+;;
+
+let functions state =
+  List.map
+    (fun (n, b) -> { text = n; detail = Infer.display (snd (Infer.signature b)) })
+    Prelude.all
+  @ List.filter_map
+      (fun (n, b) ->
+         match b with
+         | Analysis_program.Function (ps, _, _, _) ->
+           Some { text = n; detail = "fn(" ^ String.concat ", " ps ^ ")" }
+         | _ -> None)
+      state.tables
+;;
+
+let values state =
+  List.filter_map
+    (fun (n, b) ->
+       match b with
+       | Analysis_program.Dataset _ -> Some { text = n; detail = "table" }
+       | Dictionary _ -> Some { text = n; detail = "contract" }
+       | Function _ -> None)
+    state.tables
+  @ List.map
+      (fun (n, (_, t)) -> { text = n; detail = Infer.display t })
+      (user_values state)
+;;
+
+let tables state =
+  List.filter_map
+    (fun (n, b) ->
+       match b with
+       | Analysis_program.Dataset _ -> Some { text = n; detail = "table" }
+       | Dictionary _ -> Some { text = n; detail = "contract" }
+       | Function _ -> None)
+    state.tables
+;;
+
+let dialects = List.map (fun (n, _) -> { text = n; detail = "dialect" }) Project.dialects
+
+let files state prefix =
+  let directory = Filename.concat state.directory (Filename.dirname prefix) in
+  match Sys.readdir directory with
+  | entries ->
+    Array.to_list entries
+    |> List.sort compare
+    |> List.map (fun e ->
+      let path =
+        if Filename.dirname prefix = "." && not (String.starts_with ~prefix:"./" prefix)
+        then e
+        else Filename.concat (Filename.dirname prefix) e
+      in
+      { text = path
+      ; detail =
+          (if Sys.is_directory (Filename.concat directory e) then "directory" else "file")
+      })
+  | exception Sys_error _ -> []
+;;
+
+let option_name argument =
+  if String.ends_with ~suffix:"=" argument
+  then String.trim (String.sub argument 0 (String.length argument - 1))
+  else ""
+;;
+
+let command_candidates line =
+  let words = String.split_on_char ' ' line |> List.filter (( <> ) "") in
+  let fresh = String.ends_with ~suffix:" " line in
+  match words, fresh with
+  | ([] | [ _ ]), false ->
+    `Commands
+      (List.map
+         (fun (usage, text) ->
+            { text = List.hd (String.split_on_char ' ' usage); detail = text })
+         help)
+  | [ ":target" ], true | [ ":target"; _ ], false -> `Dialects
+  | [ ":code" ], true | [ ":code"; _ ], false -> `Code
+  | _ -> `Tables
+;;
+
 let complete state line =
-  let start =
-    match String.rindex_opt line ' ' with
-    | Some i -> i + 1
-    | None -> 0
-  in
+  let start = word_start line in
   let word = String.sub line start (String.length line - start) in
-  let candidates =
-    if start = 0 && String.starts_with ~prefix:":" word
-    then command_names
-    else names state @ keywords
+  let quotes = List.length (String.split_on_char '"' line) - 1 in
+  let candidates, start, word =
+    if String.starts_with ~prefix:":" (String.trim line)
+    then (
+      match command_candidates line with
+      | `Commands cs -> cs, start - 1, ":" ^ word
+      | `Dialects -> dialects, start, word
+      | `Code -> dialects @ tables state, start, word
+      | `Tables -> tables state, start, word)
+    else if quotes mod 2 = 1
+    then (
+      let quote = String.rindex line '"' + 1 in
+      let prefix = String.sub line quote (String.length line - quote) in
+      files state prefix, quote, prefix)
+    else if start > 0 && line.[start - 1] = '.'
+    then (
+      let base = String.sub line 0 (start - 1) in
+      let owner =
+        String.sub base (word_start base) (String.length base - word_start base)
+      in
+      match List.assoc_opt owner state.tables with
+      | Some (Analysis_program.Dictionary contract) ->
+        ( List.map
+            (fun (t : Contract.table) -> { text = t.name; detail = "table" })
+            contract.tables
+        , start
+        , word )
+      | _ -> [], start, word)
+    else if ends_with_pipe (String.sub line 0 start)
+    then
+      ( List.map (fun (v, d, _) -> { text = v; detail = d }) verbs
+        @ List.filter
+            (fun s -> String.starts_with ~prefix:"fn" s.detail)
+            (functions state)
+      , start
+      , word )
+    else (
+      let inside =
+        match opening line (start - 1) with
+        | Some paren ->
+          let callee = String.sub line 0 paren in
+          let callee_start = word_start callee in
+          let verb = String.sub callee callee_start (paren - callee_start) in
+          let before = String.sub line 0 callee_start in
+          (match List.find_opt (fun (v, _, _) -> v = verb) verbs with
+           | Some (_, _, options) when ends_with_pipe before ->
+             let pipe = String.length (trim_right before) - 2 in
+             Some (options, piped state line pipe, paren)
+           | _ -> None)
+        | None -> None
+      in
+      let argument =
+        match inside with
+        | Some (_, _, paren) ->
+          let from =
+            match backward line (start - 1) (fun _ _ c -> c = ',') with
+            | Some comma when comma > paren -> comma + 1
+            | _ -> paren + 1
+          in
+          String.trim (String.sub line from (start - from))
+        | None -> ""
+      in
+      match inside with
+      | Some (options, _, _) when List.mem (option_name argument) options ->
+        let option = option_name argument in
+        List.map (fun c -> { text = c; detail = option }) (choices option), start, word
+      | Some (options, table, _) ->
+        ( Option.fold ~none:[] ~some:columns table
+          @ List.map (fun o -> { text = o ^ " = "; detail = "option" }) options
+          @ functions state
+          @ values state
+        , start
+        , word )
+      | None ->
+        ( values state
+          @ functions state
+          @ List.map (fun k -> { text = k; detail = "keyword" }) keywords
+        , start
+        , word ))
   in
-  start, List.filter (fun c -> String.starts_with ~prefix:word c && c <> word) candidates
+  let seen = Hashtbl.create 16 in
+  ( start
+  , List.filter
+      (fun c ->
+         let fresh = not (Hashtbl.mem seen c.text) in
+         Hashtbl.replace seen c.text ();
+         fresh && String.starts_with ~prefix:word c.text && c.text <> word)
+      candidates )
 ;;
 
 let evaluate state source =
@@ -342,7 +627,7 @@ let run state = function
       (List.rev state.tables);
     List.iter
       (fun (name, (_, t)) -> Printf.printf "%s : %s\n" name (Infer.display t))
-      (List.rev state.scalar.values);
+      (List.rev (user_values state));
     Some state
   | Type source ->
     let buf = Lexing.from_string source in
@@ -381,13 +666,7 @@ let run state = function
          let d = table state source in
          match view with
          | Schema -> Analysis_program.schema d
-         | Contract ->
-           print_endline
-             (match d.origin with
-              | Contracted { dictionary; table; _ } ->
-                Printf.sprintf "%s (%s), values pending" dictionary.path table.name
-              | File { path; _ } -> path ^ " has no contract; its schema is inferred"
-              | Joined _ -> "joined from several sources; see :explain")
+         | Contract -> print_endline (Analysis_program.origin d)
          | Validate ->
            Analysis_program.validate
              ~runtime:(Runtime.resolve state.project Runtime.Python)
