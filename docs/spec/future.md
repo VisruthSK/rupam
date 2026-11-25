@@ -53,6 +53,28 @@ release policy is defined, these outputs remain restricted.
 
 Named `test` blocks with inline tables, run on every dialect by `rupam test`.
 
+## Inferred refinements
+
+Strengthen the internal refinement engine without new syntax, in the spirit of
+Liquid Types (Rondon, Kawaguchi and Jhala, PLDI 2008): Hindley–Milner inference
+plus predicate abstraction over a small decidable domain. After
+`filter(age >= 18 and age <= 65)`, `mutate(remaining = 100 - age)` gives
+`remaining` the interval 35 to 82 without annotations.
+
+| Analysis | Establishes |
+| --- | --- |
+| intervals | lower and upper bounds through arithmetic, filters and guards |
+| cardinality bounds | enough observations, such as two present values for `sd` |
+| congruence | divisibility and integral properties |
+| relations | facts between values, such as `start <= end` |
+| implication | whether known facts discharge a new obligation |
+
+Facts follow Rupam's exact Int64 and IEEE binary64 semantics, including
+rounding, underflow and overflow; real-number reasoning alone is unsound. A
+general SMT solver comes only after the decidable domain proves insufficient.
+Users never write logical predicates in ordinary annotations. Related work:
+Abstract Refinement Types (ESOP 2013), Bounded Refinement Types (ICFP 2015).
+
 ## Logical optimiser
 
 A pass over the typed core, after checking and before any lowering, that
