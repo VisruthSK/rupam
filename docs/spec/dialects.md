@@ -34,7 +34,7 @@ A dialect provides:
 - a capability table listing the constructs it supports;
 - its adapters, packages, and readers and writers per file format.
 
-Host printing and source mapping are shared by dialects of the same language.
+The host language owns worker startup, host syntax printing and source mapping. Table dialects of that language share these facilities. The viewer compiles Rupam expressions through the same selected dialect as the REPL and script compiler.
 The manifest is derived from the typed core, lock and capability table.
 
 ## Lowering

@@ -20,7 +20,7 @@ Generated code should be readable native code, not a defensive runtime.
    and random streams have the documented limits in [Dialects](dialects.md).
 3. The REPL runs compiled code. A locked preview and script agree for the
    same dialect, effect inputs and environment.
-4. Values are immutable; functions are pure.
+4. Values are immutable. Functions are pure; top-level effects execute in source order. A live viewer draft runs automatically only when its evaluation is pure.
 5. Static and locked-analysis proofs emit no redundant checks. Complete pure
    snapshots can establish schemas and concrete domain facts; explicit locking
    commits them. Validate data
@@ -28,7 +28,8 @@ Generated code should be readable native code, not a defensive runtime.
    adapters. Changed inputs require reanalysis and recompilation.
 6. Prefer native vectorised table operations and readable pipelines; no
    per-row callbacks for core table computations.
-7. Configuration strategies are enums, not Boolean flags.
+7. Name competing analytical strategies explicitly (for example, missing-value policies). Use booleans for genuine on/off settings such as strict checking.
+8. The prompt, viewer and saved program use the same Rupam expressions, logical types and diagnostics. Inspection reads existing evidence. Evaluation that can change external state requires explicit submission.
 
 ## Out of scope
 

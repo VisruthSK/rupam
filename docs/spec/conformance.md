@@ -157,6 +157,20 @@ check that proved obligations emit no redundant runtime assertions.
 | C126 | `lookup(customers, customer_id = 7)` on a key, then on a non-key | a `{...}?` row; type error |
 | C127 | `match x, y { 0, _ => A, _, 0 => B, _, _ => C }` | exhaustive; selects per row |
 
+## Agent and session cases
+
+| ID | Program or input | Expected |
+| --- | --- | --- |
+| C128 | `penguins \|> summarize(m = todo, by = species)` | checks; hole reports numeric type, group scope and candidates including `mean(body_mass)`; `run` and `compile` refuse |
+| C129 | `filter(cost > 0.0)` with optional `cost` through the session protocol | `optional-predicate` with a decision whose options are `missing = skip` and `missing = propagate`, each with its schema consequence |
+| C130 | `select(body_mas)` | `unknown-column` with a fix to `body_mass` |
+| C131 | `mean(x, na.rm = TRUE)`; `t %>% filter(x > 1)`; `NA` | `r-na-rm` decision; `r-pipe` fix; `r-na` fix |
+| C132 | `define` an item, redefine a dependency | dependant reported stale; old revision still served to an open result handle |
+| C133 | evaluate `write_csv` without passing its effect set | rejected; nothing written |
+| C134 | `page` of a table with a restricted column at `rows` exposure | column absent; omission reported |
+| C135 | `fork`, define in the fork, `context` on both | original session unchanged |
+| C136 | `save` after defines, replacements and a removal | canonical `.rp` in dependency order that checks to the same schemas |
+
 ## Additional implementation requirements
 
 The interaction cases above are normative acceptance criteria, not results of
@@ -166,6 +180,10 @@ standard library. Add concrete fixtures for the supported role annotations,
 constraint solving and generalisation, policy capture and call instantiation.
 Include negative cases and confirm that a proof derived from one target or
 snapshot is never reused for a different one without valid shared evidence.
+
+### Live viewer interaction
+
+Open a table and edit a Rupam filter without pressing Enter. Compare the full result and logical schema against the identical REPL expression and compiled script on the same snapshot. Leave a trailing pipe, misspell a column and correct it. Keep the previous grid labelled until the correction succeeds. Deliver a late reply and verify it cannot overwrite current rows or diagnostics. Verify an effectful draft performs no write, scrolling performs no evaluation, and inserting the filter at the prompt preserves its source.
 
 ## Benchmarks
 

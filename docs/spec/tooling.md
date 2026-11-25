@@ -30,10 +30,11 @@ the locked analysis.
 
 | Command | Effect |
 | --- | --- |
+| `:options` | effective settings and their sources |
 | `:type EXPR` | type, schema, or pending discovery; runs nothing |
 | `:schema TABLE` | columns, types, refinements, evidence (static, contractual, snapshot-specific), keys, order, units, contract and lock status |
 | `:preview TABLE` | first rows |
-| `:view TABLE` | the viewer |
+| `:view EXPR` | inspect a completed value |
 | `:explain TABLE` | plan, validation steps, adapters |
 | `:probe EXPR` | on-demand stage or expression statistics over its current snapshot |
 | `:code TABLE` | generated code |
@@ -41,25 +42,32 @@ the locked analysis.
 | `:lock` | validate and lock the current complete analysis |
 | `:status` | current/stale lock and changed dependencies |
 | `:validate TABLE` | validate the whole source snapshot |
+| `:share` | let `rupam mcp --attach` join this session |
+| `:fixture ID` | write the last interaction as a conformance fixture |
 | `:bindings`, `:reload`, `:help`, `:quit` | |
 
 The prompt highlights syntax as it is typed, completes from a menu, edits
 multiple lines and keeps history. Completion offers columns with their types
 and units, enum values, and functions with signatures.
 
-Tables print with a type row (`<dbl>`, `<int>`, `<chr?>`), distinct styling
-for missing values, aligned significant figures, and a footer counting rows
+Tables print the checker’s exact type beneath each column name in subdued grey,
+including nominal names, refinements and optionality. Use distinct styling
+for missing values, aligned numbers with configurable preview precision, and a footer counting rows
 and columns not shown.
 
 ## Viewer
 
-`:view` opens a full-screen table explorer.
+`:view` opens a full-screen object viewer on a completed binding, expression or
+pipeline stage. Tables open in the grid, vectors by index and records by field.
+Drill into a value and return to the same selection. Closing the viewer restores
+the REPL draft and cursor. Pin the viewed revision until the analyst switches
+inputs, including when a binding is shadowed.
 
-- **Grid:** virtualised rows and columns over the worker; only visible pages
+- **Grid:** virtualised rows and columns over the Arrow snapshot; only visible pages
   are materialised. Frozen key columns. Column widths fit content.
 - **Headers:** name, type, refinement, units, description, key marker.
 - **Column summaries:** missing count, distinct count, min, max, mean and a
-  histogram or top-values bar for every column, computed in the worker.
+  histogram or top-values bar for every column, computed on demand and cached by snapshot revision and column.
 - **Column detail:** frequency table, quantiles and distribution for one
   column.
 - **Sort, filter and search:** multi-column sort; filters by value, range,
@@ -71,6 +79,14 @@ and columns not shown.
 - **Navigation:** keyboard-first with arrow and vi bindings, plus mouse.
 - **Restricted columns** are not shown.
 - Runs in the terminal on Windows, macOS and Linux.
+
+### Live Rupam preview
+
+Open a table with its binding or completed pipeline in an editable Rupam buffer beside the grid. For example, edit `birds |> filter(body_mass > 4000, missing = skip)`. The viewer uses the REPL's parser, name resolver, checker, completion and compiler. A grid action edits that same expression. The worker evaluates each complete, checked, pure draft against the pinned bindings in the selected dialect. A draft requiring an effect waits for explicit submission at the prompt.
+
+Keep the last successful grid visible while input is incomplete, invalid or running. Identify the displayed revision and show the current draft's diagnostic at its Rupam span. Coalesce edits and discard stale replies. Publish the new typed result when ready. Render visible Arrow cells on demand. Scrolling reuses the completed result.
+
+Insert the expression at the prompt to continue or save it in an `.rp` script. Closing the viewer restores the original draft and cursor. Generated R is available through the ordinary compiler.
 
 ## Probes
 
@@ -86,7 +102,7 @@ emit routine warnings for these observations.
 
 ## Diagnostics
 
-A diagnostic has a stable name, a source span, related spans, and concise code suggestions:
+A diagnostic has a stable code, a source span, related spans, and resolutions. A resolution is a fix that preserves meaning or a decision between edits with different analytical results ([Agents](agents.md#diagnostics-as-data)):
 
 ```text
 rates.rp:8:28  zero-divisor
@@ -101,14 +117,17 @@ rates.rp:8:28  zero-divisor
   They never show inference variables. Report code-level facts and offer
   concise code fixes. Do not interpret research questions, statistical
   validity, generalizability or substantive implications.
-- `rupam explain zero-divisor` prints the full explanation.
+- `rupam explain zero-divisor` prints the full explanation. All codes are
+  defined in one catalogue ([Development](development.md#diagnostic-catalogue)).
+- Common R and dplyr forms get a diagnostic naming the Rupam form
+  ([Agents](agents.md#r-idioms)).
 - An unused table expression is a warning. Explicit missing policies and
   ordinary loss of inferred key facts are not warnings. Hover, `:schema`
   and `:explain` show lost keys, ordering, lifting and the reason for a
   required declaration. Missing-group counts may appear in summaries.
 - Lock errors identify changed inputs and request relocking/recompilation.
 
-## Editor support
+## Editor support (deferred)
 
 `rupam lsp` provides diagnostics, hover with types, shapes, refinements,
 order, keys, lock status and lifting, schema-aware completion, and go-to-definition.
@@ -119,3 +138,6 @@ stage discovery or request an explicit probe; mark provisional schemas as such.
 Purely static `:type` runs nothing; if discovery is required it reports the
 pending schema until a probe or full exploration evaluates it.
 
+## Programmatic access
+
+The session protocol and MCP server are specified in [Agents](agents.md).

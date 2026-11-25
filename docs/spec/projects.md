@@ -14,8 +14,23 @@ strict = true
 
 - `target.dialect`: `r-dplyr` or `python-polars`. There is no default; a
   command that runs or compiles without a dialect from `--target` or
-  `rupam.toml` fails.
+  `rupam.toml` fails. An empty REPL can inspect settings and accept `:target` before execution.
 - `check.strict`: defaults to `true`.
+
+`[preview] digits = 2` sets decimal places for Float64 grid and preview cells
+(0 through 17, default 2). Calculations, exports and locks retain full precision.
+
+Resolve each key independently in this order, with later values taking precedence:
+
+1. Built-in defaults.
+2. The user's `rupam.toml`: `$XDG_CONFIG_HOME/rupam/rupam.toml` on Unix, falling back to `~/.config/rupam/rupam.toml`; `%APPDATA%/rupam/rupam.toml` on Windows.
+3. The nearest enclosing project's `rupam.toml`.
+4. Explicit command-line flags and subsequent session overrides.
+
+The global file supplies defaults even outside a project. Project environment discovery still starts from the project's own directory. `:options` reports each effective key, value and winning source, including the file path or session flag/command. An explicitly supplied value retains that origin even when it equals the built-in default. Lock semantic settings by effective value. Display preferences and their origins are presentation metadata.
+
+`[agent] data` bounds what the session protocol and MCP server return:
+`schema`, `summaries` (default) or `rows` ([Agents](agents.md#data-exposure)).
 
 Settings that change a program's meaning are declared in the program
 (`use missing`, `use group_missing`).
@@ -125,7 +140,10 @@ runtime dependencies, not future draws or timestamps.
 | `rupam fmt FILE` | format |
 | `rupam schema FILE` | describe a contract, or print an inferred schema as a `schema =` literal |
 | `rupam explain NAME` | explain a diagnostic |
-| `rupam lsp` | language server |
+| `rupam session` | JSON-RPC session protocol over stdio ([Agents](agents.md#session-protocol)) |
+| `rupam mcp [--attach]` | MCP server for the project ([Agents](agents.md#mcp-server)) |
+| `rupam debug stages\|conformance FILE` | development tools ([Development](development.md)) |
+| `rupam lsp` | language server (deferred) |
 
 `--target` and `--no-strict` override `rupam.toml` and are included in the lock.
 
