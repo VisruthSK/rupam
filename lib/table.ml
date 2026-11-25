@@ -11,6 +11,12 @@ type step =
   | Rename of (string * string * int) list
   | Bind of string * expr
   | Select of string list
+  | Assert_key of string list
+
+type key =
+  { columns : string list
+  ; present : bool
+  }
 
 type t =
   { locations : (step * Syntax.span) list
@@ -18,26 +24,61 @@ type t =
   ; schema : (string * expr) list
   ; steps : step list
   ; next : int
-  ; ordered : bool
+  ; keys : key list
+  ; order : string list option
   }
 
-let source context fields =
+let source ?(keys = []) context fields =
   let schema =
     List.mapi
       (fun id (name, primitive, nullable) ->
          name, input id { primitive; nullable; shape = Column context })
       fields
   in
-  { locations = []
-  ; context
-  ; schema
-  ; steps = []
-  ; ordered = false
-  ; next = List.length fields
-  }
+  { locations = []; context; schema; steps = []; keys; order = None; next = List.length fields }
 ;;
 
 let names table = List.map fst table.schema
+
+let key table columns =
+  { columns
+  ; present =
+      List.for_all (fun c -> not (List.assoc c table.schema).typ.nullable) columns
+  }
+;;
+
+let unique table columns =
+  List.exists (fun k -> List.for_all (fun c -> List.mem c columns) k.columns) table.keys
+;;
+
+let total table =
+  match table.order with
+  | Some sorted -> unique table sorted
+  | None -> false
+;;
+
+let prefix keep columns =
+  let rec go = function
+    | c :: rest when keep c -> c :: go rest
+    | _ -> []
+  in
+  go columns
+;;
+
+let restrict keep table =
+  { table with
+    keys = List.filter (fun k -> List.for_all keep k.columns) table.keys
+  ; order = Option.map (prefix keep) table.order
+  }
+;;
+
+let rename_columns changes table =
+  let renamed n = Option.value ~default:n (List.assoc_opt n changes) in
+  { table with
+    keys = List.map (fun k -> { k with columns = List.map renamed k.columns }) table.keys
+  ; order = Option.map (List.map renamed) table.order
+  }
+;;
 
 let select table arguments =
   let name = function
@@ -131,7 +172,10 @@ let select table arguments =
   if List.length schema <> List.length (List.sort_uniq compare (List.map fst schema))
   then raise (Error "Duplicate projection label");
   let steps = Select selected :: table.steps in
-  { table with schema; steps = (if changes = [] then steps else Rename changes :: steps) }
+  let kept = restrict (fun c -> List.mem c selected) table in
+  rename_columns
+    (List.map (fun (a, b, _) -> a, b) changes)
+    { kept with schema; steps = (if changes = [] then steps else Rename changes :: steps) }
 ;;
 
 let grouping table groups =
@@ -226,7 +270,8 @@ let transform env table verb arguments =
     { table with
       schema
     ; next = table.next + List.length fields
-    ; ordered = false
+    ; keys = []
+    ; order = None
     ; steps = Pivot p :: table.steps
     }
   | "rename", _ ->
@@ -253,10 +298,14 @@ let transform env table verb arguments =
       List.length ns <> List.length (List.sort_uniq compare ns)
       || List.length old <> List.length (List.sort_uniq compare old)
     then raise (Error "Duplicate rename field");
-    { table with schema; steps = Rename mapping :: table.steps }
+    rename_columns changes { table with schema; steps = Rename mapping :: table.steps }
   | "slice_head", [ (Some "n", { Syntax.form = Literal (Int n); _ }) ] ->
-    if not table.ordered
-    then raise (Error "slice_head needs an order: arrange the table first");
+    if not (total table)
+    then
+      raise
+        (Error
+           "slice_head needs a total order: arrange by columns that include a key of \
+            the table, or establish one with assert_key");
     let count =
       match int_of_string_opt n with
       | Some i when i >= 0 -> i
@@ -268,7 +317,23 @@ let transform env table verb arguments =
     let projected = if arguments = [] then table else select table arguments in
     { table with
       steps = Distinct (List.map snd projected.schema) :: table.steps
-    ; ordered = false
+    ; keys = [ key projected (names projected) ]
+    ; order = None
+    }
+  | "assert_key", _ ->
+    let columns =
+      List.map
+        (function
+          | None, { Syntax.form = Name ((Bare | Column), n); _ } ->
+            ignore (Check.lookup n table.schema);
+            n
+          | _ -> raise (Error "assert_key takes column names"))
+        arguments
+    in
+    if columns = [] then raise (Error "assert_key needs at least one column");
+    { table with
+      keys = key table columns :: table.keys
+    ; steps = Assert_key columns :: table.steps
     }
   | "arrange", [] -> raise (Error "arrange requires at least one ordering key")
   | "arrange", _ ->
@@ -278,7 +343,18 @@ let transform env table verb arguments =
       | None, x -> Check.expression env table.schema x, false
       | _ -> raise (Error "Expected unnamed order key")
     in
-    { table with ordered = true; steps = Arrange (List.map key arguments) :: table.steps }
+    let keys = List.map key arguments in
+    let sorted =
+      List.map
+        (fun ((x : Shape.expr), _) ->
+           List.find_map
+             (fun (n, (e : Shape.expr)) -> if e == x then Some n else None)
+             table.schema)
+        keys
+      |> prefix Option.is_some
+      |> List.map Option.get
+    in
+    { table with order = Some sorted; steps = Arrange keys :: table.steps }
   | "summarize", _ ->
     let options = options arguments in
     let missing = options.missing in
@@ -324,12 +400,15 @@ let transform env table verb arguments =
            n, input (table.next + i) { t with shape = Column table.context })
         fields
     in
-    { table with
-      schema
-    ; ordered = false
-    ; next = table.next + List.length schema
-    ; steps = Summarize (keys, measures) :: table.steps
-    }
+    let result =
+      { table with
+        schema
+      ; next = table.next + List.length schema
+      ; steps = Summarize (keys, measures) :: table.steps
+      ; order = (if keys = [] then Some [] else None)
+      }
+    in
+    { result with keys = [ key result (List.map fst keys) ] }
   | "select", _ -> select table arguments
   | "filter", (None, x) :: options ->
     let policy =
@@ -358,7 +437,7 @@ let transform env table verb arguments =
            else field)
         table.schema
     in
-    { table with schema; ordered = false; steps = Filter predicate :: table.steps }
+    { table with schema; steps = Filter predicate :: table.steps }
   | "filter", _ -> raise (Error "filter takes one condition and an optional missing =")
   | "mutate", _ ->
     let options = options arguments in
@@ -388,6 +467,7 @@ let transform env table verb arguments =
            | None -> raise (Error "Expected named binding")
          in
          let exists = List.mem_assoc n table.schema in
+         let table = if exists then restrict (fun c -> c <> n) table else table in
          let value =
            broadcast (Column table.context) (Check.expression ?missing env table.schema x)
            |> grouped
@@ -570,7 +650,7 @@ let execute plan ~rows inputs =
            incr next)
         columns;
       size := count
-    | Rename _ | Select _ -> ()
+    | Rename _ | Select _ | Assert_key _ -> ()
     | Window (_, v, keys) ->
       let module Groups = Map.Make (struct
           type t = value list

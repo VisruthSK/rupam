@@ -277,6 +277,8 @@ let lower ~fields (table : Table.t) =
       let value = emit x in
       bind name;
       P.link "with_columns" [ P.Positional (named name value) ] :: checks [ name, x ]
+    | Assert_key columns ->
+      [ P.link "pipe" [ P.Positional (P.Name "rp_assert_key"); P.Positional (P.names columns) ] ]
   and checks columns =
     match List.filter (fun (_, x) -> Shape.nonfinite x) columns with
     | [] -> []

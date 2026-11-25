@@ -19,6 +19,20 @@ def rp_finite(series):
     return series
 
 
+def rp_covered(left, right, key, kind):
+    sides = {"left": [(left, right)], "right": [(right, left)]}.get(kind, [(left, right), (right, left)])
+    for rows, other in sides:
+        if rows.join(other, on=key, how="anti", nulls_equal=False).select(pl.len()).collect().item():
+            raise ValueError(f"{kind}_join with unmatched = error found rows with no match on {key}")
+    return left
+
+
+def rp_assert_key(frame, columns):
+    if frame.select(pl.struct(columns).is_duplicated().any()).collect().item():
+        raise ValueError(f"{', '.join(columns)} is not a key: some rows repeat it")
+    return frame
+
+
 def rp_present(series):
     if series.null_count() > 0:
         raise ValueError("filter condition is missing and missing = error")

@@ -64,6 +64,7 @@ and join =
   ; key : string
   ; kind : join_kind
   ; relationship : relationship option
+  ; covered : bool
   }
 
 type binding =
@@ -178,7 +179,22 @@ let rec dataset ~directory env scalars x =
                    types)
           }
     ; fields = List.map (fun (n, _, _) -> n) fields
-    ; plan = Table.source 0 fields
+    ; plan =
+        (let plan = Table.source 0 fields in
+         let primary =
+           List.filter_map
+             (fun (c : Contract.column) -> if c.primary then Some c.name else None)
+             table.columns
+         in
+         let unique =
+           List.filter_map
+             (fun (c : Contract.column) ->
+                if c.unique then Some (Table.key plan [ c.name ]) else None)
+             table.columns
+         in
+         { plan with
+           keys = (if primary = [] then [] else [ Table.key plan primary ]) @ unique
+         })
     }
   | Call
       ( { form = Name (Bare, (("read_csv" | "read_parquet" | "read_tsv") as reader)); _ }
@@ -230,23 +246,25 @@ let rec dataset ~directory env scalars x =
           } -> l, r
       | _ -> fail x (verb ^ " needs by = key, or by = (left_key == right_key)")
     in
-    let relationship =
-      match List.assoc_opt (Some "relationship") options, kind with
-      | Some { form = Name (_, name); _ }, _ when List.mem_assoc name relationships ->
+    let covered =
+      match List.assoc_opt (Some "unmatched") options, kind with
+      | None, _ | Some { form = Name (_, "allow"); _ }, _ -> false
+      | Some { form = Name (_, "error"); _ }, (Semi | Anti) ->
+        fail x ("unmatched = error is not available on " ^ verb)
+      | Some { form = Name (_, "error"); _ }, _ -> true
+      | Some _, _ -> fail x "unmatched is allow or error"
+    in
+    let declared =
+      match List.assoc_opt (Some "relationship") options with
+      | Some { form = Name (_, name); _ } when List.mem_assoc name relationships ->
         Some (List.assoc name relationships)
-      | Some _, _ ->
+      | Some _ ->
         fail x "relationship is one_to_one, many_to_one, one_to_many or many_to_many"
-      | None, (Semi | Anti) -> None
-      | None, _ ->
-        fail
-          x
-          (verb
-           ^ " needs relationship = one_to_one, many_to_one, one_to_many or \
-              many_to_many, because rupam cannot yet prove how many rows match")
+      | None -> None
     in
     (match
        List.find_opt
-         (fun (n, _) -> n <> Some "by" && n <> Some "relationship")
+         (fun (n, _) -> n <> Some "by" && n <> Some "relationship" && n <> Some "unmatched")
          options
      with
      | Some (Some n, _) -> fail x (verb ^ " takes no option named " ^ n)
@@ -264,8 +282,34 @@ let rec dataset ~directory env scalars x =
               scalars
               right.plan
               "rename"
-              [ Some right_key, { x with form = Name (Bare, key) } ]
+              [ Some key, { x with form = Name (Bare, right_key) } ]
         }
+    in
+    let left_unique = Table.unique left.plan [ key ]
+    and right_unique = Table.unique right.plan [ key ] in
+    let relationship =
+      match declared, kind with
+      | Some r, _ -> Some r
+      | None, (Semi | Anti) -> None
+      | None, (Left | Inner) when right_unique -> Some Many_to_one
+      | None, Right when left_unique -> Some One_to_many
+      | None, Full when left_unique && right_unique -> Some One_to_one
+      | None, _ ->
+        fail
+          x
+          (verb
+           ^ " needs relationship = one_to_one, many_to_one, one_to_many or \
+              many_to_many: no key proves how many rows match on "
+           ^ key)
+    in
+    let at_most_one_right =
+      match relationship with
+      | Some (One_to_one | Many_to_one) -> true
+      | _ -> kind = Semi || kind = Anti
+    and at_most_one_left =
+      match relationship with
+      | Some (One_to_one | One_to_many) -> true
+      | _ -> false
     in
     let lk = Check.lookup key left.plan.schema
     and rk = Check.lookup key right.plan.schema in
@@ -288,9 +332,23 @@ let rec dataset ~directory env scalars x =
                Some (n, e.typ.primitive, e.typ.nullable || nullable_right)))
           right.plan.schema
     in
-    { origin = Joined { left; right; key; kind; relationship }
+    let plan = Table.source 0 fields in
+    let keys =
+      (if at_most_one_right && kind <> Right && kind <> Full then left.plan.keys else [])
+      @ if at_most_one_left && (kind = Right || kind = Inner) then right.plan.keys else []
+    in
+    { origin = Joined { left; right; key; kind; relationship; covered }
     ; fields = List.map (fun (n, _, _) -> n) fields
-    ; plan = Table.source 0 fields
+    ; plan =
+        { plan with
+          keys =
+            List.filter_map
+              (fun (k : Table.key) ->
+                 if List.for_all (fun c -> List.mem_assoc c plan.schema) k.columns
+                 then Some (Table.key plan k.columns)
+                 else None)
+              keys
+        }
     }
   | Pipe (a, ({ form = Call ({ form = Name (Bare, verb); _ }, args); _ } as stage)) ->
     let t = dataset ~directory env scalars a in
@@ -441,7 +499,7 @@ let rec restrictions d =
         if List.exists (fun (x, _) -> private_expr x) keys then private_rows := true
       | Filter x -> if private_expr x then private_rows := true
       | Distinct xs -> if List.exists private_expr xs then private_rows := true
-      | Select _ | Take _ -> ())
+      | Select _ | Take _ | Assert_key _ -> ())
     (List.rev d.plan.steps);
   List.filter_map
     (fun (n, x) -> if !private_rows || private_expr x then Some n else None)
@@ -487,9 +545,14 @@ let rec python_stages d =
                  | `String t -> P.Str t
                  | _ -> P.Null )))
         ]
-    | Joined { left; right; key; kind; relationship } ->
+    | Joined { left; right; key; kind; relationship; covered } ->
       P.Chain
-        ( python_table left
+        ( (if covered
+           then
+             P.call
+               "rp_covered"
+               [ python_table left; python_table right; P.Str key; P.Str (join_name kind) ]
+           else python_table left)
         , [ P.link
               "join"
               ([ P.Positional (python_table right)
@@ -587,7 +650,7 @@ let preview_page ~runtime d ~offset ~limit =
       "collect"
       []
   in
-  print_endline (if d.plan.ordered then "Ordered preview" else "Unordered preview");
+  print_endline (if d.plan.order <> None then "Ordered preview" else "Unordered preview");
   Worker.run
     runtime
     Runtime.Python
@@ -638,7 +701,8 @@ let explain d =
            ^ String.concat ", " (List.map fst measures)
            ^ if keys = [] then "" else " by " ^ String.concat ", " (List.map fst keys)
          | Arrange _ -> "arrange"
-         | Distinct _ -> "distinct rows"))
+         | Distinct _ -> "distinct rows"
+         | Assert_key columns -> "check that " ^ String.concat ", " columns ^ " is a key"))
   in
   visit d
 ;;

@@ -9,7 +9,7 @@ tables:
       - name: customer_id
         type: number(id)
         examples: [1, 2]
-        constraints: [required]
+        constraints: [primary_key]
       - name: region
         type: string
         examples: [North, South]

@@ -49,7 +49,7 @@ let long = measured
   |> mutate(group_size = n(), by = species)
   |> select(species, island, bill_length_mm, bill_depth_mm)
   |> pivot_longer(cols = [bill_length_mm, bill_depth_mm], names_to = measure, values_to = mm)
+  |> filter(island == "Biscoe")
   |> arrange(species, island, measure, mm)
-  |> slice_head(n = 6)
 
 print(long)

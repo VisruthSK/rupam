@@ -5,6 +5,8 @@ type column =
   { name : string
   ; logical_type : string
   ; required : bool
+  ; primary : bool
+  ; unique : bool
   ; restricted : bool
   ; metadata : Json.t
   }
@@ -37,7 +39,12 @@ let decode path metadata =
   let column metadata =
     { name = string "name" metadata
     ; logical_type = string "type" metadata
-    ; required = List.mem (`String "required") (list "constraints" metadata)
+    ; required =
+        List.exists
+          (fun c -> List.mem (`String c) (list "constraints" metadata))
+          [ "required"; "primary_key" ]
+    ; primary = List.mem (`String "primary_key") (list "constraints" metadata)
+    ; unique = List.mem (`String "unique") (list "constraints" metadata)
     ; restricted = optional "display" metadata = Some "restricted"
     ; metadata
     }

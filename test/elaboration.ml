@@ -116,9 +116,10 @@ let () =
       [ [| Missing; F nan; Missing; F nan; F 3. |] ]
   in
   assert (rows = 3);
+  rejects (fun () -> plan "t |> arrange(desc(x)) |> slice_head(n = 1)");
   assert (
     Table.execute
-      (plan "t |> arrange(desc(x)) |> slice_head(n = 1)")
+      (plan "t |> distinct(x) |> arrange(desc(x)) |> slice_head(n = 1)")
       ~rows:3
       [ [| F 1.; Missing; F 5. |] ]
     = (1, [ "x", [| F 5. |] ]))

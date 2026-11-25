@@ -205,6 +205,7 @@ let lower ~fields (plan : Table.t) base =
         , List.map (fun k -> R.Positional (emit k)) keys
           @ [ R.Named (".keep_all", R.Logical true) ] )
     | Filter x -> R.call "filter" [ emit x ]
+    | Assert_key columns -> R.call "rp_assert_key" [ R.strings columns ]
     | Select ns -> R.call "select" [ all_of ns ]
     | Bind (n, x) ->
       let value = checked x in
@@ -265,10 +266,18 @@ let rec table d =
         ; R.String table.name
         ; R.String (Yojson.Basic.to_string physical_types)
         ]
-    | Joined { left; right; key; kind; relationship } ->
+    | Joined { left; right; key; kind; relationship; covered } ->
+      let left =
+        if covered
+        then
+          R.call
+            "rp_covered"
+            [ table left; table right; R.String key; R.String (join_name kind) ]
+        else table left
+      in
       R.Call
         ( R.Name (join_name kind ^ "_join")
-        , [ R.Positional (table left)
+        , [ R.Positional left
           ; R.Positional (table right)
           ; R.Named ("by", R.String key)
           ; R.Named ("na_matches", R.String "never")
@@ -312,7 +321,7 @@ let preview_page ~runtime d ~offset ~limit =
         ] )
   in
   let page = R.pipe (R.call "as_tibble" [ table d ]) (R.call "slice" [ rows ]) in
-  print_endline (if d.plan.ordered then "Ordered preview" else "Unordered preview");
+  print_endline (if d.plan.order <> None then "Ordered preview" else "Unordered preview");
   Worker.run
     runtime
     Runtime.R

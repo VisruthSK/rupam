@@ -29,9 +29,11 @@ let orders = load(shop.orders)
 ```
 
 rupam asks the data-dict CLI for the resolved contract and reads the Parquet
-footer for physical types. A column marked `required` is typed `T`. Anything
-else is `T?`, even if the current file happens to have no gaps. `range`,
-`examples` and descriptions are documentation only and never become checks.
+footer for physical types. A column marked `required` or `primary_key` is
+typed `T`; anything else is `T?`, even if the current file happens to have no
+gaps. The `primary_key` columns together form the table's key, and each
+`unique` column is a key among its present values. `range`, `examples` and
+descriptions are documentation only and never become checks.
 
 Type checking needs only the contract and the Parquet footer. Before any
 preview, save or generated script touches values, the whole source is
@@ -49,10 +51,11 @@ left out of previews and generated output.
 | `rename(new = old)` | renames columns |
 | `summarize(n = n(), s = sum(x), by = k)` | one row per group with the keys and the summaries |
 | `arrange(k, desc(v))` | an explicitly ordered view |
-| `slice_head(n = 5)` | the first rows of an arranged table; on an unordered table it is an error |
+| `slice_head(n = 5)` | the first rows of a table arranged by columns that include a key |
 | `count(a, b)` | `summarize(n = n(), by = [a, b])` |
-| `distinct(a, b)` | one row per distinct key |
-| `left_join(other, by = k, relationship = many_to_one)` | also `inner_join`, `right_join`, `full_join`, `semi_join` and `anti_join`; `by = (a == b)` for differing names |
+| `distinct(a, b)` | one row per distinct combination; `a, b` becomes a key |
+| `assert_key(a, b)` | checks when it runs that `a, b` identifies each row, and makes it a key |
+| `left_join(other, by = k)` | also `inner_join`, `right_join`, `full_join`, `semi_join` and `anti_join`; `by = (a == b)` for differing names |
 | `pivot_longer(cols = [a, b], names_to = k, values_to = v)` | columns into key/value rows |
 | `pivot_wider(names_from = k, values_from = v, levels = [a, b])` | the reverse; the output columns must be listed |
 | `print(t)` | shows the table; in a script, prints it |
@@ -67,6 +70,31 @@ orders |> mutate(relative = revenue / mean(revenue), by = region)
 
 `pivot_wider` needs `levels` because a column named after a runtime value
 would make the schema unknowable until the data is read.
+
+## Keys and joins
+
+rupam tracks which columns identify a row. Keys come from contracts,
+`distinct`, `summarize(by = ...)`, `count` and `assert_key`, and survive the
+verbs that keep them intact: `filter`, `arrange` and `slice_head` keep every
+key, `select` and `rename` keep keys whose columns survive, and `mutate`
+drops a key when it replaces one of its columns.
+
+A join has to know how many rows can match. When a key proves it, as when
+joining onto a summary by its grouping column, nothing more is needed:
+
+```text
+let totals = orders |> summarize(total = sum(revenue), by = region)
+orders |> left_join(totals, by = region)
+```
+
+Otherwise say so with `relationship = one_to_one`, `many_to_one`,
+`one_to_many` or `many_to_many`, which both dialects check when the join
+runs. `unmatched = error` also requires every row to find a match: the left
+side for `left_join`, the right side for `right_join`, both for `inner_join`
+and `full_join`. Missing keys never match.
+
+`slice_head` needs a total order, so the table must be arranged by columns
+that include a key. Ties have no hidden tie-breaker.
 
 ## Names inside verbs
 
