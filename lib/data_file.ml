@@ -42,10 +42,26 @@ let columns path =
     | Some i -> Option.value row.(i) ~default:""
     | None -> failwith ("DuckDB DESCRIBE has no " ^ name ^ " column")
   in
-  Array.to_list rows
-  |> List.map (fun row ->
-    { name = field "column_name" row
-    ; physical = field "column_type" row
-    ; nullable = field "null" row <> "NO"
-    })
+  let described =
+    Array.to_list rows
+    |> List.map (fun row -> field "column_name" row, field "column_type" row)
+  in
+  let quote name = "\"" ^ String.concat "\"\"" (String.split_on_char '"' name) ^ "\"" in
+  let missing (name, physical) =
+    let column = quote name in
+    if physical = "DOUBLE"
+    then "count(*) FILTER (WHERE " ^ column ^ " IS NULL OR isnan(" ^ column ^ "))"
+    else "count(*) - count(" ^ column ^ ")"
+  in
+  let _, counts =
+    query
+      ("SELECT "
+       ^ String.concat ", " (List.map missing described)
+       ^ " FROM "
+       ^ reader path)
+  in
+  List.mapi
+    (fun i (name, physical) ->
+       { name; physical; nullable = Option.value counts.(0).(i) ~default:"0" <> "0" })
+    described
 ;;

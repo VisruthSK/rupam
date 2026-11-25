@@ -191,12 +191,17 @@ let compile ?(annotate = Source_map.plain) program =
             | op -> binary_symbol op
           in
           let v = "(" ^ a ^ " " ^ symbol ^ " " ^ b ^ ")" in
-          if op = Power then "float" ^ v else v
+          (match op, Infer.operand x with
+           | Power, _ -> "float" ^ v
+           | (Add | Sub | Mul), Some Int -> "rp_int" ^ v
+           | (Add | Sub | Mul), Some Float -> "rp_real" ^ v
+           | _ -> v)
         | _ -> assert false)
     | Unary (op, v) ->
       operate [ v ] (function
         | [ v ] ->
           (match op with
+           | Negate when Infer.operand x = Some Int -> "rp_int(-" ^ v ^ ")"
            | Negate -> "(-" ^ v ^ ")"
            | Not -> "(not " ^ v ^ ")")
         | _ -> assert false)
@@ -234,7 +239,8 @@ let compile ?(annotate = Source_map.plain) program =
              (types, env, lines)
              constructors
          | Import (n, _) -> failwith ("Module " ^ n ^ " requires a table backend")
-         | Contract _ -> failwith "Contract lowering is unavailable")
+         | Contract _ -> failwith "Contract lowering is unavailable"
+         | Setting _ -> types, env, lines)
       (Infer.empty, [], [])
       program
   in

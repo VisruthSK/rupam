@@ -41,7 +41,9 @@ rp_source <- function(path, expected, name, expected_types) {
   }
   fields <- Filter(function(t) identical(t$name, name), model$tables)[[1]]$columns
   file <- sources[[name]]
-  data <- rp_read(file, "parquet", unlist(jsonlite::fromJSON(expected_types)))
+  types <- unlist(jsonlite::fromJSON(expected_types))
+  types[] <- paste0(types, "?")
+  data <- rp_read(file, "parquet", types)
   data[vapply(fields, function(c) c$name, character(1))]
 }
 
@@ -55,7 +57,10 @@ rp_arrow_type <- function(kind) {
     String = arrow::utf8())
 }
 
-rp_read <- function(path, format, schema) {
+rp_read <- function(path, format, expected) {
+  schema <- sub("[?]$", "", expected)
+  names(schema) <- names(expected)
+  required <- names(expected)[!endsWith(unlist(expected), "?")]
   data <- if (format == "parquet") {
     arrow::read_parquet(path, as_data_frame = FALSE)
   } else {
@@ -74,6 +79,8 @@ rp_read <- function(path, format, schema) {
     x[is.nan(x)] <- NA
     data[[column]] <- x
   }
+  if (any(vapply(data[required], anyNA, logical(1))))
+    stop(path, " now has missing values in a column it was compiled as complete")
   data
 }
 

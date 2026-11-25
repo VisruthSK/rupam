@@ -77,6 +77,26 @@ let stop w =
 let active = Hashtbl.create 2
 let () = at_exit (fun () -> Hashtbl.iter (fun _ w -> stop w) active)
 
+let host_error message =
+  let contains needle =
+    let n = String.length needle in
+    let rec scan i =
+      i + n <= String.length message && (String.sub message i n = needle || scan (i + 1))
+    in
+    scan 0
+  in
+  let lines = String.split_on_char '\n' message |> List.map String.trim in
+  if contains "to `i64` failed"
+  then "arithmetic overflow: Int64 out of range"
+  else (
+    match List.rev (List.filter (String.starts_with ~prefix:"! ") lines) with
+    | last :: _ -> String.sub last 2 (String.length last - 2)
+    | [] ->
+      (match List.filter (fun l -> l <> "") lines with
+       | first :: _ -> first
+       | [] -> message))
+;;
+
 let evaluate runtime language script =
   let key = runtime, language in
   let w =
@@ -105,7 +125,7 @@ let evaluate runtime language script =
   let open Yojson.Basic.Util in
   if to_int (member "revision" reply) <> w.revision then failwith "Stale backend response";
   match member "error" reply |> to_string_option with
-  | Some message -> failwith message
+  | Some message -> failwith (host_error message)
   | None -> member "output" reply |> to_string
 ;;
 

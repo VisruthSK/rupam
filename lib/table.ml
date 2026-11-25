@@ -147,6 +147,77 @@ let grouping table groups =
   | _ -> raise (Error "Repeated by argument")
 ;;
 
+type options =
+  { missing : Shape.policy option
+  ; group_missing : Shape.policy option
+  ; rest : (string option * Syntax.expr) list
+  }
+
+let options arguments =
+  let named label = List.assoc_opt (Some label) arguments |> Option.map Check.policy in
+  { missing = named "missing"
+  ; group_missing = named "group_missing"
+  ; rest =
+      List.filter
+        (fun (label, _) -> label <> Some "missing" && label <> Some "group_missing")
+        arguments
+  }
+;;
+
+let group_policy env options keys =
+  if options.group_missing <> None && keys = []
+  then raise (Error "group_missing needs by =");
+  let first = List.find_map Fun.id in
+  match List.filter (fun (_, (k : Shape.expr)) -> k.typ.nullable) keys with
+  | [] -> None
+  | (name, _) :: _ ->
+    (match
+       first
+         [ options.group_missing
+         ; options.missing
+         ; Check.default env Group_missing
+         ; Check.default env Missing
+         ]
+     with
+     | Some p -> Some p
+     | None ->
+       raise
+         (Error
+            ("The grouping key "
+             ^ name
+             ^ " can be missing. Say what to do with those rows: group_missing = skip \
+                leaves them out, propagate makes missing a group, error stops the run")))
+;;
+
+let present keys =
+  List.filter_map
+    (fun (_, (k : Shape.expr)) ->
+       if k.typ.nullable then Some (Shape.apply Present [ k ]) else None)
+    keys
+  |> function
+  | [] -> Shape.constant (`Bool true)
+  | t :: rest -> List.fold_left (fun a b -> Shape.binary And a b) t rest
+;;
+
+let require_keys table keys =
+  let check =
+    { Shape.node = Required (Shape.choose (present keys) (Shape.constant (`Bool true)) Shape.null)
+    ; typ = { primitive = Bool; nullable = false; shape = Column table.context }
+    }
+  in
+  { table with steps = Filter check :: table.steps }
+;;
+
+let drop_missing_keys table keys =
+  let schema =
+    List.map
+      (fun ((n, (e : Shape.expr)) as field) ->
+         if List.mem_assoc n keys then n, { e with typ = { e.typ with nullable = false } } else field)
+      table.schema
+  in
+  { table with schema; steps = Filter (present keys) :: table.steps }
+;;
+
 let transform env table verb arguments =
   match verb, arguments with
   | ("pivot_longer" | "pivot_wider"), _ ->
@@ -209,11 +280,16 @@ let transform env table verb arguments =
     in
     { table with ordered = true; steps = Arrange (List.map key arguments) :: table.steps }
   | "summarize", _ ->
-    let missing, arguments =
-      List.partition (fun (label, _) -> label = Some "missing") arguments
+    let options = options arguments in
+    let missing = options.missing in
+    let groups, values = List.partition (fun (label, _) -> label = Some "by") options.rest in
+    let keys = grouping table groups in
+    let table =
+      match group_policy env options keys with
+      | Some Skip -> drop_missing_keys table keys
+      | Some Fail -> require_keys table keys
+      | Some Propagate | None -> table
     in
-    let missing = Option.map (fun (_, p) -> Check.policy p) (List.nth_opt missing 0) in
-    let groups, values = List.partition (fun (label, _) -> label = Some "by") arguments in
     let keys = grouping table groups in
     let measures =
       List.map
@@ -258,7 +334,7 @@ let transform env table verb arguments =
   | "filter", (None, x) :: options ->
     let policy =
       match options with
-      | [] -> None
+      | [] -> Check.default env Missing
       | [ (Some "missing", p) ] -> Some (Check.policy p)
       | _ -> raise (Error "filter takes one condition and an optional missing =")
     in
@@ -285,12 +361,25 @@ let transform env table verb arguments =
     { table with schema; ordered = false; steps = Filter predicate :: table.steps }
   | "filter", _ -> raise (Error "filter takes one condition and an optional missing =")
   | "mutate", _ ->
-    let missing, arguments =
-      List.partition (fun (label, _) -> label = Some "missing") arguments
-    in
-    let missing = Option.map (fun (_, p) -> Check.policy p) (List.nth_opt missing 0) in
-    let by, arguments = List.partition (fun (n, _) -> n = Some "by") arguments in
+    let options = options arguments in
+    let missing = options.missing in
+    let by, arguments = List.partition (fun (n, _) -> n = Some "by") options.rest in
     let keys = grouping table by in
+    let group = group_policy env options keys in
+    let table = if group = Some Fail then require_keys table keys else table in
+    let grouped value =
+      let dependent =
+        Shape.exists
+          (fun e ->
+             match e.node with
+             | Reduce _ | Count -> true
+             | _ -> false)
+          value
+      in
+      if group = Some Skip && dependent
+      then Shape.choose (present keys) value Shape.null
+      else value
+    in
     List.fold_left
       (fun table (name, x) ->
          let n =
@@ -300,9 +389,8 @@ let transform env table verb arguments =
          in
          let exists = List.mem_assoc n table.schema in
          let value =
-           broadcast
-             (Column table.context)
-             (Check.expression ?missing env table.schema x)
+           broadcast (Column table.context) (Check.expression ?missing env table.schema x)
+           |> grouped
          in
          let field = n, input table.next value.typ in
          let schema =

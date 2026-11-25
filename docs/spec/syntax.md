@@ -37,9 +37,15 @@
   may occur singly between any two digits, including fraction and exponent
   digits; no fixed grouping width is required. They are ignored numerically.
 - Date, time and regex literals are validated during checking.
-- Strings interpolate `{expr}`, `{expr:spec}` and `{expr=}`. Specs follow
-  Python's format mini-language for numbers and strftime for dates; a spec of
-  the wrong type is a type error. `{{` and `}}` are literal braces.
+- Strings interpolate `{expr}`, `{expr:spec}` and `{expr=}`. `{expr}` inserts
+  `String(expr)`, the rupam display format ([Conversions](types.md#conversions)),
+  and requires a `showable` type. `{expr=}` inserts the expression's source
+  text, `=`, then its display. Specs follow Python's format mini-language for
+  numbers (fill, alignment, sign, width, `,` grouping, precision and the
+  types `d`, `f`, `e`, `g` and `%`) and strftime for dates; a spec of the wrong
+  type is a type error. Interpolation lifts: a string with an optional part
+  is optional and missing where that part is missing. `{{` and `}}` are
+  literal braces.
 - `"""` strings span lines and strip common indentation. `raw"..."` strings do
   not interpolate or process escapes.
 

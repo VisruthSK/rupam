@@ -43,6 +43,7 @@ decl: IMPORT NAME { Import ($2,$2) } | IMPORT NAME AS NAME { Import ($2,$4) }
  | TYPE NAME type_params EQ annotation { Alias ($2,$3,$5) }
  | TYPE NAME type_params EQ variants { Type ($2,$3,List.rev $5) }
  | USE CONTRACT STRING AS NAME { Contract ($3,$5) }
+ | USE NAME EQ NAME { Setting ($2,$4) }
  | LET NAME COLON annotation EQ expr { Let ($2,None,at $startpos $endpos (Annotated ($6,$4))) }
  | LET NAME EQ expr { Let ($2,None,$4) }
  | LET NAME LP params RP return_type EQ expr { Let ($2,Some (List.map fst $4),parameters $4 (result_annotation $6 $8)) }

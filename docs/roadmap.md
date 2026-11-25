@@ -6,8 +6,10 @@ improve ergonomics or performance are made freely.
 
 ## Order of work
 
-1. `Int64` through `bit64` on R; remove overflow checks, row callbacks and
-   `gmp`.
+1. `Int64` through `bit64` on R and checked through `Int128` in Polars;
+   overflow and nonfinite results fail as [Numbers](spec/types.md#numbers)
+   requires, through native checks where the host has them and narrow
+   adapters where it does not; no `gmp` and no row callbacks.
 2. Front end: the new syntax (`fn`, `if (c) a else b`, `TRUE`/`FALSE`, `_`,
    destructuring and punning, richer patterns, blocks, interpolation,
    prefixed literals, `^`, `%`, `%in%`, `~=`, `use` settings), Menhir

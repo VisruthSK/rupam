@@ -73,9 +73,15 @@ let lifted x =
   | _ -> None
 ;;
 
-let generic x =
+let operand x =
   match Decisions.find_opt decisions x with
-  | Some (Lifted (_, t)) ->
+  | Some (Lifted (_, t)) -> Some (repr t)
+  | _ -> None
+;;
+
+let unsettled x =
+  match Decisions.find_opt decisions x with
+  | Some (Integer t) ->
     (match repr t with
      | Var _ -> true
      | _ -> false)
@@ -785,6 +791,11 @@ let declaration env = function
   | Evaluate x -> env, settle (expression env 1 x)
   | Import (n, _) -> failwith ("Module " ^ n ^ " requires a table backend")
   | Contract _ -> failwith "Contract loading is unavailable"
+  | Setting (("missing" | "group_missing"), ("skip" | "propagate" | "error")) ->
+    env, Tuple []
+  | Setting (("missing" | "group_missing"), _) ->
+    failwith "A missing policy is skip, propagate or error"
+  | Setting (name, _) -> failwith ("Unknown setting " ^ name ^ ". Expected missing or group_missing")
 ;;
 
 let program env ds = List.fold_left (fun env d -> fst (declaration env d)) env ds

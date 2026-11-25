@@ -108,6 +108,7 @@ let declaration = function
   | Let (n, None, { form = Annotated (x, t); _ }) ->
     "let " ^ n ^ ": " ^ annotation t ^ " = " ^ expr x
   | Contract (path, name) -> Printf.sprintf "use contract %S as %s" path name
+  | Setting (name, value) -> "use " ^ name ^ " = " ^ value
   | Let (name, ps, body) ->
     let params =
       Option.fold ~none:"" ~some:(fun ps -> "(" ^ String.concat ", " ps ^ ")") ps

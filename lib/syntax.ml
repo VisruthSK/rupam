@@ -94,6 +94,7 @@ type declaration =
   | Type of string * string list * variant list
   | Import of string * string
   | Contract of string * string
+  | Setting of string * string
   | Let of string * string list option * expr
   | Evaluate of expr
 

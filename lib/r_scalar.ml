@@ -117,6 +117,7 @@ let compile ?(annotate = Source_map.plain) ds =
     | Literal (Text s) -> q s
     | Literal (Float s) -> s
     | Literal (Int s) when Infer.promoted x -> R_syntax.number (Shape.exact_float s)
+    | Literal (Int s) when Infer.unsettled x -> s
     | Literal (Int s) -> "bit64::as.integer64(" ^ q s ^ ")"
     | Annotated (v, _) -> exp v
     | Tuple vs | List vs -> call "list" (List.map exp vs)
@@ -164,10 +165,7 @@ let compile ?(annotate = Source_map.plain) ds =
             | op -> binary_symbol op
           in
           let v = "(" ^ a ^ " " ^ symbol ^ " " ^ b ^ ")" in
-          (match op with
-           | (Add | Sub | Mul | Power | Mod) when Infer.generic x ->
-             "rp_mixed(function(a, b) a " ^ symbol ^ " b, " ^ a ^ ", " ^ b ^ ")"
-           | _ -> v)
+          v
         | _ -> assert false)
     | Match (subject, bs) ->
       let id = fresh () in
@@ -267,15 +265,17 @@ let compile ?(annotate = Source_map.plain) ds =
              | Some ps -> { x with form = Lambda (ps, x) }
            in
            let id = fresh () in
-           types, (n, id) :: env, (id ^ " <- " ^ emit env v) :: lines
+           let value = if ps = None then "rp_checked(" ^ emit env v ^ ")" else emit env v in
+           types, (n, id) :: env, (id ^ " <- " ^ value) :: lines
          | Evaluate x ->
            let shape = q (Yojson.Basic.to_string (Infer.descriptor typ)) in
            ( types
            , env
-           , ("cat(rp_show(" ^ emit env x ^ ", " ^ shape ^ "), \"\\n\", sep = \"\")")
+           , ("cat(rp_show(rp_checked(" ^ emit env x ^ "), " ^ shape ^ "), \"\\n\", sep = \"\")")
              :: lines )
          | Import (n, _) -> failwith ("Module " ^ n ^ " requires a table backend")
-         | Contract _ -> failwith "Expected scalar program")
+         | Contract _ -> failwith "Expected scalar program"
+         | Setting _ -> types, env, lines)
       (Infer.empty, [], [])
       ds
   in

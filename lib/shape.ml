@@ -205,6 +205,11 @@ let reduce ?policy (reduction : Prelude.reduction) x =
       | Mean | Median | Var | Sd -> Float64, true
       | Distinct | Count -> Int64, policy = Propagate
     in
+    let x =
+      match reduction with
+      | Mean | Median | Var | Sd -> to_float x
+      | Sum | Min | Max | Distinct | Count -> x
+    in
     { node = Reduce (reduction, policy, x); typ = { primitive; nullable; shape = Scalar } }
 ;;
 
@@ -250,3 +255,36 @@ let member x items =
 ;;
 
 let count = { node = Count; typ = { primitive = Int64; nullable = false; shape = Scalar } }
+
+let rec exists f e =
+  f e
+  ||
+  match e.node with
+  | Constant _ | Null | Input _ | Count -> false
+  | Choose (a, b, c) -> List.exists (exists f) [ a; b; c ]
+  | Coalesce (a, b) | Binary (_, a, b) -> exists f a || exists f b
+  | Apply (_, xs) -> List.exists (exists f) xs
+  | Member (x, xs) -> List.exists (exists f) (x :: xs)
+  | Polars_sqrt x | Unary (_, x) | Required x | Broadcast (_, x) | Reduce (_, _, x)
+  | Convert x -> exists f x
+;;
+
+let nonfinite =
+  exists (fun e ->
+    e.typ.primitive = Float64
+    &&
+    match e.node with
+    | Binary ((Add | Sub | Mul | Div | Power), _, _)
+    | Apply ((Exp | Log | Log2 | Log10 | Sqrt), _)
+    | Reduce ((Sum | Mean | Var | Sd), _, _) -> true
+    | _ -> false)
+;;
+
+let overflows =
+  exists (fun e ->
+    e.typ.primitive = Int64
+    &&
+    match e.node with
+    | Binary ((Add | Sub | Mul), _, _) | Unary (Negate, _) | Reduce (Sum, _, _) -> true
+    | _ -> false)
+;;

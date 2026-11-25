@@ -166,6 +166,11 @@ let lower ~fields (plan : Table.t) base =
            ]
        | Count -> assert false)
   in
+  let checked x =
+    if Shape.nonfinite x || Shape.overflows x
+    then R.call "rp_checked" [ emit x ]
+    else emit x
+  in
   let stage = function
     | Table.Pivot p ->
       let ids = List.map fst p.ids in
@@ -187,7 +192,7 @@ let lower ~fields (plan : Table.t) base =
       List.iter (fun (_, b, i) -> names.(i) <- b) changes;
       R.Call (R.Name "rename", List.map (fun (a, b, _) -> R.Named (b, R.Name a)) changes)
     | Window (n, x, keys) ->
-      let value = emit x in
+      let value = checked x in
       bind n;
       R.Call
         ( R.Name "mutate"
@@ -202,7 +207,7 @@ let lower ~fields (plan : Table.t) base =
     | Filter x -> R.call "filter" [ emit x ]
     | Select ns -> R.call "select" [ all_of ns ]
     | Bind (n, x) ->
-      let value = emit x in
+      let value = checked x in
       bind n;
       R.Call (R.Name "mutate", [ R.Named (n, value) ])
     | Arrange keys ->
@@ -219,7 +224,7 @@ let lower ~fields (plan : Table.t) base =
                , match x with
                  | None ->
                    R.qualified "bit64" "as.integer64" [ R.Positional (R.call "n" []) ]
-                 | Some x -> emit x ))
+                 | Some x -> checked x ))
           values
       in
       List.iter bind (key_names @ List.map fst values);
@@ -250,7 +255,7 @@ let rec table d =
         ; R.String (Data_file.format_name format)
         ; R.Call
             ( R.Name "c"
-            , List.map (fun (n, t) -> R.Named (n, R.String (polars_name t))) columns )
+            , List.map (fun (n, t, nullable) -> R.Named (n, R.String (kind t nullable))) columns )
         ]
     | Contracted { dictionary; table; physical_types } ->
       R.call

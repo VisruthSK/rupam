@@ -1,6 +1,3 @@
-rp_mixed <- function(f, a, b) {
-  if (is.double(a) || is.double(b)) f(as.numeric(a), as.numeric(b)) else f(a, b)
-}
 rp_variant <- function(tag, ...) structure(list(...), tag = tag)
 
 rp_float <- function(x) {

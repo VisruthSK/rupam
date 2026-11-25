@@ -14,12 +14,12 @@ let scores = read_parquet("scores.parquet")
 ```
 
 `read_csv`, `read_tsv` and `read_parquet` take a path relative to the
-program. rupam reads the file's schema while checking, through its embedded
-DuckDB, so column names and types are known before anything runs. Every
-column of such a file is optional (`T?`), because nothing guarantees it is
-complete. The generated script checks that the file still has that schema
-before reading it, reads 64-bit integers exactly in both dialects, and turns
-NaN into a missing value.
+program. While checking, rupam reads the whole file through its embedded
+DuckDB, so column names, types and optionality are known before anything
+runs: a column is `T?` only if the file has missing values in it. The
+generated script checks that the file still matches before reading it, reads
+64-bit integers exactly in both dialects, and turns NaN into a missing
+value.
 
 ## Contracts
 
@@ -121,13 +121,22 @@ orders |> summarize(average = mean(cost, missing = propagate), by = region)
 ```
 
 `skip` leaves missing values out, `propagate` makes the result missing, and
-`error` stops the run. A verb's `missing =` applies to every reduction in it,
-and a call's own `missing =` wins. Without one, a filter or a reduction on a
-column that can be missing is a type error.
+`error` stops the run. A call's own `missing =` wins over its verb's, and a
+verb's wins over a file-wide default:
+
+```text
+use missing = skip
+```
+
+Grouping keys that can be missing take `group_missing =` the same way:
+`skip` leaves those rows out of `summarize` (and gives `None` for
+group-dependent `mutate` results), `propagate` makes missing one group.
+Without a policy, a filter, reduction or grouping on a column that can be
+missing is a type error.
 
 `sum`, `mean`, `median`, `min` and `max` return `None` when there are no
 values left, and `var` and `sd` when there are fewer than two. `n()` counts
-rows and is never missing. Missing values in a grouping key form one group.
+rows and is never missing.
 
 ## Generated code
 

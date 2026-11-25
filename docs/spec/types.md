@@ -310,6 +310,12 @@ rounding. Optional lifting preserves missing positions.
 | `Float64` known to be whole | `Int64` | same value, checked portable range |
 | `Bool` | `Int64`, `Float64` | `FALSE` is 0, `TRUE` is 1 |
 | any `showable` type | `String` | rupam display format |
+
+The rupam display format writes `Int64` in decimal, `Float64` as the shortest
+decimal that reads back to the same value, with `.0` on whole values and an
+exponent from `1e16` up or below `1e-4` (`2.0`, `0.30000000000000004`,
+`1e+300`), `Bool` as `TRUE` or `FALSE`, and `String` unchanged. REPL values
+and interpolation use it in every dialect.
 | newtype | its base type | unwrapped value |
 | base type | newtype | wrapped value |
 

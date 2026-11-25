@@ -220,7 +220,8 @@ let run env declarations =
              vs
          , None )
        | Import (n, _) -> failwith ("Module " ^ n ^ " requires a table backend")
-       | Contract _ -> raise (Failure "Contract loading is unavailable"))
+       | Contract _ -> raise (Failure "Contract loading is unavailable")
+       | Setting _ -> env, None)
     (env, None)
     declarations
 ;;

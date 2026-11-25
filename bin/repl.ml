@@ -183,7 +183,7 @@ let echo ?(announce = true) state d =
     if announce then Printf.printf "%s : %s\n" name (Infer.display t);
     { state with definitions = state.definitions @ [ d ] }
   | Type _ | Alias _ -> { state with definitions = state.definitions @ [ d ] }
-  | Import _ | Contract _ -> state
+  | Import _ | Contract _ | Setting _ -> state
 ;;
 
 let extend state ds =
@@ -205,7 +205,7 @@ let tabular state =
     | Some (Function _) | None -> false
   in
   function
-  | Syntax.Contract _ | Import _ -> true
+  | Syntax.Contract _ | Import _ | Setting _ -> true
   | Let (_, None, x) | Evaluate x -> Analysis_program.uses table x
   | Let (_, Some _, _) | Alias _ | Type _ -> false
 ;;

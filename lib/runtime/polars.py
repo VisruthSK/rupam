@@ -13,6 +13,12 @@ import pyarrow.parquet as pq
 
 
 
+def rp_finite(series):
+    if (series.is_infinite() | series.is_nan()).any():
+        raise ArithmeticError("arithmetic overflow: a result is not finite")
+    return series
+
+
 def rp_present(series):
     if series.null_count() > 0:
         raise ValueError("filter condition is missing and missing = error")
@@ -81,7 +87,9 @@ ARROW_TYPES = {"Int64": pa.int64(), "Float64": pa.float64(), "Boolean": pa.bool_
 ARROW_KINDS = {"int64": "Int64", "double": "Float64", "bool": "Boolean", "string": "String", "large_string": "String"}
 
 
-def read_file(path, format, schema):
+def read_file(path, format, expected):
+    schema = {name: kind.rstrip("?") for name, kind in expected.items()}
+    required = [name for name, kind in expected.items() if not kind.endswith("?")]
     if format == "parquet":
         table = pq.read_table(path)
     else:
@@ -97,4 +105,7 @@ def read_file(path, format, schema):
     found = {field.name: ARROW_KINDS.get(str(field.type), str(field.type)) for field in table.schema}
     if list(found) != list(schema) or found != schema:
         raise ValueError(f"{path} no longer matches the schema it was compiled against")
-    return pl.from_arrow(table).with_columns(pl.col(pl.Float64).fill_nan(None)).lazy()
+    data = pl.from_arrow(table).with_columns(pl.col(pl.Float64).fill_nan(None))
+    if required and data.select(pl.col(required).null_count()).sum_horizontal().item():
+        raise ValueError(f"{path} now has missing values in a column it was compiled as complete")
+    return data.lazy()

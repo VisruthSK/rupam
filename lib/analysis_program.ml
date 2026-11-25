@@ -55,7 +55,7 @@ and contracted =
 and file =
   { path : string
   ; format : Data_file.format
-  ; columns : (string * Shape.primitive) list
+  ; columns : (string * Shape.primitive * bool) list
   }
 
 and join =
@@ -102,7 +102,7 @@ let tabular =
   List.exists (function
     | Contract _ -> true
     | Let (_, _, x) | Evaluate x -> reads x
-    | Alias _ | Type _ | Import _ -> false)
+    | Alias _ | Type _ | Import _ | Setting _ -> false)
 ;;
 
 let physical path =
@@ -118,7 +118,9 @@ let physical path =
     (Data_file.columns path)
 ;;
 
-let polars_name = function
+let rec kind t nullable = polars_name t ^ if nullable then "?" else ""
+
+and polars_name = function
   | Shape.Int64 -> "Int64"
   | Float64 -> "Float64"
   | Bool -> "Boolean"
@@ -195,19 +197,22 @@ let rec dataset ~directory env scalars x =
     let columns =
       List.map
         (fun (c : Data_file.column) ->
-           match c.physical with
-           | "BIGINT" | "INTEGER" -> c.name, Shape.Int64
-           | "DOUBLE" -> c.name, Float64
-           | "BOOLEAN" -> c.name, Bool
-           | "VARCHAR" -> c.name, String
-           | other ->
-             fail x (Printf.sprintf "Column %s has unsupported type %s" c.name other))
+           let primitive =
+             match c.physical with
+             | "BIGINT" | "INTEGER" -> Shape.Int64
+             | "DOUBLE" -> Float64
+             | "BOOLEAN" -> Bool
+             | "VARCHAR" -> String
+             | other ->
+               fail x (Printf.sprintf "Column %s has unsupported type %s" c.name other)
+           in
+           c.name, primitive, c.nullable)
         (try Data_file.columns path with
          | Failure message -> fail x message)
     in
     { origin = File { path; format; columns }
-    ; fields = List.map fst columns
-    ; plan = Table.source 0 (List.map (fun (n, t) -> n, t, true) columns)
+    ; fields = List.map (fun (n, _, _) -> n) columns
+    ; plan = Table.source 0 columns
     }
   | Pipe
       ( a
@@ -355,6 +360,14 @@ let extend ?(strict = true) ~directory env scalars declarations =
       let x = Option.get (printed d) in
       loop env scalars ((dataset ~directory env scalars x, Print) :: outputs) ds
     | Alias _ :: ds -> loop env scalars outputs ds
+    | Setting (name, value) :: ds ->
+      let setting =
+        match name with
+        | "group_missing" -> Check.Group_missing
+        | _ -> Missing
+      in
+      let policy = Check.policy_of_name value in
+      loop env ((Check.setting_key setting, Check.Default (setting, policy)) :: scalars) outputs ds
     | Type _ :: _ -> failwith "Table backend does not support variant declarations"
     | Evaluate x :: _ ->
       fail
@@ -458,7 +471,7 @@ let rec python_stages d =
         "read_file"
         [ P.Str path
         ; P.Str (Data_file.format_name format)
-        ; P.Dict (List.map (fun (n, t) -> P.Str n, P.Str (polars_name t)) columns)
+        ; P.Dict (List.map (fun (n, t, nullable) -> P.Str n, P.Str (kind t nullable)) columns)
         ]
     | Contracted { dictionary; table; physical_types } ->
       P.call

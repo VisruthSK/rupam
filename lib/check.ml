@@ -1,12 +1,28 @@
 open Syntax
 open Shape
 
+type setting =
+  | Missing
+  | Group_missing
+
 type binding =
   | Module of string
   | Value of Shape.expr
   | Function of string list * Syntax.expr * env
+  | Default of setting * Shape.policy
 
 and env = (string * binding) list
+
+let setting_key = function
+  | Missing -> "use missing"
+  | Group_missing -> "use group_missing"
+;;
+
+let default env setting =
+  match List.assoc_opt (setting_key setting) env with
+  | Some (Default (_, p)) -> Some p
+  | _ -> None
+;;
 
 let lookup name bindings =
   match List.assoc_opt name bindings with
@@ -38,6 +54,7 @@ let rec types env =
   List.fold_right
     (fun (name, binding) (inferred : Infer.env) ->
        match binding with
+       | Default _ -> inferred
        | Module _ ->
          Infer.extend
            inferred
@@ -54,16 +71,21 @@ let rec types env =
 
 let unsupported what = raise (Error (what ^ " is not available inside a table verb yet"))
 
-let policy (x : Syntax.expr) =
-  match x.form with
-  | Name (_, "skip") -> Skip
-  | Name (_, "propagate") -> Propagate
-  | Name (_, "error") -> Fail
-  | _ -> raise (Error "missing must be skip, propagate or error")
+let policy_of_name = function
+  | "skip" -> Skip
+  | "propagate" -> Propagate
+  | "error" -> Fail
+  | _ -> raise (Error "A missing policy is skip, propagate or error")
 ;;
 
-let rec elaborate ?missing env columns source =
-  let elaborate = elaborate ?missing in
+let policy (x : Syntax.expr) =
+  match x.form with
+  | Name (_, name) -> policy_of_name name
+  | _ -> raise (Error "A missing policy is skip, propagate or error")
+;;
+
+let rec elaborate_with ?missing env columns source =
+  let elaborate = elaborate_with ?missing in
   let go = elaborate env columns in
   match source.form with
   | Literal (Bool b) -> constant (`Bool b)
@@ -80,7 +102,8 @@ let rec elaborate ?missing env columns source =
   | Name (_, name) ->
     (match lookup name env with
      | Value x -> x
-     | Function _ | Module _ -> raise (Error (name ^ " is a function, not a value")))
+     | Function _ | Module _ | Default _ ->
+       raise (Error (name ^ " is a function, not a value")))
   | Annotated (x, _) -> go x
   | If (c, t, f) -> choose (go c) (go t) (go f)
   | Binary (op, a, b) -> binary op (go a) (go b)
@@ -119,7 +142,12 @@ let rec elaborate ?missing env columns source =
     (match List.assoc_opt name env, Prelude.find name, values with
      | Some (Function (params, body, closure)), _, _ ->
        let locals = List.map2 (fun p v -> p, Value v) params values in
-       elaborate (locals @ closure) [] body
+       let missing =
+         match default closure Missing with
+         | Some p -> Some p
+         | None -> missing
+       in
+       elaborate_with ?missing (locals @ closure) [] body
      | Some _, _, _ -> raise (Error (name ^ " is not a function"))
      | None, Some Coalesce, [ x; fallback ] -> coalesce x fallback
      | None, Some (Row row), _ -> apply row values
@@ -142,7 +170,7 @@ let rec elaborate ?missing env columns source =
   | Member _ -> unsupported "%in% with a computed set"
 
 and choice ?missing env columns subject arms =
-  let elaborate = elaborate ?missing in
+  let elaborate = elaborate_with ?missing in
   let known e = coalesce e (constant (`Bool false)) in
   let both a b =
     match a, b with
@@ -211,7 +239,12 @@ and choice ?missing env columns subject arms =
 let expression ?missing env columns source =
   let fields = List.map (fun (n, (x : Shape.expr)) -> n, typ x.typ) columns in
   ignore (Infer.expression (Infer.rows (types env) fields) 1 source);
-  elaborate ?missing env columns source
+  let missing =
+    match missing with
+    | Some p -> Some p
+    | None -> default env Missing
+  in
+  elaborate_with ?missing env columns source
 ;;
 
 let define env = function

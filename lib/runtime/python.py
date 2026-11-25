@@ -3,6 +3,18 @@ import math
 import re
 
 
+def rp_int(x):
+    if not -(2**63) < x < 2**63:
+        raise OverflowError("arithmetic overflow: Int64 out of range")
+    return x
+
+
+def rp_real(x):
+    if math.isinf(x) or math.isnan(x):
+        raise OverflowError("arithmetic overflow: a result is not finite")
+    return x
+
+
 def rp_float(x):
     for digits in (15, 16, 17):
         text = "%.*g" % (digits, x)

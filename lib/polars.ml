@@ -79,6 +79,16 @@ let apply (row : Prelude.row) args =
   | _ -> raise (Error ("Wrong arguments to " ^ Prelude.name (Row row)))
 ;;
 
+let wide e = P.meth e "cast" [ P.Positional (pl "Int128") ]
+let narrow e = P.meth e "cast" [ P.Positional (pl "Int64"); P.Keyword ("strict", P.Bool true) ]
+
+let finite name =
+  P.meth
+    (P.Call (pl "col", [ P.Positional (P.Str name) ]))
+    "map_batches"
+    [ P.Positional (P.Name "rp_finite"); P.Keyword ("return_dtype", pl "Float64") ]
+;;
+
 let emit_value (x : Shape.expr) =
   match x.node with
   | Constant (`Int i) -> P.Int (Int64.to_string i)
@@ -118,7 +128,18 @@ let lower ~fields (table : Table.t) =
     | Member (a, items) ->
       P.meth (emit a) "is_in" [ P.Positional (P.List (List.map emit_value items)) ]
     | Unary (Not, a) -> P.Unary (P.Invert, emit a)
+    | Unary (Negate, a) when x.typ.primitive = Int64 ->
+      narrow (P.Unary (P.Negate, wide (emit a)))
     | Unary (Negate, a) -> P.Unary (P.Negate, emit a)
+    | Binary (((Add | Sub | Mul) as op), a, b) when x.typ.primitive = Int64 ->
+      narrow
+        (P.Binary
+           ( (match op with
+              | Add -> P.Add
+              | Sub -> P.Subtract
+              | _ -> P.Multiply)
+           , wide (emit a)
+           , emit b ))
     | Required a ->
       P.meth
         (emit a)
@@ -164,10 +185,10 @@ let lower ~fields (table : Table.t) =
       guard
       @@ (match reduction with
        | Sum ->
-         choose
-           (P.Binary (P.Greater, P.meth a "count" [], P.Int "0"))
-           (P.meth a "sum" [])
-           P.Null
+         let total =
+           if x.typ.primitive = Int64 then narrow (P.meth (wide a) "sum" []) else P.meth a "sum" []
+         in
+         choose (P.Binary (P.Greater, P.meth a "count" [], P.Int "0")) total P.Null
        | Mean -> P.meth a "mean" []
        | Median -> P.meth a "median" []
        | Var -> P.meth a "var" ddof
@@ -181,7 +202,7 @@ let lower ~fields (table : Table.t) =
            "cast"
            [ P.Positional (pl "Int64") ])
   in
-  let stage = function
+  let rec stage = function
     | Table.Pivot p ->
       let ids = List.map fst p.ids in
       List.iter bind (ids @ if p.wider then p.labels else [ p.key; p.value ]);
@@ -215,14 +236,12 @@ let lower ~fields (table : Table.t) =
     | Window (n, x, keys) ->
       let value = emit x in
       bind n;
-      [ P.link
-          "with_columns"
-          [ P.Positional
-              (named
-                 n
-                 (P.meth value "over" [ P.Positional (P.names (List.map fst keys)) ]))
-          ]
-      ]
+      P.link
+        "with_columns"
+        [ P.Positional
+            (named n (P.meth value "over" [ P.Positional (P.names (List.map fst keys)) ]))
+        ]
+      :: checks [ n, x ]
     | Table.Take n -> [ P.link "head" [ P.Positional (P.Int (string_of_int n)) ] ]
     | Distinct keys ->
       [ P.link "unique" [ P.Keyword ("subset", P.List (List.map emit keys)) ] ]
@@ -244,18 +263,25 @@ let lower ~fields (table : Table.t) =
       in
       let aggregates = P.List (List.map measure measures) in
       List.iter bind (List.map fst keys @ List.map fst measures);
-      if keys = []
-      then [ P.link "select" [ P.Positional aggregates ] ]
-      else
-        [ P.link "group_by" [ P.Positional (P.names (List.map fst keys)) ]
-        ; P.link "agg" [ P.Positional aggregates ]
-        ]
+      let computed = List.filter_map (fun (n, x) -> Option.map (fun x -> n, x) x) measures in
+      (if keys = []
+       then [ P.link "select" [ P.Positional aggregates ] ]
+       else
+         [ P.link "group_by" [ P.Positional (P.names (List.map fst keys)) ]
+         ; P.link "agg" [ P.Positional aggregates ]
+         ])
+      @ checks computed
     | Table.Select fields -> [ P.link "select" [ P.Positional (P.names fields) ] ]
     | Filter x -> [ P.link "filter" [ P.Positional (emit x) ] ]
     | Bind (name, x) ->
       let value = emit x in
       bind name;
-      [ P.link "with_columns" [ P.Positional (named name value) ] ]
+      P.link "with_columns" [ P.Positional (named name value) ] :: checks [ name, x ]
+  and checks columns =
+    match List.filter (fun (_, x) -> Shape.nonfinite x) columns with
+    | [] -> []
+    | risky ->
+      [ P.link "with_columns" (List.map (fun (n, _) -> P.Positional (finite n)) risky) ]
   in
   List.concat_map
     (fun step ->

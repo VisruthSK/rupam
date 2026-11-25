@@ -257,7 +257,7 @@ write_parquet(wide, "result.parquet")
             }).write_parquet(work / "orders.parquet")
             source = work / "groups.rp"
             source.write_text("""use contract "data-dict.yaml" as shop
-let t = load(shop.orders) |> summarize(n=n(), by=cost)
+let t = load(shop.orders) |> summarize(n=n(), by=cost, group_missing=propagate)
 write_parquet(t, "groups.parquet")
 """)
             compiler = ROOT / "_build/default/bin/rupam_cli.exe"
