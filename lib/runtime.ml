@@ -43,5 +43,5 @@ let run runtime language script =
        let pid = Unix.create_process argv.(0) argv Unix.stdin Unix.stdout Unix.stderr in
        match snd (Unix.waitpid [] pid) with
        | Unix.WEXITED 0 -> ()
-       | _ -> failwith (argv.(0) ^ " exited with an error"))
+       | _ -> Diagnostic.fail Host_failure (argv.(0) ^ " exited with an error"))
 ;;

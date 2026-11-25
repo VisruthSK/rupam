@@ -20,7 +20,7 @@ let combine f x y =
   match x, y with
   | One a, One b -> One (f a b)
   | Many a, Many b when Array.length a = Array.length b -> Many (Array.map2 f a b)
-  | _ -> raise (Error "Misaligned inputs in elaborated expression")
+  | _ -> invalid_arg "Misaligned inputs in elaborated expression"
 ;;
 
 let arithmetic op a b =
@@ -32,7 +32,7 @@ let arithmetic op a b =
     | Greater_equal -> B (c >= 0)
     | Equal -> B (c = 0)
     | Not_equal -> B (c <> 0)
-    | _ -> raise (Error "Unexpected operator")
+    | _ -> invalid_arg "Unexpected operator"
   in
   match op, a, b with
   | And, B false, _ | And, _, B false -> B false
@@ -52,7 +52,7 @@ let arithmetic op a b =
   | Power, F a, F b -> F (Float.pow a b)
   | (Less | Greater | Less_equal | Greater_equal | Equal | Not_equal), _, _ ->
     order (compare a b)
-  | _ -> raise (Error "Unexpected operands in expression")
+  | _ -> invalid_arg "Unexpected operands in expression"
 ;;
 
 let apply op v =
@@ -61,7 +61,7 @@ let apply op v =
   | Syntax.Not, B b -> B (not b)
   | Negate, I i -> I (Integer.sub 0L i)
   | Negate, F f -> F (-.f)
-  | _ -> raise (Error "Unexpected operand")
+  | _ -> invalid_arg "Unexpected operand"
 ;;
 
 let present values = List.filter (fun v -> v <> Missing) (Array.to_list values)
@@ -69,7 +69,7 @@ let present values = List.filter (fun v -> v <> Missing) (Array.to_list values)
 let number = function
   | F f -> f
   | I i -> Int64.to_float i
-  | _ -> raise (Error "Expected a number")
+  | _ -> invalid_arg "Expected a number"
 ;;
 
 let aggregate (reduction : Prelude.reduction) values =
@@ -120,7 +120,7 @@ let round_even f =
 let apply_row (row : Prelude.row) args =
   let text = function
     | S s -> s
-    | _ -> raise (Error "Expected a string")
+    | _ -> invalid_arg "Expected a string"
   in
   match row, args with
   | Present, [ v ] -> B (v <> Missing)
@@ -154,11 +154,12 @@ let apply_row (row : Prelude.row) args =
   | Trim, [ v ] -> S (String.trim (text v))
   | Starts, [ v; p ] -> B (String.starts_with ~prefix:(text p) (text v))
   | Ends, [ v; p ] -> B (String.ends_with ~suffix:(text p) (text v))
-  | _ -> raise (Error "Unexpected arguments")
+  | _ -> invalid_arg "Unexpected arguments"
 ;;
 
 let present_or_fail = function
-  | Missing -> raise (Error "filter condition is missing and missing = error")
+  | Missing ->
+    Diagnostic.fail Missing_under_error "filter condition is missing and missing = error"
   | v -> v
 ;;
 
@@ -186,7 +187,7 @@ let evaluate ~rows ~input expression =
       (match at i c with
        | B true -> at i t
        | B false -> at i f
-       | _ -> raise (Error "Expected Bool"))
+       | _ -> invalid_arg "Expected Bool")
     | Polars_sqrt a | Apply (Sqrt, [ a ]) -> apply_row Sqrt [ at i a ]
     | Apply (row, args) -> apply_row row (List.map (at i) args)
     | Reduce (r, policy, e) ->
@@ -194,7 +195,9 @@ let evaluate ~rows ~input expression =
       (match policy with
        | Propagate when Array.mem Missing values -> Missing
        | Fail when Array.mem Missing values ->
-         raise (Error "a reduction met a missing value and missing = error")
+         Diagnostic.fail
+           Missing_under_error
+           "a reduction met a missing value and missing = error"
        | Skip | Propagate | Fail -> aggregate r values)
     | Count -> I (Int64.of_int rows)
     | Text parts ->
@@ -202,7 +205,10 @@ let evaluate ~rows ~input expression =
         List.map
           (function
             | Fixed s -> Some s
-            | Shown (_, Some _) -> raise (Error "Format specs are not in the reference evaluator")
+            | Shown (_, Some _) ->
+              Diagnostic.fail
+                Unsupported_feature
+                "Format specs are not in the reference evaluator"
             | Shown (x, None) ->
               (match at i x with
                | Missing -> None
@@ -212,7 +218,9 @@ let evaluate ~rows ~input expression =
                | B b -> Some (Display.bool b)))
           parts
       in
-      if List.mem None pieces then Missing else S (String.concat "" (List.filter_map Fun.id pieces))
+      if List.mem None pieces
+      then Missing
+      else S (String.concat "" (List.filter_map Fun.id pieces))
     | Convert a ->
       (match at i a with
        | I v -> F (Int64.to_float v)

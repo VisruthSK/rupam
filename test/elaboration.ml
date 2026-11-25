@@ -2,7 +2,7 @@ open Rupam.Shape
 
 let rejects f =
   match f () with
-  | exception (Error _ | Rupam.Infer.Error _) -> ()
+  | exception Rupam.Diagnostic.Error _ -> ()
   | _ -> failwith "expected an elaboration error"
 ;;
 
@@ -47,7 +47,7 @@ let () =
   assert (run "if (FALSE) 9223372036854775807 + 1 else 3" = Some "3");
   assert (run "let a=2; let f(x)=x*a; let a=3; 4 |> f" = Some "8");
   match run "9223372036854775807 + 1" with
-  | exception Rupam.Eval.Error (_, "Int64 overflow") -> ()
+  | exception Rupam.Diagnostic.Error { code = Arithmetic_overflow; _ } -> ()
   | _ -> failwith "expected Int64 overflow"
 ;;
 
@@ -162,7 +162,7 @@ let () =
   let infer s = Frontend.parse (Lexing.from_string s) |> Infer.program Infer.empty in
   ignore (infer "let décaler(δ: Float64): Float64 = δ + 1.0; décaler(3.0)");
   (match infer "let bad(x: Int64): String=x" with
-   | exception Infer.Error _ -> ()
+   | exception Diagnostic.Error _ -> ()
    | _ -> failwith "inconsistent annotations");
   let code = "let `price per unit` = 3; `price per unit`" in
   let pretty = Format.program (Frontend.parse (Lexing.from_string code)) in
@@ -202,7 +202,9 @@ let () =
   let p = plan "sales |> mutate(a=revenue+1,b=a*2) |> select(b)" in
   assert (Table.execute p ~rows:1 [ [| F 3. |]; [| I 1L |] ] = (1, [ "b", [| F 8. |] ]));
   assert (
-    Table.execute (plan "sales |> mutate(b=revenue+id) |> select(b)") ~rows:1
+    Table.execute
+      (plan "sales |> mutate(b=revenue+id) |> select(b)")
+      ~rows:1
       [ [| F 3. |]; [| I 1L |] ]
     = (1, [ "b", [| F 4. |] ]));
   rejects (fun () -> plan "sales |> mutate(b=revenue+9007199254740993)")
@@ -224,7 +226,7 @@ let () =
   let open Rupam in
   let missing src =
     match Frontend.parse (Lexing.from_string src) |> Infer.program Infer.empty with
-    | exception Infer.Error (_, message) -> Some message
+    | exception Diagnostic.Error { message; _ } -> Some message
     | _ -> None
   in
   let reading =

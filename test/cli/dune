@@ -1,0 +1,2 @@
+(cram
+ (deps %{bin:rupam} ../../examples/penguins.csv))

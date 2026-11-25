@@ -22,8 +22,6 @@ let directory (project : Project.t) source =
   Option.value project.root ~default:(Filename.dirname source)
 ;;
 
-exception Stale of string
-
 let relative root path =
   let strip prefix path =
     if String.starts_with ~prefix path
@@ -61,7 +59,9 @@ let entry_of json =
       J.member "inputs" json
       |> J.to_list
       |> List.map (fun i ->
-        { path = J.member "path" i |> J.to_string; sha256 = J.member "sha256" i |> J.to_string })
+        { path = J.member "path" i |> J.to_string
+        ; sha256 = J.member "sha256" i |> J.to_string
+        })
   ; schemas =
       J.member "schemas" json
       |> J.to_assoc
@@ -78,7 +78,9 @@ let load root =
 ;;
 
 let save root entries =
-  let json = `Assoc [ "version", `Int 1; "entries", `List (List.map entry_json entries) ] in
+  let json =
+    `Assoc [ "version", `Int 1; "entries", `List (List.map entry_json entries) ]
+  in
   Out_channel.with_open_text (Filename.concat root file_name) (fun channel ->
     output_string channel (Json.pretty_to_string json ^ "\n"))
 ;;
@@ -102,24 +104,31 @@ let analysis ~(project : Project.t) ~source declarations =
       env
     @ List.map fst outputs
   in
-  let paths = List.concat_map Analysis_program.sources datasets |> List.sort_uniq compare in
+  let paths =
+    List.concat_map Analysis_program.sources datasets |> List.sort_uniq compare
+  in
   let schemas =
     List.concat_map Analysis_program.files datasets
     |> List.sort_uniq compare
     |> List.map (fun (file : Analysis_program.source) ->
       ( relative root file.path
       , List.map
-          (fun (n, t, nullable) -> n, Analysis_program.kind t ^ if nullable then "?" else "")
+          (fun (n, t, nullable) ->
+             n, Analysis_program.kind t ^ if nullable then "?" else "")
           file.columns ))
   in
-  let contracts = List.concat_map Analysis_program.contracts datasets |> List.sort_uniq compare in
+  let contracts =
+    List.concat_map Analysis_program.contracts datasets |> List.sort_uniq compare
+  in
   let entry =
     { source = relative root source
     ; dialect = Project.dialect_name (Project.require_dialect project)
     ; compiler
     ; strict = project.strict.value
     ; inputs =
-        List.map (fun path -> { path = relative root path; sha256 = Data_file.digest path }) paths
+        List.map
+          (fun path -> { path = relative root path; sha256 = Data_file.digest path })
+          paths
     ; schemas
     }
   in
@@ -166,8 +175,8 @@ let require ~project ~source declarations =
     (match differences locked current with
      | [] -> locked
      | changed ->
-       raise
-       @@ Stale
+       Diagnostic.fail
+         Stale_lock
          (Printf.sprintf
             "%s changed since rupam lock. Run rupam lock %s, then compile again."
             (String.concat ", " changed)
@@ -177,8 +186,8 @@ let require ~project ~source declarations =
     write root current;
     current
   | None ->
-    raise
-    @@ Stale
+    Diagnostic.fail
+      Stale_lock
       (Printf.sprintf
          "%s reads files whose schemas rupam inferred. Review them with :schema, then \
           run rupam lock %s to commit them."

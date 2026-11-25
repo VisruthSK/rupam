@@ -1,5 +1,4 @@
 module R = R_syntax
-
 open Syntax
 
 let number a = R.call "as.numeric" [ a ]
@@ -27,16 +26,20 @@ let native fresh (builtin : Prelude.builtin) args =
   | Row Present, [ a ] -> R.Not (null a)
   | Row Absent, [ a ] -> null a
   | Row Length, [ a ] ->
-    integer (R.Call (R.Name "nchar", [ R.Positional a; R.Named ("type", R.String "chars") ]))
+    integer
+      (R.Call (R.Name "nchar", [ R.Positional a; R.Named ("type", R.String "chars") ]))
   | Row Lower, [ a ] -> R.call "tolower" [ a ]
   | Row Upper, [ a ] -> R.call "toupper" [ a ]
   | Row Trim, [ a ] -> R.call "trimws" [ a ]
   | Row Starts, [ a; b ] -> R.call "startsWith" [ a; b ]
   | Row Ends, [ a; b ] -> R.call "endsWith" [ a; b ]
   | Row Detect, [ a; b ] ->
-    R.Call (R.Name "grepl", [ R.Positional b; R.Positional a; R.Named ("perl", R.Logical true) ])
-  | Reduction _, _ -> failwith (Prelude.name builtin ^ " works on table columns")
-  | _ -> failwith ("Wrong arguments to " ^ Prelude.name builtin)
+    R.Call
+      ( R.Name "grepl"
+      , [ R.Positional b; R.Positional a; R.Named ("perl", R.Logical true) ] )
+  | Reduction _, _ ->
+    Diagnostic.fail Wrong_arguments (Prelude.name builtin ^ " works on table columns")
+  | _ -> Diagnostic.fail Wrong_arguments ("Wrong arguments to " ^ Prelude.name builtin)
 ;;
 
 let arity builtin =
@@ -138,7 +141,7 @@ let statements declarations =
        | None, Some b ->
          let ps = List.init (arity b) (fun _ -> fresh ()) in
          R.Function (ps, native fresh b (List.map (fun p -> R.Name p) ps))
-       | None, None -> raise (Infer.Error (x.span, "Unknown name: " ^ n)))
+       | None, None -> Diagnostic.fail ~span:x.span Unknown_name ("Unknown name: " ^ n))
     | Literal (Int s) when Infer.promoted x -> R.Number (R.number (Shape.exact_float s))
     | Literal (Int s) when Infer.unsettled x -> R.Number s
     | Literal (Int s) -> integer (R.String s)
@@ -224,18 +227,21 @@ let statements declarations =
         | Tag ("Some", [ p ]) ->
           let ts, vs = pattern path p in
           R.Not (null path) :: ts, vs
-        | Pliteral l -> [ R.call "identical" [ path; exp { x with form = Literal l } ] ], []
+        | Pliteral l ->
+          [ R.call "identical" [ path; exp { x with form = Literal l } ] ], []
         | Tag (n, ps) ->
           let ts, vs = parts path ps in
           ( R.call "identical" [ R.call "attr" [ path; R.String "tag" ]; R.String n ] :: ts
           , vs )
         | Ptuple ps -> parts path ps
         | Prange { low; high; inclusive } ->
-          ( Option.to_list (Option.map (fun l -> R.Binary (R.Less_equal, literal l, path)) low)
+          ( Option.to_list
+              (Option.map (fun l -> R.Binary (R.Less_equal, literal l, path)) low)
             @ Option.to_list
                 (Option.map
                    (fun h ->
-                      R.Binary ((if inclusive then R.Less_equal else R.Less), path, literal h))
+                      R.Binary
+                        ((if inclusive then R.Less_equal else R.Less), path, literal h))
                    high)
           , [] )
         | Pas (n, p) ->
@@ -283,10 +289,13 @@ let statements declarations =
       R.Call
         ( R.Function
             ( [ id ]
-            , List.fold_right branch arms (R.call "stop" [ R.String "Non-exhaustive match" ]) )
+            , List.fold_right
+                branch
+                arms
+                (R.call "stop" [ R.String "Non-exhaustive match" ]) )
         , [ R.Positional (exp subject) ] )
     | Range _ | Formula _ | Name ((Column | Lexical), _) ->
-      raise (Infer.Error (x.span, "Expression has no R lowering"))
+      Diagnostic.fail ~span:x.span Unsupported_feature "Expression has no R lowering"
   in
   let _, _, statements =
     List.fold_left
@@ -297,7 +306,9 @@ let statements declarations =
            List.fold_left
              (fun (types, env, statements) (n, fs) ->
                 let vs = List.map (fun _ -> fresh ()) fs in
-                let value = R.call "rp_variant" (R.String n :: List.map (fun v -> R.Name v) vs) in
+                let value =
+                  R.call "rp_variant" (R.String n :: List.map (fun v -> R.Name v) vs)
+                in
                 let value = if vs = [] then value else R.Function (vs, value) in
                 let tag = fresh () in
                 types, (n, tag) :: env, R.Assign (tag, value) :: statements)
@@ -321,14 +332,19 @@ let statements declarations =
            , R.Expression
                (R.Call
                   ( R.Name "cat"
-                  , [ R.Positional (R.call "rp_show" [ R.call "rp_checked" [ emit env x ]; shape ])
+                  , [ R.Positional
+                        (R.call "rp_show" [ R.call "rp_checked" [ emit env x ]; shape ])
                     ; R.Positional (R.String "\n")
                     ; R.Named ("sep", R.String "")
                     ] ))
              :: statements )
          | Alias _ | Setting _ -> types, env, statements
-         | Import (n, _) -> failwith ("Module " ^ n ^ " requires a table program")
-         | Contract _ -> failwith "Contracts require a table program")
+         | Import (n, _) ->
+           Diagnostic.fail
+             Unsupported_feature
+             ("Module " ^ n ^ " requires a table program")
+         | Contract _ ->
+           Diagnostic.fail Unsupported_feature "Contracts require a table program")
       (Infer.empty, [], [])
       declarations
   in

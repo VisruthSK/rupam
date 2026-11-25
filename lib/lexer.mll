@@ -15,7 +15,7 @@ let id = start (start | digit)*
 rule token = parse
  | [' ' '\t' '\r']+ | '#' [^'\n']* { token lexbuf }
  | '\n' { Lexing.new_line lexbuf; END }
- | id as s { if Identifier.valid s then keyword s else failwith "Invalid Unicode identifier" }
+ | id as s { if Identifier.valid s then keyword s else Diagnostic.fail Syntax_error "Invalid Unicode identifier" }
  | '`' { quoted (Buffer.create 16) lexbuf }
  | number as n { INT (digits n) }
  | number ('.' number exponent? | exponent) as n { FLOAT (digits n) }
@@ -29,9 +29,9 @@ rule token = parse
  | "%in%" { MEMBER }
  | '+' { PLUS } | '-' { MINUS } | '*' { TIMES } | '/' { DIV } | '%' { MOD }
  | ':' { COLON } | '$' { DOLLAR } | '^' { CARET } | '~' { TILDE }
- | eof { EOF } | _ as c { failwith (Printf.sprintf "Unexpected character %C" c) }
+ | eof { EOF } | _ as c { Diagnostic.fail Syntax_error (Printf.sprintf "Unexpected character %C" c) }
 and quoted buffer = parse
  | "``" { Buffer.add_char buffer '`'; quoted buffer lexbuf }
  | '`' { NAME (Buffer.contents buffer) }
  | [^'`' '\n' '\r']+ as s { Buffer.add_string buffer s; quoted buffer lexbuf }
- | eof | '\n' | '\r' { failwith "Unterminated quoted identifier" }
+ | eof | '\n' | '\r' { Diagnostic.fail Syntax_error "Unterminated quoted identifier" }

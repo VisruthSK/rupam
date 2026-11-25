@@ -103,34 +103,32 @@ let parse line =
 ;;
 
 let report message = prerr_endline ("error: " ^ message)
-
-let position (p : Lexing.position) =
-  Printf.sprintf
-    "%s%d:%d"
-    (if p.pos_fname = "" then "" else p.pos_fname ^ ":")
-    p.pos_lnum
-    (p.pos_cnum - p.pos_bol + 1)
-;;
+let report_diagnostic d = prerr_endline (Diagnostic.render d)
 
 let diagnostic buf f =
   try Ok (f ()) with
   | Sys.Break ->
     prerr_endline "Cancelled";
     Error ()
-  | Lock.Stale msg ->
-    report msg;
-    Error ()
-  | Infer.Error ((p, _), msg) ->
-    report (position p ^ ": " ^ msg);
-    Error ()
   | Parser.Error ->
     let token = Lexing.lexeme buf in
-    report
-      (position buf.Lexing.lex_start_p
-       ^ if token = "" then ": the input ends too early" else ": unexpected " ^ token);
+    report_diagnostic
+      (if token = ""
+       then
+         { code = Incomplete_input
+         ; span = Some (buf.lex_start_p, buf.lex_curr_p)
+         ; message = "The input ends too early"
+         }
+       else
+         { code = Syntax_error
+         ; span = Some (buf.lex_start_p, buf.lex_curr_p)
+         ; message = "Unexpected " ^ token
+         });
     Error ()
-  | Failure msg | Shape.Error msg ->
-    report (position buf.Lexing.lex_curr_p ^ ": " ^ msg);
+  | exn ->
+    let d = Diagnostic.of_exn exn in
+    let span = buf.Lexing.lex_start_p, buf.Lexing.lex_curr_p in
+    report_diagnostic { d with span = Some (Option.value d.span ~default:span) };
     Error ()
 ;;
 
@@ -166,7 +164,8 @@ let dataset state x =
 let preview state d =
   let dialect = Project.require_dialect state.project in
   let runtime = Runtime.resolve state.project (Runtime.of_dialect dialect) in
-  state.show ~digits:state.project.preview_digits.value
+  state.show
+    ~digits:state.project.preview_digits.value
     (match dialect with
      | dialect -> Dialect.preview dialect ~runtime d ~offset:0 ~limit:20)
 ;;
@@ -255,7 +254,7 @@ let declare ~announce state d =
     let state = extend state [ d ] in
     (match echo ~announce state d with
      | state -> state
-     | exception Infer.Error _ ->
+     | exception Diagnostic.Error _ ->
        if announce then Printf.printf "%s : fn(%s)\n" name (String.concat ", " params);
        state)
   | d when Option.is_some (Analysis_program.printed d) ->
@@ -576,7 +575,7 @@ let evaluate state source =
 let table state source =
   match Frontend.parse (Lexing.from_string source) with
   | [ Syntax.Evaluate x ] -> dataset state x
-  | _ -> failwith "Expected a table expression"
+  | _ -> Diagnostic.fail Not_a_table "Expected a table expression"
 ;;
 
 let schemas state =
@@ -610,13 +609,14 @@ let reload state =
     history
 ;;
 
-let run state = function
+let dispatch state = function
   | Quit -> None
   | Help ->
     List.iter (fun (usage, text) -> Printf.printf "  %-24s %s\n" usage text) help;
     Some state
   | Options ->
-    List.iter (fun (name, value, source) -> Printf.printf "%-16s %-14s %s\n" name value source)
+    List.iter
+      (fun (name, value, source) -> Printf.printf "%-16s %-14s %s\n" name value source)
       (Project.options state.project);
     Some state
   | Target None ->
@@ -627,7 +627,13 @@ let run state = function
          "No dialect yet. Choose one with :target r-dplyr or :target python-polars.");
     Some state
   | Target (Some dialect) ->
-    Some { state with project = { state.project with dialect = { value = Some dialect; origin = Session ":target" } } }
+    Some
+      { state with
+        project =
+          { state.project with
+            dialect = { value = Some dialect; origin = Session ":target" }
+          }
+      }
   | Lock ->
     (match state.source_path with
      | None -> report "No file loaded. Start the REPL with a program to lock it."
@@ -671,7 +677,7 @@ let run state = function
            Analysis_program.schema (dataset state x)
          | [ Syntax.Evaluate x ] ->
            print_endline (Infer.display (Infer.expression state.scalar 1 x))
-         | _ -> failwith "Expected one expression"));
+         | _ -> Diagnostic.fail Wrong_arguments "Expected one expression"));
     Some state
   | Code (chosen, source) ->
     ignore
@@ -699,13 +705,22 @@ let run state = function
          match view with
          | Schema -> Analysis_program.schema d
          | Contract -> print_endline (Analysis_program.origin d)
-         | Validate ->
-           Analysis_program.validate d
+         | Validate -> Analysis_program.validate d
          | Explain -> Analysis_program.explain d
          | Preview -> preview state d));
     Some state
   | Source "" -> Some state
   | Source source -> Some (evaluate state source)
+;;
+
+let run state command =
+  try dispatch state command with
+  | Sys.Break ->
+    prerr_endline "Cancelled";
+    Some state
+  | exn ->
+    report_diagnostic (Diagnostic.of_exn exn);
+    Some state
 ;;
 
 let open_session ~project ?path () =
@@ -728,7 +743,7 @@ let incomplete source =
   match Frontend.parse buf with
   | _ -> false
   | exception Parser.Error -> Lexing.lexeme buf = ""
-  | exception Failure _ -> false
+  | exception Diagnostic.Error _ -> false
 ;;
 
 let rec loop state pending =

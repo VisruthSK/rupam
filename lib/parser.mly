@@ -116,7 +116,7 @@ expr: MATCH values LC arms RC { at $startpos $endpos (Match (subject $startpos($
  | IF LP expr RP expr ELSE expr { at $startpos $endpos (If ($3,$5,$7)) }
  | FN LP params RP ARROW expr { at $startpos $endpos (Lambda (List.map fst $3,parameters $3 $6)) }
  | MINUS expr %prec UNARY
-   { (match $2.form with Binary (Power,_,_) when $startpos($2) = fst $2.span -> failwith "Write -(x ^ y) or (-x) ^ y" | _ -> ());
+   { (match $2.form with Binary (Power,_,_) when $startpos($2) = fst $2.span -> Diagnostic.fail Syntax_error "Write -(x ^ y) or (-x) ^ y" | _ -> ());
      at $startpos $endpos (Unary (Negate,$2)) }
  | NOT expr { at $startpos $endpos (Unary (Not,$2)) }
  | expr PLUS expr { at $startpos $endpos (Binary (Add,$1,$3)) }

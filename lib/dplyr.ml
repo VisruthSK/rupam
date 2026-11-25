@@ -45,7 +45,7 @@ let apply (row : Prelude.row) args =
              ( R.Name "grepl"
              , [ R.Positional p; R.Positional x; R.Named ("perl", R.Logical true) ] ))
       ]
-  | _ -> raise (Error ("Wrong arguments to " ^ Prelude.name (Row row)))
+  | _ -> Diagnostic.fail Wrong_arguments ("Wrong arguments to " ^ Prelude.name (Row row))
 ;;
 
 let lower ~fields (plan : Table.t) base =
@@ -79,10 +79,13 @@ let lower ~fields (plan : Table.t) base =
     | Coalesce (a, b) ->
       R.qualified "dplyr" "coalesce" [ R.Positional (emit a); R.Positional (emit b) ]
     | Polars_sqrt _ ->
-      raise (Error "R target cannot execute the Python capability polars.sqrt")
+      Diagnostic.fail
+        Dialect_capability
+        "R target cannot execute the Python capability polars.sqrt"
     | Apply (row, args) -> apply row (List.map emit args)
     | Convert a -> R.call "as.double" [ emit a ]
-    | Count -> R.qualified "bit64" "as.integer64" [ R.Positional (R.qualified "dplyr" "n" []) ]
+    | Count ->
+      R.qualified "bit64" "as.integer64" [ R.Positional (R.qualified "dplyr" "n" []) ]
     | Text parts ->
       let shown =
         List.filter_map
@@ -104,7 +107,10 @@ let lower ~fields (plan : Table.t) base =
              R.qualified
                "dplyr"
                "if_else"
-               [ R.Positional e; R.Positional (R.String "TRUE"); R.Positional (R.String "FALSE") ])
+               [ R.Positional e
+               ; R.Positional (R.String "TRUE")
+               ; R.Positional (R.String "FALSE")
+               ])
       in
       let joined = R.call "paste0" (List.map part parts) in
       (match shown with
@@ -165,7 +171,10 @@ let lower ~fields (plan : Table.t) base =
           R.qualified
             "dplyr"
             "if_else"
-            [ R.Positional (R.call "anyNA" [ source ]); R.Positional R.Na; R.Positional value ]
+            [ R.Positional (R.call "anyNA" [ source ])
+            ; R.Positional R.Na
+            ; R.Positional value
+            ]
         | Skip | Fail -> value
       in
       guard

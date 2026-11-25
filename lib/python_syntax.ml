@@ -93,7 +93,8 @@ let binding = function
   | And -> 3
   | Either -> 6
   | Both -> 8
-  | Less | Less_equal | Greater | Greater_equal | Equal | Not_equal | Is | Is_not | In -> 5
+  | Less | Less_equal | Greater | Greater_equal | Equal | Not_equal | Is | Is_not | In ->
+    5
   | Add | Subtract -> 10
   | Multiply | Divide | Modulo -> 11
   | Power -> 13
@@ -155,8 +156,15 @@ let rec expr d indent level e =
      let left, right =
        match op with
        | Power -> p + 1, p
-       | Less | Less_equal | Greater | Greater_equal | Equal | Not_equal | Is | Is_not | In ->
-         p + 1, p + 1
+       | Less
+       | Less_equal
+       | Greater
+       | Greater_equal
+       | Equal
+       | Not_equal
+       | Is
+       | Is_not
+       | In -> p + 1, p + 1
        | _ -> p, p + 1
      in
      expr d indent left a;

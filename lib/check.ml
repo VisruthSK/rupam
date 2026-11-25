@@ -24,19 +24,43 @@ let default env setting =
   | _ -> None
 ;;
 
+let closest name candidates =
+  List.map (fun n -> Distance.between n name, n) candidates
+  |> List.sort compare
+  |> function
+  | (d, n) :: _ when d <= 2 -> Some n
+  | _ -> None
+;;
+
+let did_you_mean = function
+  | Some n -> ". Did you mean " ^ n ^ "?"
+  | None -> ""
+;;
+
 let lookup name bindings =
   match List.assoc_opt name bindings with
   | Some value -> value
   | None ->
-    let hint =
-      List.map (fun (n, _) -> Distance.between n name, n) bindings |> List.sort compare
-    in
-    let message =
-      match hint with
-      | (d, n) :: _ when d <= 2 -> ". Did you mean " ^ n ^ "?"
-      | _ -> ""
-    in
-    raise (Error ("Unknown name: " ^ name ^ message))
+    Diagnostic.fail
+      Unknown_name
+      ("Unknown name: " ^ name ^ did_you_mean (closest name (List.map fst bindings)))
+;;
+
+let column name schema =
+  match List.assoc_opt name schema with
+  | Some value -> value
+  | None ->
+    Diagnostic.fail
+      Unknown_column
+      ("No column named " ^ name ^ did_you_mean (closest name (List.map fst schema)))
+;;
+
+let unresolved name ~columns ~env =
+  let column_names = List.map fst columns in
+  match closest name (column_names @ List.map fst env) with
+  | Some n when List.mem n column_names ->
+    Diagnostic.fail Unknown_column ("No column named " ^ name ^ did_you_mean (Some n))
+  | hint -> Diagnostic.fail Unknown_name ("Unknown name: " ^ name ^ did_you_mean hint)
 ;;
 
 let typ (t : Shape.typ) =
@@ -64,24 +88,26 @@ let rec types env =
          let local = Infer.rows (types closure) [] in
          (match Infer.expression local 2 { body with form = Lambda (params, body) } with
           | t -> Infer.extend inferred [ name, Infer.generalize 1 t ]
-          | exception Infer.Error _ -> inferred))
+          | exception Diagnostic.Error _ -> inferred))
     env
     Infer.empty
 ;;
 
-let unsupported what = raise (Error (what ^ " is not available inside a table verb yet"))
+let unsupported what =
+  Diagnostic.fail Unsupported_feature (what ^ " is not available inside a table verb yet")
+;;
 
 let policy_of_name = function
   | "skip" -> Skip
   | "propagate" -> Propagate
   | "error" -> Fail
-  | _ -> raise (Error "A missing policy is skip, propagate or error")
+  | _ -> Diagnostic.fail Invalid_policy "A missing policy is skip, propagate or error"
 ;;
 
 let policy (x : Syntax.expr) =
   match x.form with
   | Name (_, name) -> policy_of_name name
-  | _ -> raise (Error "A missing policy is skip, propagate or error")
+  | _ -> Diagnostic.fail Invalid_policy "A missing policy is skip, propagate or error"
 ;;
 
 let rec elaborate_with ?missing env columns source =
@@ -96,14 +122,15 @@ let rec elaborate_with ?missing env columns source =
   | Literal (Int s) ->
     (match Int64.of_string_opt s with
      | Some n -> constant (`Int n)
-     | None -> raise (Error "Integer literal is outside the Int64 range"))
-  | Name (Column, name) -> lookup name columns
-  | Name (Bare, name) when List.mem_assoc name columns -> lookup name columns
+     | None -> Diagnostic.fail Int64_range "Integer literal is outside the Int64 range")
+  | Name (Column, name) -> column name columns
+  | Name (Bare, name) when List.mem_assoc name columns -> column name columns
   | Name (_, name) ->
-    (match lookup name env with
-     | Value x -> x
-     | Function _ | Module _ | Default _ ->
-       raise (Error (name ^ " is a function, not a value")))
+    (match List.assoc_opt name env with
+     | None -> unresolved name ~columns ~env
+     | Some (Value x) -> x
+     | Some (Function _ | Module _ | Default _) ->
+       Diagnostic.fail Not_a_value (name ^ " is a function, not a value"))
   | Annotated (x, _) -> go x
   | If (c, t, f) -> choose (go c) (go t) (go f)
   | Binary (op, a, b) -> binary op (go a) (go b)
@@ -122,7 +149,9 @@ let rec elaborate_with ?missing env columns source =
     (match List.assoc_opt ns env with
      | Some (Module "polars") -> ()
      | _ ->
-       raise (Error "polars.sqrt requires explicit import polars and the Python target"));
+       Diagnostic.fail
+         Dialect_capability
+         "polars.sqrt requires explicit import polars and the Python target");
     let v = go arg in
     { v with node = Polars_sqrt v }
   | Call ({ form = Name (Bare, name); _ }, args) ->
@@ -136,7 +165,8 @@ let rec elaborate_with ?missing env columns source =
       List.map
         (function
           | None, x -> go x
-          | Some label, _ -> raise (Error (name ^ " takes no argument named " ^ label)))
+          | Some label, _ ->
+            Diagnostic.fail Unknown_option (name ^ " takes no argument named " ^ label))
         args
     in
     (match List.assoc_opt name env, Prelude.find name, values with
@@ -148,12 +178,12 @@ let rec elaborate_with ?missing env columns source =
          | None -> missing
        in
        elaborate_with ?missing (locals @ closure) [] body
-     | Some _, _, _ -> raise (Error (name ^ " is not a function"))
+     | Some _, _, _ -> Diagnostic.fail Not_a_function (name ^ " is not a function")
      | None, Some Coalesce, [ x; fallback ] -> coalesce x fallback
      | None, Some (Row row), _ -> apply row values
      | None, Some (Reduction Count), [] -> count
      | None, Some (Reduction r), [ x ] -> reduce ?policy:missing r x
-     | _ -> raise (Error ("Wrong arguments to " ^ name)))
+     | _ -> Diagnostic.fail Wrong_arguments ("Wrong arguments to " ^ name))
   | Call ({ form = Lambda (params, body); _ }, args)
     when List.length params = List.length args ->
     let locals = List.map2 (fun p (_, a) -> p, Value (go a)) params args in
@@ -164,7 +194,7 @@ let rec elaborate_with ?missing env columns source =
   | Tuple _ -> unsupported "A tuple"
   | Record _ -> unsupported "A record"
   | Field _ -> unsupported "Field access"
-  | Range _ -> unsupported "A range"
+  | Range _ -> Diagnostic.fail R_range "`a:b` selects columns. For integers write `a..=b`"
   | Formula _ -> unsupported "A formula"
   | Member (x, { form = List items; _ }) -> member (go x) (List.map go items)
   | Interpolate pieces ->
@@ -234,7 +264,7 @@ and choice ?missing env columns subject arms =
     both t guard, elaborate env columns a.body
   in
   match List.rev_map arm arms with
-  | [] -> raise (Error "match needs at least one branch")
+  | [] -> Diagnostic.fail Wrong_arguments "match needs at least one branch"
   | (_, last) :: earlier ->
     List.fold_left
       (fun otherwise (test, body) ->
@@ -260,14 +290,14 @@ let define env = function
   | Let (name, Some params, body) | Let (name, None, { form = Lambda (params, body); _ })
     -> (name, Function (params, body, env)) :: env
   | Let (name, None, body) -> (name, Value (expression env [] body)) :: env
-  | _ -> raise (Error "Expected a let declaration")
+  | _ -> invalid_arg "Expected a let declaration"
 ;;
 
 let mutate env columns bindings =
   List.fold_left
     (fun schema (label, source) ->
        match label with
-       | None -> raise (Error "mutate requires named columns")
+       | None -> Diagnostic.fail Wrong_arguments "mutate requires named columns"
        | Some name when List.mem_assoc name schema ->
          List.map
            (fun ((n, _) as field) ->

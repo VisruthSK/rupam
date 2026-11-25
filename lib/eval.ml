@@ -13,8 +13,6 @@ type value =
   | Option of value option
   | Closure of string list * expr * (string * value) list
 
-exception Error of span * string
-
 let rec display = function
   | Int n -> Int64.to_string n
   | Float n -> string_of_float n
@@ -35,19 +33,20 @@ let rec display = function
 
 let rec expression env source =
   let eval = expression env
-  and fail message = raise (Error (source.span, message)) in
+  and fail code message = Diagnostic.fail ~span:source.span code message
+  and internal message = invalid_arg message in
   let apply fn arguments =
     match fn with
     | Constructor (n, k) when k = List.length arguments -> Variant (n, arguments)
     | Closure (params, body, captured) when List.length params = List.length arguments ->
       expression (List.combine params arguments @ captured) body
-    | Closure _ -> fail "Wrong argument count"
-    | _ -> fail "Expected function"
+    | Closure _ -> internal "Wrong argument count"
+    | _ -> internal "Expected function"
   in
   let args =
     List.map (function
       | None, x -> eval x
-      | _ -> fail "Expected positional argument")
+      | _ -> internal "Expected positional argument")
   in
   match source.form with
   | Annotated (x, _) -> eval x
@@ -104,14 +103,14 @@ let rec expression env source =
          branches
      with
      | Some (vars, body) -> expression (vars @ env) body
-     | None -> fail "Non-exhaustive match")
+     | None -> fail Nonexhaustive_match "Non-exhaustive match")
   | Tuple xs -> Tuple (List.map eval xs)
   | List xs -> List (List.map eval xs)
   | Record fs -> Record (List.map (fun (n, x) -> n, eval x) fs)
   | Field (x, n) ->
     (match eval x with
      | Record fs -> List.assoc n fs
-     | _ -> fail "Expected record")
+     | _ -> internal "Expected record")
   | Local (n, x, y) -> expression ((n, eval x) :: env) y
   | Call ({ form = Name (Bare, "Some"); _ }, [ (None, x) ]) -> Option (Some (eval x))
   | Literal Absent -> Option None
@@ -120,20 +119,20 @@ let rec expression env source =
   | Literal (Syntax.Float s) ->
     (match float_of_string_opt s with
      | Some f -> Float f
-     | None -> fail "Expected numeric literal")
+     | None -> internal "Expected numeric literal")
   | Literal (Syntax.Int s) ->
     (match Int64.of_string_opt s with
      | Some n -> Int n
-     | None -> fail "Expected Int64 literal")
+     | None -> internal "Expected Int64 literal")
   | Name (Bare, name) ->
     (match List.assoc_opt name env with
      | Some v -> v
-     | None -> fail ("Unknown name: " ^ name))
+     | None -> fail Unknown_name ("Unknown name: " ^ name))
   | Lambda (params, body) -> Closure (params, body, env)
   | If (c, yes, no) ->
     (match eval c with
      | Bool b -> eval (if b then yes else no)
-     | _ -> fail "Expected Bool")
+     | _ -> internal "Expected Bool")
   | Call (f, xs) -> apply (eval f) (args xs)
   | Pipe (x, f) ->
     let v = eval x in
@@ -143,24 +142,24 @@ let rec expression env source =
   | Unary (Not, x) ->
     (match eval x with
      | Bool b -> Bool (not b)
-     | _ -> fail "Expected Bool")
+     | _ -> internal "Expected Bool")
   | Unary (Negate, x) ->
     (match eval x with
      | Int n ->
        (try Int (Integer.sub 0L n) with
-        | Integer.Overflow -> fail "Int64 overflow")
+        | Integer.Overflow -> fail Arithmetic_overflow "Int64 overflow")
      | Float f -> Float (-.f)
-     | _ -> fail "Expected number")
+     | _ -> internal "Expected number")
   | Binary (And, a, b) ->
     (match eval a with
      | Bool true -> eval b
      | Bool false -> Bool false
-     | _ -> fail "Expected Bool")
+     | _ -> internal "Expected Bool")
   | Binary (Or, a, b) ->
     (match eval a with
      | Bool false -> eval b
      | Bool true -> Bool true
-     | _ -> fail "Expected Bool")
+     | _ -> internal "Expected Bool")
   | Binary (op, a, b) ->
     let x = eval a in
     (try
@@ -190,10 +189,10 @@ let rec expression env source =
        | Not_equal, Float a, Float b -> Bool (a <> b)
        | Greater, Int a, Int b -> Bool (a > b)
        | Greater, Float a, Float b -> Bool (a > b)
-       | _ -> fail ("Unsupported operands for " ^ binary_symbol op)
+       | _ -> internal ("Unsupported operands for " ^ binary_symbol op)
      with
-     | Integer.Overflow -> fail "Int64 overflow")
-  | _ -> fail "Unsupported expression in scalar evaluator"
+     | Integer.Overflow -> fail Arithmetic_overflow "Int64 overflow")
+  | _ -> internal "Unsupported expression in scalar evaluator"
 ;;
 
 let run env declarations =
@@ -219,8 +218,10 @@ let run env declarations =
              env
              vs
          , None )
-       | Import (n, _) -> failwith ("Module " ^ n ^ " requires a table backend")
-       | Contract _ -> raise (Failure "Contract loading is unavailable")
+       | Import (n, _) ->
+         Diagnostic.fail Unsupported_feature ("Module " ^ n ^ " requires a table backend")
+       | Contract _ ->
+         Diagnostic.fail Unsupported_feature "Contract loading is unavailable"
        | Setting _ -> env, None)
     (env, None)
     declarations

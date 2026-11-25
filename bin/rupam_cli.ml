@@ -12,16 +12,22 @@ let with_program path action =
 let settings directory target strict =
   let project = Project.load directory in
   { project with
-    dialect = (match target with None -> project.dialect | Some _ -> { value = target; origin = Session "--target" })
-  ; strict = (if strict then project.strict else { value = false; origin = Session "--no-strict" })
+    dialect =
+      (match target with
+       | None -> project.dialect
+       | Some _ -> { value = target; origin = Session "--target" })
+  ; strict =
+      (if strict
+       then project.strict
+       else { value = false; origin = Session "--no-strict" })
   }
 ;;
 
 let guarded action =
   match action () with
   | code -> code
-  | exception Failure message ->
-    Repl.report message;
+  | exception exn ->
+    Repl.report_diagnostic (Diagnostic.of_exn exn);
     Cmd.Exit.some_error
 ;;
 
@@ -59,14 +65,11 @@ let lock target strict path =
     let entry = Lock.lock ~project ~source:path ds in
     List.iter
       (fun (file, columns) ->
-         Printf.printf "%s
-" file;
-         List.iter (fun (n, t) -> Printf.printf "  %s  %s
-" n t) columns)
+         Printf.printf "%s\n" file;
+         List.iter (fun (n, t) -> Printf.printf "  %s  %s\n" n t) columns)
       entry.schemas;
     Printf.printf
-      "Locked %s for %s: %d input%s
-"
+      "Locked %s for %s: %d input%s\n"
       entry.source
       entry.dialect
       (List.length entry.inputs)
@@ -146,7 +149,8 @@ let commands =
         $ Arg.(value & pos 0 (some file) None & info [] ~docv:"FILE.rp"))
   ; command
       "lock"
-      "Validate a program's inputs and record them, with any inferred schemas, in        rupam.lock."
+      "Validate a program's inputs and record them, with any inferred schemas, in        \
+       rupam.lock."
       Term.(const lock $ target $ strict $ program)
   ; command "fmt" "Print a program in canonical form." Term.(const fmt $ program)
   ; command
@@ -172,6 +176,22 @@ let commands =
           Contract.describe (Contract.import path);
           Cmd.Exit.ok)
         $ Arg.(required & pos 0 (some file) None & info [] ~docv:"data-dict.yaml"))
+  ; command
+      "explain"
+      "Explain a diagnostic code."
+      Term.(
+        const (fun code ->
+          print_endline (Diagnostic.name code ^ "\n\n" ^ Diagnostic.explanation code);
+          Cmd.Exit.ok)
+        $ Arg.(
+            required
+            & pos
+                0
+                (some
+                   (enum
+                      (List.map (fun c -> Diagnostic.name c, c) Diagnostic.all_of_code)))
+                None
+            & info [] ~docv:"CODE"))
   ; command
       "lsp"
       "Serve the language server over stdio."

@@ -1,6 +1,7 @@
 let float x =
   let text =
-    List.find (fun t -> float_of_string t = x)
+    List.find
+      (fun t -> float_of_string t = x)
       (List.init 17 (fun p -> Printf.sprintf "%.*e" p x))
   in
   let negative = String.starts_with ~prefix:"-" text in
@@ -18,14 +19,18 @@ let float x =
   if exponent < -4 || exponent >= 16
   then
     sign
-    ^ (if count > 1 then String.sub digits 0 1 ^ "." ^ String.sub digits 1 (count - 1) else digits)
+    ^ (if count > 1
+       then String.sub digits 0 1 ^ "." ^ String.sub digits 1 (count - 1)
+       else digits)
     ^ Printf.sprintf "e%c%02d" (if exponent < 0 then '-' else '+') (abs exponent)
   else if exponent < 0
   then sign ^ "0." ^ String.make (-exponent - 1) '0' ^ digits
   else (
     let padded = digits ^ String.make (max 0 (exponent + 1 - count)) '0' in
     let whole = String.sub padded 0 (exponent + 1) in
-    let fraction = String.sub padded (exponent + 1) (String.length padded - exponent - 1) in
+    let fraction =
+      String.sub padded (exponent + 1) (String.length padded - exponent - 1)
+    in
     sign ^ whole ^ "." ^ if fraction = "" then "0" else fraction)
 ;;
 

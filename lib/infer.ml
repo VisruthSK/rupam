@@ -31,9 +31,6 @@ type env =
   }
 
 let extend env xs = { env with values = xs @ env.values }
-
-exception Error of span * string
-
 let fresh level c = Var (ref (Free (level, c)))
 
 let rec repr = function
@@ -165,7 +162,7 @@ let unify span expected actual =
         (fun b ->
            match !b with
            | Free (n, k) ->
-             if a == b then raise (Error (span, "Infinite type"));
+             if a == b then Diagnostic.fail ~span Infinite_type "Infinite type";
              let k =
                match t with
                | Var _ when c = Numeric -> Numeric
@@ -206,9 +203,10 @@ let unify span expected actual =
   in
   try equal expected actual with
   | Mismatch ->
-    raise
-      (Error
-         (span, Printf.sprintf "Expected %s, found %s" (display expected) (display actual)))
+    Diagnostic.fail
+      ~span
+      Type_mismatch
+      (Printf.sprintf "Expected %s, found %s" (display expected) (display actual))
 ;;
 
 let generalize level t =
@@ -282,8 +280,8 @@ let rec annotation env params level = function
            | Arrow (params, result) when List.length params = List.length ts ->
              List.iter2 (unify (Lexing.dummy_pos, Lexing.dummy_pos)) params ts;
              result
-           | _ -> failwith ("Wrong type arity: " ^ n))
-        | _ -> failwith ("Unknown type or wrong arity: " ^ n)))
+           | _ -> Diagnostic.fail Unknown_type ("Wrong type arity: " ^ n))
+        | _ -> Diagnostic.fail Unknown_type ("Unknown type or wrong arity: " ^ n)))
 ;;
 
 let signature builtin =
@@ -492,7 +490,7 @@ let uncovered env level equal subject branches =
 let rec expression env level source =
   let check = expression env level
   and equal = unify source.span in
-  let fail m = raise (Error (source.span, m)) in
+  let fail code m = Diagnostic.fail ~span:source.span code m in
   let strip t =
     match repr t with
     | Option inner -> inner, true
@@ -539,6 +537,7 @@ let rec expression env level source =
       if List.mem true flags then optional r else r
     | Arrow (ps, _) ->
       fail
+        Wrong_arguments
         (Printf.sprintf
            "Expected %d argument%s, got %d"
            (List.length ps)
@@ -612,7 +611,7 @@ let rec expression env level source =
              if
                List.sort compare (List.map fst others)
                <> List.sort compare (List.map fst vars)
-             then fail "Every alternative must bind the same names";
+             then fail Pattern_bindings "Every alternative must bind the same names";
              List.iter (fun (n, (_, ty)) -> equal (snd (List.assoc n vars)) ty) others)
           rest;
         vars
@@ -624,7 +623,7 @@ let rec expression env level source =
            let constr =
              match List.find_map (fun (_, cs) -> List.assoc_opt n cs) env.variants with
              | Some s -> instantiate level s
-             | None -> fail ("Unknown constructor " ^ n)
+             | None -> fail Unknown_constructor ("Unknown constructor " ^ n)
            in
            equal constr (if ts = [] then t else Arrow (ts, t)));
         List.concat (List.map2 bind ts ps)
@@ -634,13 +633,14 @@ let rec expression env level source =
          let vars = bind subject arm.pattern in
          let ns = List.map fst vars in
          if List.length ns <> List.length (List.sort_uniq compare ns)
-         then fail "Repeated pattern variable";
+         then fail Pattern_bindings "Repeated pattern variable";
          let inner = extend env vars in
          Option.iter (fun g -> equal Bool (expression inner level g)) arm.guard;
          equal result (expression inner level arm.body))
       branches;
     (match uncovered env level equal subject branches with
-     | Some p -> fail ("Non-exhaustive match. Missing case " ^ Format.pattern p)
+     | Some p ->
+       fail Nonexhaustive_match ("Non-exhaustive match. Missing case " ^ Format.pattern p)
      | None -> ());
     result
   | Interpolate pieces ->
@@ -654,11 +654,14 @@ let rec expression env level source =
              | (Int | Float), _ | Var _, None -> ()
              | Var _, Some _ -> equal (fresh level Numeric) t
              | (Bool | String), None -> ()
-             | String, Some f when not (String.exists (fun c -> String.contains "dfeg%" c) f)
-               -> ()
-             | _, Some _ -> fail "A format spec like :.2f applies to numbers"
+             | String, Some f
+               when not (String.exists (fun c -> String.contains "dfeg%" c) f) -> ()
+             | _, Some _ ->
+               fail Type_mismatch "A format spec like :.2f applies to numbers"
              | t, None ->
-               fail ("Interpolation shows numbers, text and Bool, not " ^ display t));
+               fail
+                 Type_mismatch
+                 ("Interpolation shows numbers, text and Bool, not " ^ display t));
             Some (t, lifted))
         pieces
     in
@@ -672,7 +675,7 @@ let rec expression env level source =
   | Name (Column, n) ->
     (match List.assoc_opt n env.columns with
      | Some t -> t
-     | None -> fail ("No column named " ^ n))
+     | None -> fail Unknown_column ("No column named " ^ n))
   | Name (Bare, n) when List.mem_assoc n env.columns -> List.assoc n env.columns
   | Name (_, n) ->
     (match List.assoc_opt n env.values with
@@ -682,8 +685,8 @@ let rec expression env level source =
        (match
           List.filter (fun m -> Distance.between m n <= 2) names |> List.sort_uniq compare
         with
-        | [] -> fail ("Unknown name: " ^ n)
-        | m :: _ -> fail ("Unknown name: " ^ n ^ ". Did you mean " ^ m ^ "?")))
+        | [] -> fail Unknown_name ("Unknown name: " ^ n)
+        | m :: _ -> fail Unknown_name ("Unknown name: " ^ n ^ ". Did you mean " ^ m ^ "?")))
   | Literal (Int _) ->
     let t = fresh level Numeric in
     decide source (Integer t);
@@ -698,7 +701,7 @@ let rec expression env level source =
   | Record fs ->
     let names = List.map fst fs in
     if List.length names <> List.length (List.sort_uniq compare names)
-    then fail "Duplicate record field";
+    then fail Duplicate_name "Duplicate record field";
     Record (List.map (fun (n, x) -> n, check x) fs, None)
   | Field (x, n) ->
     let field = fresh level Any in
@@ -754,6 +757,7 @@ let rec expression env level source =
     (match repr (check c) with
      | Option _ ->
        fail
+         Optional_condition
          "This condition is missing where its inputs are missing. Wrap it in \
           coalesce(condition, FALSE) or coalesce(condition, TRUE)"
      | t -> equal Bool t);
@@ -769,8 +773,11 @@ let rec expression env level source =
      | _ ->
        equal ta tb;
        ta)
-  | Formula _ -> fail "Formulas (y ~ x) are reserved for the model and graphics libraries"
-  | _ -> fail "Unsupported scalar expression"
+  | Formula _ ->
+    fail
+      Unsupported_feature
+      "Formulas (y ~ x) are reserved for the model and graphics libraries"
+  | Range _ -> fail R_range "`a:b` selects columns. For integers write `a..=b`"
 ;;
 
 let settle t =
@@ -785,12 +792,14 @@ let settle t =
 
 let declaration env = function
   | Alias (name, params, body) ->
-    if List.mem_assoc name env.types then failwith ("Duplicate type " ^ name);
+    if List.mem_assoc name env.types
+    then Diagnostic.fail Duplicate_name ("Duplicate type " ^ name);
     let ps = List.map (fun n -> n, fresh 1 Any) params in
     let t = annotation env ps 1 body in
     { env with types = (name, generalize 0 (Arrow (List.map snd ps, t))) :: env.types }, t
   | Type (name, params, constructors) ->
-    if List.mem_assoc name env.types then failwith ("Duplicate type " ^ name);
+    if List.mem_assoc name env.types
+    then Diagnostic.fail Duplicate_name ("Duplicate type " ^ name);
     let ps = List.map (fun n -> n, fresh 1 Any) params in
     let t = Variant (name, List.map snd ps) in
     let env = { env with types = (name, generalize 0 t) :: env.types } in
@@ -799,7 +808,7 @@ let declaration env = function
       List.fold_left
         (fun tags (tag, fs) ->
            if known tag || List.mem_assoc tag tags
-           then failwith ("Duplicate constructor " ^ tag);
+           then Diagnostic.fail Duplicate_name ("Duplicate constructor " ^ tag);
            let args = List.map (fun (_, a) -> annotation env ps 1 a) fs in
            (tag, generalize 0 (if args = [] then t else Arrow (args, t))) :: tags)
         []
@@ -817,13 +826,17 @@ let declaration env = function
     let t = if ps = None then settle t else t in
     extend env [ name, generalize 0 t ], t
   | Evaluate x -> env, settle (expression env 1 x)
-  | Import (n, _) -> failwith ("Module " ^ n ^ " requires a table backend")
-  | Contract _ -> failwith "Contract loading is unavailable"
+  | Import (n, _) ->
+    Diagnostic.fail Unsupported_feature ("Module " ^ n ^ " requires a table backend")
+  | Contract _ -> Diagnostic.fail Unsupported_feature "Contract loading is unavailable"
   | Setting (("missing" | "group_missing"), ("skip" | "propagate" | "error")) ->
     env, Tuple []
   | Setting (("missing" | "group_missing"), _) ->
-    failwith "A missing policy is skip, propagate or error"
-  | Setting (name, _) -> failwith ("Unknown setting " ^ name ^ ". Expected missing or group_missing")
+    Diagnostic.fail Unknown_setting "A missing policy is skip, propagate or error"
+  | Setting (name, _) ->
+    Diagnostic.fail
+      Unknown_setting
+      ("Unknown setting " ^ name ^ ". Expected missing or group_missing")
 ;;
 
 let program env ds = List.fold_left (fun env d -> fst (declaration env d)) env ds

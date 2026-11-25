@@ -75,7 +75,7 @@ type binding =
 
 and environment = (string * binding) list
 
-let fail x msg = raise (Infer.Error (x.span, msg))
+let fail (x : expr) code message = Diagnostic.fail ~span:x.span code message
 let readers = [ "read_csv"; "read_tsv"; "read_parquet" ]
 
 let rec uses table x =
@@ -139,24 +139,24 @@ let rec dataset ~directory env scalars x =
   | Name (Bare, n) ->
     (match List.assoc_opt n env with
      | Some (Dataset t) -> t
-     | _ -> fail x ("Unknown table " ^ n))
+     | _ -> fail x Unknown_table ("Unknown table " ^ n))
   | Call
       ( { form = Name (Bare, "load"); _ }
       , [ (None, { form = Field ({ form = Name (Bare, d); _ }, n); _ }) ] ) ->
     let dict =
       match List.assoc_opt d env with
       | Some (Dictionary d) -> d
-      | _ -> fail x "Expected contract"
+      | _ -> fail x Wrong_arguments "Expected contract"
     in
     let table =
       match List.find_opt (fun (t : Contract.table) -> t.name = n) dict.tables with
       | Some t -> t
-      | None -> fail x ("Unknown contracted table " ^ n)
+      | None -> fail x Unknown_table ("Unknown contracted table " ^ n)
     in
     let path =
       match table.parquet with
       | Some p -> p
-      | None -> fail x "Missing Parquet source"
+      | None -> fail x Wrong_arguments "Missing Parquet source"
     in
     let types = physical path in
     let fields =
@@ -165,8 +165,13 @@ let rec dataset ~directory env scalars x =
            let t =
              match List.assoc_opt c.name types with
              | Some (Some t) -> t
-             | Some None -> fail x ("Unsupported physical type for " ^ c.name)
-             | None -> fail x ("Contract column " ^ c.name ^ " is missing from the file")
+             | Some None ->
+               fail x Unknown_column ("Unsupported physical type for " ^ c.name)
+             | None ->
+               fail
+                 x
+                 Unknown_column
+                 ("Contract column " ^ c.name ^ " is missing from the file")
            in
            c.name, t, not c.required)
         table.columns
@@ -209,7 +214,8 @@ let rec dataset ~directory env scalars x =
       | "read_tsv" -> Data_file.Tsv
       | _ -> Data_file.Parquet
     in
-    if format <> expected then fail x (reader ^ " cannot read " ^ Filename.basename path);
+    if format <> expected
+    then fail x Unreadable_input (reader ^ " cannot read " ^ Filename.basename path);
     let columns =
       List.map
         (fun (c : Data_file.column) ->
@@ -220,19 +226,19 @@ let rec dataset ~directory env scalars x =
              | "BOOLEAN" -> Bool
              | "VARCHAR" -> String
              | other ->
-               fail x (Printf.sprintf "Column %s has unsupported type %s" c.name other)
+               fail
+                 x
+                 Unsupported_column_type
+                 (Printf.sprintf "Column %s has unsupported type %s" c.name other)
            in
            c.name, primitive, c.nullable)
-        (try Data_file.columns path with
-         | Failure message -> fail x message)
+        (Diagnostic.locate x.span (fun () -> Data_file.columns path))
     in
     { origin = File { path; digest = Data_file.digest path; format; columns }
     ; fields = List.map (fun (n, _, _) -> n) columns
     ; plan = Table.source 0 columns
     }
-  | Pipe
-      ( a
-      , { form = Call ({ form = Name (Bare, verb); _ }, (None, b) :: options); _ } )
+  | Pipe (a, { form = Call ({ form = Name (Bare, verb); _ }, (None, b) :: options); _ })
     when List.mem_assoc verb join_kinds ->
     let left = dataset ~directory env scalars a
     and right = dataset ~directory env scalars b in
@@ -244,31 +250,35 @@ let rec dataset ~directory env scalars x =
           { form = Binary (Equal, { form = Name (_, l); _ }, { form = Name (_, r); _ })
           ; _
           } -> l, r
-      | _ -> fail x (verb ^ " needs by = key, or by = (left_key == right_key)")
+      | _ -> fail x Join_keys (verb ^ " needs by = key, or by = (left_key == right_key)")
     in
     let covered =
       match List.assoc_opt (Some "unmatched") options, kind with
       | None, _ | Some { form = Name (_, "allow"); _ }, _ -> false
       | Some { form = Name (_, "error"); _ }, (Semi | Anti) ->
-        fail x ("unmatched = error is not available on " ^ verb)
+        fail x Wrong_arguments ("unmatched = error is not available on " ^ verb)
       | Some { form = Name (_, "error"); _ }, _ -> true
-      | Some _, _ -> fail x "unmatched is allow or error"
+      | Some _, _ -> fail x Wrong_arguments "unmatched is allow or error"
     in
     let declared =
       match List.assoc_opt (Some "relationship") options with
       | Some { form = Name (_, name); _ } when List.mem_assoc name relationships ->
         Some (List.assoc name relationships)
       | Some _ ->
-        fail x "relationship is one_to_one, many_to_one, one_to_many or many_to_many"
+        fail
+          x
+          Wrong_arguments
+          "relationship is one_to_one, many_to_one, one_to_many or many_to_many"
       | None -> None
     in
     (match
        List.find_opt
-         (fun (n, _) -> n <> Some "by" && n <> Some "relationship" && n <> Some "unmatched")
+         (fun (n, _) ->
+            n <> Some "by" && n <> Some "relationship" && n <> Some "unmatched")
          options
      with
-     | Some (Some n, _) -> fail x (verb ^ " takes no option named " ^ n)
-     | Some (None, _) -> fail x (verb ^ " takes one table")
+     | Some (Some n, _) -> fail x Unknown_option (verb ^ " takes no option named " ^ n)
+     | Some (None, _) -> fail x Wrong_arguments (verb ^ " takes one table")
      | None -> ());
     let nullable_left = kind = Right || kind = Full
     and nullable_right = kind = Left || kind = Full in
@@ -297,6 +307,7 @@ let rec dataset ~directory env scalars x =
       | None, _ ->
         fail
           x
+          Join_relationship
           (verb
            ^ " needs relationship = one_to_one, many_to_one, one_to_many or \
               many_to_many: no key proves how many rows match on "
@@ -311,9 +322,9 @@ let rec dataset ~directory env scalars x =
       | Some (One_to_one | One_to_many) -> true
       | _ -> false
     in
-    let lk = Check.lookup key left.plan.schema
-    and rk = Check.lookup key right.plan.schema in
-    if lk.typ.primitive <> rk.typ.primitive then fail x "Join key types differ";
+    let lk = Check.column key left.plan.schema
+    and rk = Check.column key right.plan.schema in
+    if lk.typ.primitive <> rk.typ.primitive then fail x Join_keys "Join key types differ";
     let fields =
       List.map
         (fun (n, (e : Shape.expr)) ->
@@ -328,7 +339,7 @@ let rec dataset ~directory env scalars x =
              then None
              else (
                if List.mem_assoc n left.plan.schema
-               then fail x ("Join column collision: " ^ n);
+               then fail x Join_collision ("Join column collision: " ^ n);
                Some (n, e.typ.primitive, e.typ.nullable || nullable_right)))
           right.plan.schema
     in
@@ -352,8 +363,11 @@ let rec dataset ~directory env scalars x =
     }
   | Pipe (a, ({ form = Call ({ form = Name (Bare, verb); _ }, args); _ } as stage)) ->
     let t = dataset ~directory env scalars a in
-    (try { t with plan = Table.stage ~span:x.span scalars t.plan verb args } with
-     | Shape.Error message -> fail stage message)
+    { t with
+      plan =
+        Diagnostic.locate stage.span (fun () ->
+          Table.stage ~span:x.span scalars t.plan verb args)
+    }
   | Call ({ form = Name (Bare, f); _ }, [ (None, arg) ]) ->
     (match List.assoc_opt f env with
      | Some (Function ([ p ], body, closure, captured)) ->
@@ -362,8 +376,8 @@ let rec dataset ~directory env scalars x =
          ((p, Dataset (dataset ~directory env scalars arg)) :: closure)
          captured
          body
-     | _ -> fail x ("Unsupported table function " ^ f))
-  | _ -> fail x "Expected table expression"
+     | _ -> fail x Unknown_verb ("Unsupported table function " ^ f))
+  | _ -> fail x Not_a_table "Expected table expression"
 ;;
 
 type output =
@@ -384,12 +398,13 @@ let extend ?(strict = true) ~directory env scalars declarations =
   let rec loop env scalars outputs = function
     | [] -> env, scalars, List.rev outputs
     | Import ("polars", _) :: _ when strict ->
-      failwith
+      Diagnostic.fail
+        Dialect_capability
         "import polars is target-specific. Set strict = false under [check] in \
          rupam.toml, or pass --no-strict"
     | Import ("polars", alias) :: ds ->
       loop env ((alias, Check.Module "polars") :: scalars) outputs ds
-    | Import (n, _) :: _ -> failwith ("Unknown module " ^ n)
+    | Import (n, _) :: _ -> Diagnostic.fail Unknown_module ("Unknown module " ^ n)
     | Contract (path, n) :: ds ->
       let path =
         if Filename.is_relative path then Filename.concat directory path else path
@@ -425,11 +440,19 @@ let extend ?(strict = true) ~directory env scalars declarations =
         | _ -> Missing
       in
       let policy = Check.policy_of_name value in
-      loop env ((Check.setting_key setting, Check.Default (setting, policy)) :: scalars) outputs ds
-    | Type _ :: _ -> failwith "Table backend does not support variant declarations"
+      loop
+        env
+        ((Check.setting_key setting, Check.Default (setting, policy)) :: scalars)
+        outputs
+        ds
+    | Type _ :: _ ->
+      Diagnostic.fail
+        Unsupported_feature
+        "Table backend does not support variant declarations"
     | Evaluate x :: _ ->
       fail
         x
+        Unsupported_feature
         "A table program's top-level expressions are print(table) or \
          write_parquet(table, path)"
   in
@@ -518,18 +541,18 @@ let public_view d =
   then d
   else (
     let schema = List.filter (fun (n, _) -> not (List.mem n hidden)) d.plan.schema in
-    if schema = [] then failwith "No unrestricted fields to display";
+    if schema = []
+    then Diagnostic.fail Restricted_output "No unrestricted fields to display";
     { d with
       plan =
         { d.plan with schema; steps = Table.Select (List.map fst schema) :: d.plan.steps }
     })
 ;;
 
-
 let bound env name =
   match List.assoc_opt name env with
   | Some (Dataset d) -> d
-  | _ -> failwith ("Unknown bound table " ^ name)
+  | _ -> Diagnostic.fail Unknown_table ("Unknown bound table " ^ name)
 ;;
 
 let rec origin d =

@@ -13,13 +13,13 @@ let parse schema verb arguments =
   let argument n =
     match List.assoc_opt (Some n) arguments with
     | Some x -> x
-    | None -> raise (Error ("Missing pivot argument " ^ n))
+    | None -> Diagnostic.fail Wrong_arguments ("Missing pivot argument " ^ n)
   in
   let name x =
     match x.Syntax.form with
     | Name (Bare, n) | Name (Column, n) -> n
     | Literal (Text n) -> n
-    | _ -> raise (Error "Expected literal field name")
+    | _ -> Diagnostic.fail Wrong_arguments "Expected literal field name"
   in
   let fields n =
     match (argument n).Syntax.form with
@@ -41,20 +41,23 @@ let parse schema verb arguments =
     List.length arguments <> 3
     || labels = []
     || List.length labels <> List.length (List.sort_uniq compare labels)
-  then raise (Error "Expected three pivot arguments and distinct nonempty field names");
+  then
+    Diagnostic.fail
+      Pivot_shape
+      "Expected three pivot arguments and distinct nonempty field names";
   let ids = List.filter (fun (n, _) -> not (List.mem n selected)) schema in
-  let values = List.map (fun n -> n, Check.lookup n schema) selected in
+  let values = List.map (fun n -> n, Check.column n schema) selected in
   let t = { wider; ids; values; key; value; labels } in
   let fields =
     if wider
     then (
       if (List.assoc key schema).typ.primitive <> String
-      then raise (Error "Pivot names must be strings");
+      then Diagnostic.fail Pivot_shape "Pivot names must be strings";
       List.map (fun n -> n, { (List.assoc value schema).typ with nullable = true }) labels)
     else (
       let ty = (snd (List.hd values)).typ in
       if not (List.for_all (fun (_, x) -> x.typ.primitive = ty.primitive) values)
-      then raise (Error "Pivot values must share a type");
+      then Diagnostic.fail Pivot_shape "Pivot values must share a type";
       [ key, { ty with primitive = String; nullable = false }
       ; value, { ty with nullable = List.exists (fun (_, x) -> x.typ.nullable) values }
       ])
@@ -62,7 +65,7 @@ let parse schema verb arguments =
   let output = List.map (fun (n, x) -> n, x.typ) ids @ fields in
   let names = List.map fst output in
   if List.length names <> List.length (List.sort_uniq compare names)
-  then raise (Error "Pivot produces duplicate labels");
+  then Diagnostic.fail Pivot_shape "Pivot produces duplicate labels";
   t, output
 ;;
 
@@ -94,10 +97,11 @@ let execute p ~rows ~eval =
       let key =
         match keys.(i) with
         | S s when List.mem s p.labels -> s
-        | _ -> raise (Error "Unexpected pivot key")
+        | _ -> invalid_arg "Unexpected pivot key"
       in
       let cells = Option.value ~default:[] (Groups.find_opt id !groups) in
-      if List.mem_assoc key cells then raise (Error "Duplicate pivot cell");
+      if List.mem_assoc key cells
+      then Diagnostic.fail Duplicate_pivot_cell "Duplicate pivot cell";
       groups := Groups.add id ((key, values.(i)) :: cells) !groups
     done;
     let records =

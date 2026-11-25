@@ -123,9 +123,10 @@ let evaluate runtime language script =
       raise exn
   in
   let open Yojson.Basic.Util in
-  if to_int (member "revision" reply) <> w.revision then failwith "Stale backend response";
+  if to_int (member "revision" reply) <> w.revision
+  then invalid_arg "Stale backend response";
   match member "error" reply |> to_string_option with
-  | Some message -> failwith (host_error message)
+  | Some message -> Diagnostic.fail Host_failure (host_error message)
   | None -> member "output" reply |> to_string
 ;;
 

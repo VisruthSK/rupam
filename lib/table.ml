@@ -35,15 +35,21 @@ let source ?(keys = []) context fields =
          name, input id { primitive; nullable; shape = Column context })
       fields
   in
-  { locations = []; context; schema; steps = []; keys; order = None; next = List.length fields }
+  { locations = []
+  ; context
+  ; schema
+  ; steps = []
+  ; keys
+  ; order = None
+  ; next = List.length fields
+  }
 ;;
 
 let names table = List.map fst table.schema
 
 let key table columns =
   { columns
-  ; present =
-      List.for_all (fun c -> not (List.assoc c table.schema).typ.nullable) columns
+  ; present = List.for_all (fun c -> not (List.assoc c table.schema).typ.nullable) columns
   }
 ;;
 
@@ -83,20 +89,20 @@ let rename_columns changes table =
 let select table arguments =
   let name = function
     | { Syntax.form = Name ((Bare | Column), n); _ } -> n
-    | _ -> raise (Error "Expected named column selector")
+    | _ -> Diagnostic.fail Invalid_selector "Expected named column selector"
   in
   let resolve x =
     let n = name x in
-    ignore (Check.lookup n table.schema);
+    ignore (Check.column n table.schema);
     n
   in
   let fields = names table in
   let range first last =
     let rec from = function
-      | [] -> raise (Error "Invalid schema range")
+      | [] -> Diagnostic.fail Invalid_selector "Invalid schema range"
       | n :: rest -> if n = first then through (n :: rest) else from rest
     and through = function
-      | [] -> raise (Error "Range ends before its start")
+      | [] -> Diagnostic.fail Invalid_selector "Range ends before its start"
       | n :: rest -> if n = last then [ n ] else n :: through rest
     in
     from fields
@@ -144,7 +150,7 @@ let select table arguments =
     |> List.filter (fun n -> not (List.mem n removed))
   in
   if List.length selected <> List.length (List.sort_uniq String.compare selected)
-  then raise (Error "Duplicate selected column");
+  then Diagnostic.fail Duplicate_name "Duplicate selected column";
   let aliases =
     List.filter_map
       (function
@@ -170,25 +176,28 @@ let select table arguments =
       selected
   in
   if List.length schema <> List.length (List.sort_uniq compare (List.map fst schema))
-  then raise (Error "Duplicate projection label");
+  then Diagnostic.fail Duplicate_name "Duplicate projection label";
   let steps = Select selected :: table.steps in
   let kept = restrict (fun c -> List.mem c selected) table in
   rename_columns
     (List.map (fun (a, b, _) -> a, b) changes)
-    { kept with schema; steps = (if changes = [] then steps else Rename changes :: steps) }
+    { kept with
+      schema
+    ; steps = (if changes = [] then steps else Rename changes :: steps)
+    }
 ;;
 
 let grouping table groups =
   let rec keys x =
     match x.Syntax.form with
-    | Name ((Bare | Column), n) -> [ n, Check.lookup n table.schema ]
+    | Name ((Bare | Column), n) -> [ n, Check.column n table.schema ]
     | Tuple xs | List xs -> List.concat_map keys xs
-    | _ -> raise (Error "by takes a column or a list of columns")
+    | _ -> Diagnostic.fail Wrong_arguments "by takes a column or a list of columns"
   in
   match groups with
   | [] -> []
   | [ (_, x) ] -> keys x
-  | _ -> raise (Error "Repeated by argument")
+  | _ -> Diagnostic.fail Wrong_arguments "Repeated by argument"
 ;;
 
 type options =
@@ -210,7 +219,7 @@ let options arguments =
 
 let group_policy env options keys =
   if options.group_missing <> None && keys = []
-  then raise (Error "group_missing needs by =");
+  then Diagnostic.fail Group_missing_without_by "group_missing needs by =";
   let first = List.find_map Fun.id in
   match List.filter (fun (_, (k : Shape.expr)) -> k.typ.nullable) keys with
   | [] -> None
@@ -225,12 +234,12 @@ let group_policy env options keys =
      with
      | Some p -> Some p
      | None ->
-       raise
-         (Error
-            ("The grouping key "
-             ^ name
-             ^ " can be missing. Say what to do with those rows: group_missing = skip \
-                leaves them out, propagate makes missing a group, error stops the run")))
+       Diagnostic.fail
+         Missing_policy_required
+         ("The grouping key "
+          ^ name
+          ^ " can be missing. Say what to do with those rows: group_missing = skip \
+             leaves them out, propagate makes missing a group, error stops the run"))
 ;;
 
 let present keys =
@@ -245,7 +254,8 @@ let present keys =
 
 let require_keys table keys =
   let check =
-    { Shape.node = Required (Shape.choose (present keys) (Shape.constant (`Bool true)) Shape.null)
+    { Shape.node =
+        Required (Shape.choose (present keys) (Shape.constant (`Bool true)) Shape.null)
     ; typ = { primitive = Bool; nullable = false; shape = Column table.context }
     }
   in
@@ -256,7 +266,9 @@ let drop_missing_keys table keys =
   let schema =
     List.map
       (fun ((n, (e : Shape.expr)) as field) ->
-         if List.mem_assoc n keys then n, { e with typ = { e.typ with nullable = false } } else field)
+         if List.mem_assoc n keys
+         then n, { e with typ = { e.typ with nullable = false } }
+         else field)
       table.schema
   in
   { table with schema; steps = Filter (present keys) :: table.steps }
@@ -279,11 +291,11 @@ let transform env table verb arguments =
       List.map
         (function
           | Some b, { Syntax.form = Name ((Bare | Column), a); _ } ->
-            let x = Check.lookup a table.schema in
+            let x = Check.column a table.schema in
             (match x.node with
              | Input i -> a, b, i
              | _ -> assert false)
-          | _ -> raise (Error "rename takes new = old"))
+          | _ -> Diagnostic.fail Wrong_arguments "rename takes new = old")
         arguments
     in
     let changes = List.map (fun (a, b, _) -> a, b) mapping in
@@ -297,22 +309,22 @@ let transform env table verb arguments =
     if
       List.length ns <> List.length (List.sort_uniq compare ns)
       || List.length old <> List.length (List.sort_uniq compare old)
-    then raise (Error "Duplicate rename field");
+    then Diagnostic.fail Duplicate_name "Duplicate rename field";
     rename_columns changes { table with schema; steps = Rename mapping :: table.steps }
   | "slice_head", [ (Some "n", { Syntax.form = Literal (Int n); _ }) ] ->
     if not (total table)
     then
-      raise
-        (Error
-           "slice_head needs a total order: arrange by columns that include a key of \
-            the table, or establish one with assert_key");
+      Diagnostic.fail
+        Unordered_slice
+        "slice_head needs a total order: arrange by columns that include a key of the \
+         table, or establish one with assert_key";
     let count =
       match int_of_string_opt n with
       | Some i when i >= 0 -> i
-      | _ -> raise (Error "slice_head needs a nonnegative n")
+      | _ -> Diagnostic.fail Wrong_arguments "slice_head needs a nonnegative n"
     in
     { table with steps = Take count :: table.steps }
-  | "slice_head", _ -> raise (Error "slice_head takes n = count")
+  | "slice_head", _ -> Diagnostic.fail Wrong_arguments "slice_head takes n = count"
   | "distinct", _ ->
     let projected = if arguments = [] then table else select table arguments in
     { table with
@@ -325,23 +337,25 @@ let transform env table verb arguments =
       List.map
         (function
           | None, { Syntax.form = Name ((Bare | Column), n); _ } ->
-            ignore (Check.lookup n table.schema);
+            ignore (Check.column n table.schema);
             n
-          | _ -> raise (Error "assert_key takes column names"))
+          | _ -> Diagnostic.fail Wrong_arguments "assert_key takes column names")
         arguments
     in
-    if columns = [] then raise (Error "assert_key needs at least one column");
+    if columns = []
+    then Diagnostic.fail Wrong_arguments "assert_key needs at least one column";
     { table with
       keys = key table columns :: table.keys
     ; steps = Assert_key columns :: table.steps
     }
-  | "arrange", [] -> raise (Error "arrange requires at least one ordering key")
+  | "arrange", [] ->
+    Diagnostic.fail Wrong_arguments "arrange requires at least one ordering key"
   | "arrange", _ ->
     let key = function
       | None, { Syntax.form = Call ({ form = Name (Bare, "desc"); _ }, [ (None, x) ]); _ }
         -> Check.expression env table.schema x, true
       | None, x -> Check.expression env table.schema x, false
-      | _ -> raise (Error "Expected unnamed order key")
+      | _ -> Diagnostic.fail Wrong_arguments "Expected unnamed order key"
     in
     let keys = List.map key arguments in
     let sorted =
@@ -358,7 +372,9 @@ let transform env table verb arguments =
   | "summarize", _ ->
     let options = options arguments in
     let missing = options.missing in
-    let groups, values = List.partition (fun (label, _) -> label = Some "by") options.rest in
+    let groups, values =
+      List.partition (fun (label, _) -> label = Some "by") options.rest
+    in
     let keys = grouping table groups in
     let table =
       match group_policy env options keys with
@@ -375,9 +391,10 @@ let transform env table verb arguments =
             -> n, None
           | Some n, x ->
             let value = Check.expression ?missing env table.schema x in
-            if value.typ.shape <> Scalar then raise (Error "Summary must yield a scalar");
+            if value.typ.shape <> Scalar
+            then Diagnostic.fail Scalar_required "Summary must yield a scalar";
             n, Some value
-          | _ -> raise (Error "Summary requires named expressions"))
+          | _ -> Diagnostic.fail Wrong_arguments "Summary requires named expressions")
         values
     in
     let fields =
@@ -393,7 +410,7 @@ let transform env table verb arguments =
     in
     let labels = List.map fst fields in
     if List.length labels <> List.length (List.sort_uniq String.compare labels)
-    then raise (Error "Duplicate summary label");
+    then Diagnostic.fail Duplicate_name "Duplicate summary label";
     let schema =
       List.mapi
         (fun i (n, t) ->
@@ -415,7 +432,10 @@ let transform env table verb arguments =
       match options with
       | [] -> Check.default env Missing
       | [ (Some "missing", p) ] -> Some (Check.policy p)
-      | _ -> raise (Error "filter takes one condition and an optional missing =")
+      | _ ->
+        Diagnostic.fail
+          Wrong_arguments
+          "filter takes one condition and an optional missing ="
     in
     let predicate =
       Shape.filter table.context policy (Check.expression env table.schema x)
@@ -438,7 +458,8 @@ let transform env table verb arguments =
         table.schema
     in
     { table with schema; steps = Filter predicate :: table.steps }
-  | "filter", _ -> raise (Error "filter takes one condition and an optional missing =")
+  | "filter", _ ->
+    Diagnostic.fail Wrong_arguments "filter takes one condition and an optional missing ="
   | "mutate", _ ->
     let options = options arguments in
     let missing = options.missing in
@@ -464,7 +485,7 @@ let transform env table verb arguments =
          let n =
            match name with
            | Some n -> n
-           | None -> raise (Error "Expected named binding")
+           | None -> Diagnostic.fail Wrong_arguments "Expected named binding"
          in
          let exists = List.mem_assoc n table.schema in
          let table = if exists then restrict (fun c -> c <> n) table else table in
@@ -487,7 +508,7 @@ let transform env table verb arguments =
          })
       table
       arguments
-  | _ -> raise (Error ("Unsupported table operation: " ^ verb))
+  | _ -> Diagnostic.fail Unknown_verb ("Unsupported table operation: " ^ verb)
 ;;
 
 let stage ?span env table verb arguments =
@@ -542,7 +563,7 @@ let execute plan ~rows inputs =
   let buffers = Array.make plan.next [||] in
   List.iteri
     (fun i values ->
-       if Array.length values <> rows then raise (Error "Source column length mismatch");
+       if Array.length values <> rows then invalid_arg "Source column length mismatch";
        buffers.(i) <- values)
     inputs;
   let size = ref rows
@@ -550,7 +571,7 @@ let execute plan ~rows inputs =
   let eval x =
     match evaluate ~rows:!size ~input:(fun i -> Many buffers.(i)) x with
     | Many vs -> vs
-    | One _ -> raise (Error "Expected column expression")
+    | One _ -> invalid_arg "Expected column expression"
   in
   let reorder indices =
     for i = 0 to !next - 1 do
@@ -684,7 +705,7 @@ let execute plan ~rows inputs =
         Array.map
           (function
             | B b -> b
-            | _ -> raise (Error "Expected Bool"))
+            | _ -> invalid_arg "Expected Bool")
           (eval x)
       in
       let indices =
@@ -700,8 +721,16 @@ let execute plan ~rows inputs =
 
 let rec pipeline env tables x =
   match x.Syntax.form with
-  | Syntax.Name (Bare, n) -> Check.lookup n tables
+  | Syntax.Name (Bare, n) ->
+    (match List.assoc_opt n tables with
+     | Some t -> t
+     | None ->
+       Diagnostic.fail
+         Unknown_table
+         ("Unknown table "
+          ^ n
+          ^ Check.did_you_mean (Check.closest n (List.map fst tables))))
   | Pipe (base, { form = Call ({ form = Name (Bare, verb); _ }, args); _ }) ->
     stage env (pipeline env tables base) verb args
-  | _ -> raise (Error "Expected a table pipeline")
+  | _ -> Diagnostic.fail Not_a_table "Expected a table pipeline"
 ;;

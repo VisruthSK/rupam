@@ -21,8 +21,9 @@ let pieces parse (x : Syntax.expr) text =
     let source = String.sub text start (finish - start) in
     let trimmed = String.trim source in
     let echo, source =
-      if String.ends_with ~suffix:"=" trimmed
-         && not (String.ends_with ~suffix:"==" trimmed)
+      if
+        String.ends_with ~suffix:"=" trimmed
+        && not (String.ends_with ~suffix:"==" trimmed)
       then (
         let body = String.sub trimmed 0 (String.length trimmed - 1) in
         Some (body ^ "="), body)
@@ -34,7 +35,8 @@ let pieces parse (x : Syntax.expr) text =
         when String.for_all
                (fun c -> String.contains "<>^=+- 0123456789,.dfeg%" c)
                (String.sub source (i + 1) (String.length source - i - 1)) ->
-        Some (String.sub source (i + 1) (String.length source - i - 1)), String.sub source 0 i
+        ( Some (String.sub source (i + 1) (String.length source - i - 1))
+        , String.sub source 0 i )
       | _ -> None, source
     in
     let position = fst x.span in
@@ -55,7 +57,7 @@ let pieces parse (x : Syntax.expr) text =
       | '{' ->
         let rec close j depth =
           if j >= length
-          then failwith "Unclosed { in string"
+          then Diagnostic.fail Bad_interpolation "Unclosed { in string"
           else (
             match text.[j] with
             | '{' -> close (j + 1) (depth + 1)
@@ -66,7 +68,10 @@ let pieces parse (x : Syntax.expr) text =
         let finish = close (i + 1) 0 in
         let acc = flush acc in
         scan (finish + 1) (slot (i + 1) finish :: acc)
-      | '}' -> failwith "Unmatched } in string; write }} for a literal brace"
+      | '}' ->
+        Diagnostic.fail
+          Bad_interpolation
+          "Unmatched } in string; write }} for a literal brace"
       | c ->
         Buffer.add_char buffer c;
         scan (i + 1) acc)
@@ -121,7 +126,7 @@ let rec parse lexbuf =
     Lexing.set_position buffer position;
     match parse buffer with
     | [ Syntax.Evaluate value ] -> value
-    | _ -> failwith "A string slot holds one expression"
+    | _ -> Diagnostic.fail Bad_interpolation "A string slot holds one expression"
   in
   let desugar = desugar expression in
   let declaration = function
@@ -209,7 +214,7 @@ let valid_prefix source =
     | (PIPE | END | SEMI) when depth = 0 ->
       boundaries depth (Lexing.lexeme_start buf :: acc)
     | _ -> boundaries depth acc
-    | exception Failure _ -> acc
+    | exception Diagnostic.Error _ -> acc
   in
   List.find_map
     (fun stop ->
@@ -219,6 +224,6 @@ let valid_prefix source =
          | [] -> None
          | ds -> Some (text, ds)
        with
-       | Parser.Error | Failure _ -> None)
+       | Parser.Error | Diagnostic.Error _ -> None)
     (boundaries 0 [])
 ;;

@@ -162,7 +162,7 @@ check that proved obligations emit no redundant runtime assertions.
 | ID | Program or input | Expected |
 | --- | --- | --- |
 | C128 | `penguins \|> summarize(m = todo, by = species)` | checks; hole reports numeric type, group scope and candidates including `mean(body_mass)`; `run` and `compile` refuse |
-| C129 | `filter(cost > 0.0)` with optional `cost` through the session protocol | `optional-predicate` with a decision whose options are `missing = skip` and `missing = propagate`, each with its schema consequence |
+| C129 | `filter(cost > 0.0)` with optional `cost` through the session protocol | `optional-condition` with a decision whose options are `missing = skip` and `missing = propagate`, each with its schema consequence |
 | C130 | `select(body_mas)` | `unknown-column` with a fix to `body_mass` |
 | C131 | `mean(x, na.rm = TRUE)`; `t %>% filter(x > 1)`; `NA` | `r-na-rm` decision; `r-pipe` fix; `r-na` fix |
 | C132 | `define` an item, redefine a dependency | dependant reported stale; old revision still served to an open result handle |

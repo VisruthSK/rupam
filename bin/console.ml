@@ -96,7 +96,9 @@ let page_view ~digits page =
     | Index | Missing -> Mosaic.text ~style:(style faint) text
     | Note -> Mosaic.text ~style:(style subtle) text
   in
-  List.map (fun line -> box ~flex_direction:Row (List.map styled line)) (lines ~digits page)
+  List.map
+    (fun line -> box ~flex_direction:Row (List.map styled line))
+    (lines ~digits page)
 ;;
 
 let transcript ~digits source output pages =
@@ -238,7 +240,14 @@ let evaluate model source =
           Some model.session
         | Ok command -> Repl.run model.session command)
     in
-    let committed = Cmd.static_commit (transcript ~digits:model.session.project.preview_digits.value entry output (List.rev !(model.pages))) in
+    let committed =
+      Cmd.static_commit
+        (transcript
+           ~digits:model.session.project.preview_digits.value
+           entry
+           output
+           (List.rev !(model.pages)))
+    in
     match next with
     | None -> model, Cmd.batch [ committed; Cmd.quit ]
     | Some session ->
@@ -340,7 +349,9 @@ let start ~project ?path () =
   | None -> ()
   | Some session ->
     let pages = ref [] in
-    let session = { session with show = (fun ~digits:_ page -> pages := page :: !pages) } in
+    let session =
+      { session with show = (fun ~digits:_ page -> pages := page :: !pages) }
+    in
     let config = Matrix.config ~mode:`Primary ~mouse:`Off () in
     run
       ~config

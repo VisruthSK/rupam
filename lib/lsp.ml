@@ -87,10 +87,11 @@ let inspect text =
            ds);
       []
     with
-    | Infer.Error (span, msg) -> issue span msg
+    | Diagnostic.Error { span = Some span; message; _ } -> issue span message
+    | Diagnostic.Error { span = None; message; _ } ->
+      issue (buf.lex_start_p, buf.lex_curr_p) message
     | Parser.Error ->
       issue (buf.lex_start_p, buf.lex_curr_p) "Syntax error or incomplete expression"
-    | Failure msg -> issue (buf.lex_start_p, buf.lex_curr_p) msg
   in
   !symbols, diagnostics
 ;;

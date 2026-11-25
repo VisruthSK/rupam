@@ -16,7 +16,8 @@ let format path =
   | ".parquet" -> Parquet
   | ".csv" -> Csv
   | ".tsv" | ".tab" -> Tsv
-  | extension -> failwith ("Unsupported data file extension " ^ extension)
+  | extension ->
+    Diagnostic.fail Unreadable_input ("Unsupported data file extension " ^ extension)
 ;;
 
 let format_name = function
@@ -49,12 +50,13 @@ let digest path =
 ;;
 
 let columns path =
-  if not (Sys.file_exists path) then failwith ("No such data file " ^ path);
+  if not (Sys.file_exists path)
+  then Diagnostic.fail Unreadable_input ("No such data file " ^ path);
   let names, rows = query ("DESCRIBE SELECT * FROM " ^ reader path) in
   let field name row =
     match Array.find_index (String.equal name) names with
     | Some i -> Option.value row.(i) ~default:""
-    | None -> failwith ("DuckDB DESCRIBE has no " ^ name ^ " column")
+    | None -> invalid_arg ("DuckDB DESCRIBE has no " ^ name ^ " column")
   in
   let described =
     Array.to_list rows

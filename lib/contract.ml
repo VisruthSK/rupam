@@ -35,7 +35,7 @@ let list key json =
 
 let decode path metadata =
   if string "$version" metadata <> "0.1.0"
-  then failwith "Unsupported data-dict export version";
+  then Diagnostic.fail Contract_failure "Unsupported data-dict export version";
   let column metadata =
     { name = string "name" metadata
     ; logical_type = string "type" metadata
@@ -75,19 +75,22 @@ let import path =
   match Unix.close_process_in channel, result with
   | Unix.WEXITED 0, Ok text -> decode path (Json.from_string text)
   | _, Error exn -> raise exn
-  | _ -> failwith "data-dict export-spec failed"
+  | _ -> Diagnostic.fail Contract_failure "data-dict export-spec failed"
 ;;
 
 let validate path =
   List.iter
     (fun level ->
        let command = "data-dict" in
-       let channel = Unix.open_process_args_in command [| command; level; "--json"; path |] in
+       let channel =
+         Unix.open_process_args_in command [| command; level; "--json"; path |]
+       in
        let report = In_channel.input_all channel in
        ignore (Unix.close_process_in channel);
        let json =
          try Json.from_string report with
-         | Yojson.Json_error _ -> failwith ("data-dict " ^ level ^ " failed on " ^ path)
+         | Yojson.Json_error _ ->
+           Diagnostic.fail Contract_failure ("data-dict " ^ level ^ " failed on " ^ path)
        in
        let problems =
          list "problems" json
@@ -100,7 +103,8 @@ let validate path =
        in
        if J.member "status" json <> `String "ok" || failed <> []
        then
-         failwith
+         Diagnostic.fail
+           Contract_failure
            (Printf.sprintf
               "%s does not match its data: %s"
               (Filename.basename path)
