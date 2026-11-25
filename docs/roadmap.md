@@ -4,13 +4,10 @@ Start with an analyst opening a dataset, exploring it at the prompt, and keeping
 
 ## 0. Make every change checkable
 
-Build the [development tooling](spec/development.md) before further features, so each later step is verified by commands rather than by reading terminal sessions.
+The [development tooling](spec/development.md) verifies each later step by command. Remaining:
 
-- Add `.mli` files. Replace string-typed dialects, types and settings with variants.
-- Create the diagnostic catalogue and move every `failwith` and `Error of span * string` onto a code. Tests assert codes and spans.
-- Add the internal `dev/` tool with stage dumps and fixture capture, cram tests for the CLI and REPL, and `scripts/dev`.
-- Give the conformance runner `pending`/`now passes` reporting and run it on every check.
-- Adopt `ppx_yojson_conv`, `digestif`, `ppx_expect` and `logs` where they replace existing code.
+- Add `scripts/dev trace` and `scripts/dev log` with `trace`, `trace-tef` and `logs` once the session model (step 1) has stages worth timing.
+- Add the `resolved`, `core` and `host` stage dumps as those representations appear in step 1.
 
 ## 1. Give the prompt and compiler one session model
 
