@@ -549,12 +549,6 @@ let public_view d =
     })
 ;;
 
-let bound env name =
-  match List.assoc_opt name env with
-  | Some (Dataset d) -> d
-  | _ -> Diagnostic.fail Unknown_table ("Unknown bound table " ^ name)
-;;
-
 let rec origin d =
   match d.origin with
   | Contracted { dictionary; table; _ } ->

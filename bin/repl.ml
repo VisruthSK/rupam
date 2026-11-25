@@ -640,7 +640,7 @@ let dispatch state = function
      | Some source ->
        ignore
          (diagnostic (Lexing.from_string "") (fun () ->
-            let entry = Lock.lock ~project:state.project ~source state.history in
+            let entry = Lock.establish ~project:state.project ~source state.history in
             Lock.print_schemas entry;
             Printf.printf
               "Locked %s for %s\n"

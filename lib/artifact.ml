@@ -21,7 +21,7 @@ type manifest =
   { compiler : string
   ; dialect : Project.dialect
   ; source : string
-  ; program : string
+  ; program_sha256 : string
   ; inputs : Lock.input list
   ; dependencies : string list
   ; nonportable : string list
@@ -45,15 +45,8 @@ let write_json path json =
     output_string channel (Yojson.Safe.pretty_to_string json ^ "\n"))
 ;;
 
-let write
-      ~(entry : Lock.entry)
-      ~program
-      ~locations
-      ~(dialect : Project.dialect)
-      ~output
-      ~code
-      declarations
-  =
+let write ~(entry : Lock.entry) ~program_sha256 ~locations ~output ~code declarations =
+  let dialect = entry.dialect in
   let extension = Runtime.suffix (Runtime.of_dialect dialect) in
   if not (Filename.check_suffix output extension)
   then Diagnostic.fail Unreadable_input ("Expected a " ^ extension ^ " output file");
@@ -73,7 +66,7 @@ let write
     { compiler = entry.compiler
     ; dialect = entry.dialect
     ; source = entry.source
-    ; program
+    ; program_sha256
     ; inputs = entry.inputs
     ; dependencies = dependencies dialect ~tabular:(Analysis_program.tabular declarations)
     ; nonportable =

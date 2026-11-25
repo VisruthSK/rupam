@@ -551,13 +551,6 @@ let stage ?span env table verb arguments =
   { result with locations = collect result.steps result.locations }
 ;;
 
-let render_step annotate table render step =
-  let text = render step in
-  match List.find_opt (fun (s, _) -> s == step) table.locations with
-  | Some (_, span) -> annotate span text
-  | None -> text
-;;
-
 let execute plan ~rows inputs =
   let open Column_eval in
   let buffers = Array.make plan.next [||] in

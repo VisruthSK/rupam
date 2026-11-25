@@ -139,11 +139,6 @@ let binary_symbol = function
   | Or -> "or"
 ;;
 
-let comparison = function
-  | Less | Greater | Less_equal | Greater_equal | Equal | Not_equal -> true
-  | Add | Sub | Mul | Div | Mod | Power | And | Or -> false
-;;
-
 let map f x =
   let arm a = { a with guard = Option.map f a.guard; body = f a.body } in
   let form =

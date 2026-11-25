@@ -1,14 +1,14 @@
 open Rupam
 
 let%expect_test "every code has a unique name that parses back" =
-  let names = List.map Diagnostic.name Diagnostic.all_of_code in
+  let names = List.map Diagnostic.name Diagnostic.all in
   let unique = List.sort_uniq String.compare names in
   Printf.printf
     "%b %b\n"
     (List.length unique = List.length names)
     (List.for_all
        (fun c -> Diagnostic.of_name (Diagnostic.name c) = Some c)
-       Diagnostic.all_of_code);
+       Diagnostic.all);
   [%expect {| true true |}]
 ;;
 

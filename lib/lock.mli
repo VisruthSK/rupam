@@ -1,0 +1,28 @@
+type input =
+  { path : string
+  ; sha256 : string
+  }
+[@@deriving yojson_of]
+
+type column =
+  { name : string
+  ; type_ : string
+  }
+
+type schema =
+  { path : string
+  ; columns : column list
+  }
+
+type entry =
+  { source : string
+  ; dialect : Project.dialect
+  ; compiler : string
+  ; strict : bool
+  ; inputs : input list
+  ; schemas : schema list
+  }
+
+val establish : project:Project.t -> source:string -> Syntax.declaration list -> entry
+val require : project:Project.t -> source:string -> Syntax.declaration list -> entry
+val print_schemas : entry -> unit

@@ -54,6 +54,8 @@ type code =
   | Internal_error
 [@@deriving enumerate]
 
+let all = all_of_code
+
 type t =
   { code : code
   ; span : span option
@@ -131,7 +133,7 @@ let name = function
   | Internal_error -> "internal-error"
 ;;
 
-let of_name text = List.find_opt (fun code -> name code = text) all_of_code
+let of_name text = List.find_opt (fun code -> name code = text) all
 
 let explanation = function
   | Syntax_error ->

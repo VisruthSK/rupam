@@ -11,18 +11,6 @@ type result =
   | One of value
   | Many of value array
 
-let map f = function
-  | One v -> One (f v)
-  | Many vs -> Many (Array.map f vs)
-;;
-
-let combine f x y =
-  match x, y with
-  | One a, One b -> One (f a b)
-  | Many a, Many b when Array.length a = Array.length b -> Many (Array.map2 f a b)
-  | _ -> invalid_arg "Misaligned inputs in elaborated expression"
-;;
-
 let arithmetic op a b =
   let order c =
     match op with

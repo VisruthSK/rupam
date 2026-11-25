@@ -136,8 +136,3 @@ let evaluate runtime language script =
   | Some message, _ -> Diagnostic.fail Host_failure (host_error message)
   | None, output -> Option.value output ~default:""
 ;;
-
-let run runtime language script =
-  print_string (evaluate runtime language script);
-  flush stdout
-;;

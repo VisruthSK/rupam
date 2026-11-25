@@ -1,7 +1,6 @@
 open Shape
 module P = Python_syntax
 
-let quoted s = Yojson.Basic.to_string (`String s)
 let pl name = P.Attribute (P.Name "pl", name)
 let col n = P.Call (pl "col", [ P.Positional (P.Str n) ])
 let lit e = P.Call (pl "lit", [ P.Positional e ])

@@ -37,7 +37,7 @@ type file =
   }
 [@@deriving yojson]
 
-let version = 2
+let version = 1
 
 let directory (project : Project.t) source =
   Option.value project.root ~default:(Filename.dirname source)
@@ -145,7 +145,7 @@ let write root entry =
   save root (others @ [ entry ])
 ;;
 
-let lock ~project ~source declarations =
+let establish ~project ~source declarations =
   let root, entry, contracts = analysis ~project ~source declarations in
   List.iter Contract.validate contracts;
   write root entry;

@@ -62,7 +62,7 @@ let lock target strict path =
   targeted (Filename.dirname path) target strict
   @@ fun project ->
   with_program path (fun ds ->
-    let entry = Lock.lock ~project ~source:path ds in
+    let entry = Lock.establish ~project ~source:path ds in
     Lock.print_schemas entry;
     Printf.printf
       "Locked %s for %s: %d input%s\n"
@@ -83,9 +83,8 @@ let compile target strict path output =
     | Some output ->
       Artifact.write
         ~entry
-        ~program:(Data_file.digest path)
+        ~program_sha256:(Data_file.digest path)
         ~locations
-        ~dialect:(Project.require_dialect project)
         ~output
         ~code
         ds)
@@ -183,9 +182,7 @@ let commands =
             required
             & pos
                 0
-                (some
-                   (enum
-                      (List.map (fun c -> Diagnostic.name c, c) Diagnostic.all_of_code)))
+                (some (enum (List.map (fun c -> Diagnostic.name c, c) Diagnostic.all)))
                 None
             & info [] ~docv:"CODE"))
   ; command

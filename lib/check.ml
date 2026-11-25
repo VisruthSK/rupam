@@ -37,15 +37,6 @@ let did_you_mean = function
   | None -> ""
 ;;
 
-let lookup name bindings =
-  match List.assoc_opt name bindings with
-  | Some value -> value
-  | None ->
-    Diagnostic.fail
-      Unknown_name
-      ("Unknown name: " ^ name ^ did_you_mean (closest name (List.map fst bindings)))
-;;
-
 let column name schema =
   match List.assoc_opt name schema with
   | Some value -> value
