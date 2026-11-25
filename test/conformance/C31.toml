@@ -2,3 +2,11 @@ id = "C31"
 status = "pending"
 case = '''`round(2.5)`, `round(-0.5)`'''
 expected = '''`2.0`, `-0.0`'''
+
+[run]
+source = '''
+(round(2.5), round(-0.5))
+'''
+
+[expect]
+value = "(2.0, -0.0)"

@@ -4,17 +4,23 @@ type status =
   | Active
   | Pending
 
-type expectation =
+type outcome =
   { typ : string option
   ; value : string option
+  ; diagnostic : string option
   }
 
 type fixture =
   { id : string
   ; status : status
-  ; source : string
-  ; expect : expectation
+  ; source : string option
+  ; expect : outcome
   }
+
+type result =
+  | Passed
+  | Failed of string list
+  | Unspecified
 
 let load file =
   let document =
@@ -23,42 +29,48 @@ let load file =
     | `Error (message, _) -> failwith (file ^ ": " ^ message)
   in
   let get path = Toml.Lenses.get document path in
+  let expected name = get Toml.Lenses.(key "expect" |-- table |-- key name |-- string) in
   { id = Option.get (get Toml.Lenses.(key "id" |-- string))
   ; status =
       (match get Toml.Lenses.(key "status" |-- string) with
        | Some "active" -> Active
        | Some "pending" -> Pending
        | _ -> failwith (file ^ ": status must be active or pending"))
-  ; source =
-      Option.value
-        ~default:""
-        (get Toml.Lenses.(key "run" |-- table |-- key "source" |-- string))
+  ; source = get Toml.Lenses.(key "run" |-- table |-- key "source" |-- string)
   ; expect =
-      { typ = get Toml.Lenses.(key "expect" |-- table |-- key "type" |-- string)
-      ; value = get Toml.Lenses.(key "expect" |-- table |-- key "value" |-- string)
+      { typ = expected "type"
+      ; value = expected "value"
+      ; diagnostic = expected "diagnostic"
       }
   }
 ;;
 
 let evaluate source =
-  let declarations = Frontend.parse (Lexing.from_string source) in
-  let _, typ =
-    List.fold_left
-      (fun (env, _) d ->
-         let env, t = Infer.declaration env d in
-         env, Some t)
-      (Infer.empty, None)
-      declarations
-  in
-  let _, value = Eval.run [] declarations in
-  Option.map Infer.display typ, Option.map Eval.display value
+  match
+    let declarations = Frontend.parse (Lexing.from_string source) in
+    let _, typ =
+      List.fold_left
+        (fun (env, _) d ->
+           let env, t = Infer.declaration env d in
+           env, Some t)
+        (Infer.empty, None)
+        declarations
+    in
+    let _, value = Eval.run [] declarations in
+    Option.map Infer.display typ, Option.map Eval.display value
+  with
+  | typ, value -> { typ; value; diagnostic = None }
+  | exception exn ->
+    let d = Diagnostic.of_exn exn in
+    { typ = None; value = None; diagnostic = Some (Diagnostic.name d.code) }
 ;;
 
 let check fixture =
-  match evaluate fixture.source with
-  | exception exn -> Error (Printexc.to_string exn)
-  | typ, value ->
-    let mismatch what expected actual =
+  match fixture.source, fixture.expect with
+  | None, _ | Some _, { typ = None; value = None; diagnostic = None } -> Unspecified
+  | Some source, expect ->
+    let outcome = evaluate source in
+    let compare what expected actual =
       match expected with
       | Some e when Some e <> actual ->
         Some
@@ -66,18 +78,22 @@ let check fixture =
              "%s: expected %s, got %s"
              what
              e
-             (Option.value actual ~default:"nothing"))
+             (match actual, outcome.diagnostic with
+              | Some a, _ -> a
+              | None, Some code -> "diagnostic " ^ code
+              | None, None -> "nothing"))
       | _ -> None
     in
     (match
        List.filter_map
          Fun.id
-         [ mismatch "type" fixture.expect.typ typ
-         ; mismatch "value" fixture.expect.value value
+         [ compare "type" expect.typ outcome.typ
+         ; compare "value" expect.value outcome.value
+         ; compare "diagnostic" expect.diagnostic outcome.diagnostic
          ]
      with
-     | [] -> Ok ()
-     | problems -> Error (String.concat "; " problems))
+     | [] -> Passed
+     | problems -> Failed problems)
 ;;
 
 let () =
@@ -88,20 +104,31 @@ let () =
     |> List.sort compare
     |> List.map (fun f -> load (Filename.concat "conformance" f))
   in
-  let active = List.filter (fun f -> f.status = Active) fixtures in
+  let results = List.map (fun f -> f, check f) fixtures in
+  let count p = List.length (List.filter p results) in
   let failures =
     List.filter_map
-      (fun f ->
-         match check f with
-         | Ok () -> None
-         | Error message -> Some (f.id ^ ": " ^ message))
-      active
+      (function
+        | { id; status = Active; _ }, Failed problems ->
+          Some (id ^ ": " ^ String.concat "; " problems)
+        | { id; status = Active; _ }, Unspecified ->
+          Some (id ^ ": no program or expectation")
+        | { id; status = Pending; _ }, Passed -> Some (id ^ ": now passes; mark it active")
+        | { id; status = Pending; _ }, Failed problems when Array.mem "--pending" Sys.argv
+          -> Some (id ^ " (pending): " ^ String.concat "; " problems)
+        | _ -> None)
+      results
   in
   Printf.printf
-    "conformance: %d active, %d passing, %d pending\n"
-    (List.length active)
-    (List.length active - List.length failures)
-    (List.length fixtures - List.length active);
+    "conformance: %d active, %d pending (%d runnable)\n"
+    (count (fun (f, _) -> f.status = Active))
+    (count (fun (f, _) -> f.status = Pending))
+    (count (fun (f, r) -> f.status = Pending && r <> Unspecified));
   List.iter prerr_endline failures;
-  if failures <> [] then exit 1
+  if
+    List.exists
+      (fun (f, r) ->
+         (f.status = Active && r <> Passed) || (f.status = Pending && r = Passed))
+      results
+  then exit 1
 ;;

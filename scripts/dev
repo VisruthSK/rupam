@@ -18,6 +18,7 @@ scripts/dev check     build, check formatting, run unit, cram and conformance te
 scripts/dev watch     rebuild and rerun tests on every change
 scripts/dev promote   accept the output of changed expect and cram tests
 scripts/dev fmt       format the code
+scripts/dev conformance   run conformance fixtures, including why pending ones fail
 scripts/dev full      check, then the R and Python integration tests
 EOF
 }
@@ -38,6 +39,10 @@ case "${1:-}" in
   watch) dune build --watch @default @runtest ;;
   promote) dune promote ;;
   fmt) dune fmt || true ;;
+  conformance)
+    dune build test/conformance.exe
+    (cd test && "$build/default/test/conformance.exe" --pending)
+    ;;
   full) full ;;
   *) usage; exit 2 ;;
 esac

@@ -2,3 +2,11 @@ id = "C125"
 status = "pending"
 case = '''`map([1.234, 5.678], round(_, 2))`'''
 expected = '''`[1.23, 5.68]`'''
+
+[run]
+source = '''
+map([1.234, 5.678], round(_, 2))
+'''
+
+[expect]
+value = "[1.23, 5.68]"
