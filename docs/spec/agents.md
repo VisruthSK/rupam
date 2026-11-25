@@ -53,8 +53,15 @@ session protocol and MCP server:
 | `summaries` | `schema` plus per-column statistics from the viewer's summaries |
 | `rows` | `summaries` plus bounded pages of rows |
 
-The default is `summaries`. Restricted columns and values derived from them
-are absent at every level, including diagnostics, suggestions, summaries and
+The default is `summaries`. Summaries are computed from the data and contain
+real values: each column's minimum and maximum, enum levels, most frequent
+values and their counts, and missing counts. A name, identifier or rare
+category in an unrestricted column can therefore reach the agent and its model
+provider. For sensitive data, mark the sensitive columns restricted in the
+contract or set `data = "schema"` for that project. `context` and the MCP
+server state the exposure level on their first line.
+
+Restricted columns and values derived from them are absent at every level, including diagnostics, suggestions, summaries and
 error text returned by a worker. The REPL and viewer are local and are not
 bounded by this setting.
 
@@ -68,7 +75,7 @@ No reply is truncated silently.
 client that cannot see the screen:
 
 ```text
-project  examples/  target r-dplyr  strict  lock current
+project  examples/  target r-dplyr  strict  lock current  exposure summaries
 use missing = error
 
 penguins : Table  344 rows  source penguins.csv (lock 3f2a…)

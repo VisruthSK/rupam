@@ -31,6 +31,9 @@ The global file supplies defaults even outside a project. Project environment di
 
 `[agent] data` bounds what the session protocol and MCP server return:
 `schema`, `summaries` (default) or `rows` ([Agents](agents.md#data-exposure)).
+`summaries` sends real values from unrestricted columns: minima, maxima, enum
+levels and most frequent values. Use `schema` or restrict sensitive columns
+for sensitive data.
 
 Settings that change a program's meaning are declared in the program
 (`use missing`, `use group_missing`).
