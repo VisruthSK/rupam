@@ -95,7 +95,7 @@ conjunct      = boolean_not { "and" boolean_not } ;
 boolean_not   = "not" boolean_not | comparison ;
 comparison    = range [ compare_op range ] ;
 compare_op    = "==" | "!=" | "~=" | "≈" | "<" | "<=" | ">" | ">=" | "%in%" ;
-range         = sum [ ":" sum ] ;
+range         = sum [ ( "..=" | "..<" | ":" ) sum ] ;
 sum           = product { ( "+" | "-" ) product } ;
 product       = negation { ( "*" | "/" | "%" ) negation } ;
 negation      = [ "-" ] power ;
@@ -106,7 +106,7 @@ arg           = arg_name "=" expr | expr | "_" ;
 arg_name      = bare_ident | quoted_ident ;
 (* Preserve quoting in named arguments until contextual argument
    classification; see Tables. *)
-index         = expr | "end" ;
+index         = expr | "end" | [ index ] ( "..=" | "..<" ) index | index ".." ;
 
 primary       = ident | Ident | "$" ident | "^" ident | literal
               | "(" expr ")"
@@ -184,7 +184,7 @@ Tightest first:
 3. unary `-`
 4. `*` `/` `%`
 5. `+` `-`
-6. `:`
+6. `..=` `..<`, and `:` in column selectors
 7. comparisons, `~=`, `%in%` (non-associative)
 8. `not`
 9. `and`
@@ -200,10 +200,16 @@ recognises its token sequence; write `-(x^y)` or `(-x)^y`. `not x > 0` means
 
 ## Ranges and indexing
 
-- `a:b` is inclusive. On integers it is an `[Int64]`; in a column selector it
-  is the columns from `a` to `b` in schema order. `a:b` with `b < a` is empty.
-- Vectors index from 1. `x[end]` is the last element. An index outside the
-  vector is an error. Tables have no positional indexing.
+- `a..=b` is the Int64 vector from `a` to `b` inclusive; `a..<b` excludes
+  `b`. There is no bare `a..b`. Ranges never count down: `5..=1` is empty, and
+  `1..=5 |> rev()` is `[5, 4, 3, 2, 1]`. `1..=n-1` is `1..=(n-1)`.
+- Open ranges (`a..`, `..=b`, `..<b`) appear only in patterns and indexing.
+- In a column selector, `a:b` is the columns from `a` to `b` in schema order,
+  as in dplyr. Elsewhere `a:b` is an `r-range` error with the fix `a..=b`.
+- Inside a string slot, `:` always starts a format spec.
+- Vectors index from 1. `x[end]` is the last element. `x[2..]`, `x[..<4]`
+  and `x[2..=end]` are slices. An index or slice outside the vector is an
+  error. Tables have no positional indexing.
 
 ## Patterns
 
@@ -232,7 +238,9 @@ match reading {
 - `match a, b { p, q => e }` matches several subjects at once; each arm has
   one pattern per subject.
 - Patterns: `_`, names, literals except floats, ranges (`a..=b` inclusive,
-  `a..<b` half-open, `..<b`, `a..`), constructors,
+  `a..<b` half-open, `..<b`, `..=b`, `a..` meaning `a` and above). A lower
+  bound is always inclusive; adjacent half-open arms such as `..<18`,
+  `18..<65`, `65..` cover a domain without gaps or overlap, constructors,
   `Some(v)` and `None` for options, vector heads with `..rest`
   (including `[..rest]`), records with optional `..`,
   alternatives, `@` bindings, guards.

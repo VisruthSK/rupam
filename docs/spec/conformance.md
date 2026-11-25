@@ -58,7 +58,7 @@ check that proved obligations emit no redundant runtime assertions.
 | C33 | `DateTime<"UTC">` compared with `DateTime<"Europe/Paris">` | type error |
 | C34 | `PatientId` joined against `HospitalId` | type error |
 | C35 | `left_join` on a non-key without `relationship` | type error |
-| C36 | `1:0` | empty vector |
+| C36 | `1..=0`; `1..=5 \|> rev()`; `1:3` outside a selector | empty vector; `[5, 4, 3, 2, 1]`; `r-range` with fix `1..=3` |
 | C37 | `[1, 2, 3] + [1, 2]` | length error |
 | C38 | `arrange(name)` on mixed-case strings | byte order |
 | C39 | `match bmi { ..<18.5 => Under, 18.5..<25.0 => Healthy, 25.0.. => Over }` on a column | enum column; exhaustive without `_` |
@@ -108,7 +108,7 @@ check that proved obligations emit no redundant runtime assertions.
 | C78 | row bind `{id:Int64, x:Int64}` with `{id:Int64, y:Float64}` | schema id:Int64, x:Int64?, y:Float64?; missing cells added |
 | C79 | `Table([{a = 1}, {a = 2.5}])` | table `{a:Float64}`; unordered, no inferred uniqueness solely from construction |
 | C80 | complete January and March cases to months 1:3 | February row created with None; fill changes only new cells by default |
-| C81 | `expand` over known enum with an unobserved level and year `2025:2026` | complete Cartesian product, including unobserved level |
+| C81 | `expand` over known enum with an unobserved level and year `2025..=2026` | complete Cartesian product, including unobserved level |
 | C82 | required contracted float with NaN; conditional assertion `not active or population > 0` | requiredness fails after normalisation; no unconditional positive refinement |
 | C83 | contracted entity keys patients.id and hospitals.id; visits.patient_id foreign key to patients | patient and hospital nominal domains incompatible; visits key shares patient domain |
 | C84 | two contract enums with equal labels; explicit shared enum annotation | independent domains initially incompatible; shared validated declaration permits combination |
