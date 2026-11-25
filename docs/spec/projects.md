@@ -35,9 +35,9 @@ An analysis is compiled for particular inputs, not for arbitrary future
 replacement data. `rupam.lock` records a content-addressed analysis entry
 per source and target, including:
 
-- source program and all imported source/contract/definition files, resolved
-  contract content, every input data file and schema, and explicit external
-  parameters (SHA-256 of exact bytes or canonical values);
+- resolved contract and definition files, every input data file and schema,
+  and explicit external parameters (SHA-256 of exact bytes or canonical
+  values);
 - rupam/compiler and specification versions, dialect, project settings,
   interpreter and actual dependency versions, dependency lockfiles and
   package identities (including content/artifact digests for local or modified
@@ -72,13 +72,16 @@ validation and the relevant checked pure computations. Compilation may
 create the initial lock automatically only if no provisional schemas or new
 snapshot-specific domain assumptions need acceptance. `rupam lock FILE`
 is the explicit acceptance action for these; report discovered schemas and
-assumptions before recording them. Subsequent changes require explicit
-relocking. Recheck downstream expressions against the committed schemas.
+assumptions before recording them. Subsequent changes to data and settings
+require explicit relocking. The lock does not cover program text: editing a
+program needs no relock unless the edit reads a new input or needs a new
+inferred schema, and the program's digest is recorded in compiled manifests
+as provenance only. Recheck downstream expressions against the committed schemas.
 `rupam check` may inspect an unlocked program and report pending schema or
 value-dependent obligations without executing it; `run` and `compile`
 require a current lock, an established input schema in strict mode, and all
 necessary obligations discharged or supported by a necessary runtime check.
-A changed source, data file, contract, dependency or compiler invalidates the
+A changed data file, contract, setting, dependency or compiler invalidates the
 relevant entry and cached proofs. `rupam lock FILE` reanalyses it and replaces
 only that entry on success. Failed relocking leaves the old lock marked stale.
 Recompile after relocking; an old generated script remains tied to its own

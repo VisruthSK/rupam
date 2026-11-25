@@ -13,6 +13,11 @@ type operator =
   | Not_equal
   | Both
   | Either
+  | And
+  | Or
+  | Is
+  | Is_not
+  | In
 
 type unary =
   | Negate
@@ -32,6 +37,9 @@ type expr =
   | Unary of unary * expr
   | List of expr list
   | Dict of (expr * expr) list
+  | Tuple of expr list
+  | Subscript of expr * expr
+  | Walrus of string * expr
   | Lambda of string list * expr
   | If of expr * expr * expr
   | Chain of expr * link list
@@ -73,12 +81,19 @@ let symbol = function
   | Not_equal -> "!="
   | Both -> "&"
   | Either -> "|"
+  | And -> "and"
+  | Or -> "or"
+  | Is -> "is"
+  | Is_not -> "is not"
+  | In -> "in"
 ;;
 
 let binding = function
+  | Or -> 2
+  | And -> 3
   | Either -> 6
   | Both -> 8
-  | Less | Less_equal | Greater | Greater_equal | Equal | Not_equal -> 5
+  | Less | Less_equal | Greater | Greater_equal | Equal | Not_equal | Is | Is_not | In -> 5
   | Add | Subtract -> 10
   | Multiply | Divide | Modulo -> 11
   | Power -> 13
@@ -140,7 +155,8 @@ let rec expr d indent level e =
      let left, right =
        match op with
        | Power -> p + 1, p
-       | Less | Less_equal | Greater | Greater_equal | Equal | Not_equal -> p + 1, p + 1
+       | Less | Less_equal | Greater | Greater_equal | Equal | Not_equal | Is | Is_not | In ->
+         p + 1, p + 1
        | _ -> p, p + 1
      in
      expr d indent left a;
@@ -154,6 +170,23 @@ let rec expr d indent level e =
         | Invert -> "~"
         | Not -> "not ");
      expr d indent p e
+   | Tuple [ x ] ->
+     Document.text d "(";
+     expr d indent 0 x;
+     Document.text d ",)"
+   | Tuple xs ->
+     Document.text d "(";
+     Document.separated d ", " (expr d indent 0) xs;
+     Document.text d ")"
+   | Subscript (e, index) ->
+     expr d indent 15 e;
+     Document.text d "[";
+     expr d indent 0 index;
+     Document.text d "]"
+   | Walrus (name, e) ->
+     Document.text d ("(" ^ name ^ " := ");
+     expr d indent 0 e;
+     Document.text d ")"
    | List xs ->
      Document.text d "[";
      Document.separated d ", " (expr d indent 0) xs;

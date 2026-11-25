@@ -14,7 +14,6 @@ type entry =
   ; dialect : string
   ; compiler : string
   ; strict : bool
-  ; program : string
   ; inputs : input list
   ; schemas : (string * (string * string) list) list
   }
@@ -42,7 +41,6 @@ let entry_json e =
     ; "dialect", `String e.dialect
     ; "compiler", `String e.compiler
     ; "strict", `Bool e.strict
-    ; "program", `String e.program
     ; "inputs", `List (List.map input_json e.inputs)
     ; ( "schemas"
       , `Assoc
@@ -59,7 +57,6 @@ let entry_of json =
   ; dialect = text "dialect"
   ; compiler = text "compiler"
   ; strict = J.member "strict" json |> J.to_bool
-  ; program = text "program"
   ; inputs =
       J.member "inputs" json
       |> J.to_list
@@ -121,7 +118,6 @@ let analysis ~(project : Project.t) ~source declarations =
     ; dialect = Project.dialect_name (Project.require_dialect project)
     ; compiler
     ; strict = project.strict
-    ; program = Data_file.digest source
     ; inputs =
         List.map (fun path -> { path = relative root path; sha256 = Data_file.digest path }) paths
     ; schemas
@@ -148,8 +144,7 @@ let lock ~project ~source declarations =
 
 let differences locked current =
   let field name a b = if a = b then [] else [ name ] in
-  field "the program" locked.program current.program
-  @ field "the compiler" locked.compiler current.compiler
+  field "the compiler" locked.compiler current.compiler
   @ field "strict mode" locked.strict current.strict
   @ List.filter_map
       (fun (i : input) ->

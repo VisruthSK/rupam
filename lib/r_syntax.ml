@@ -34,6 +34,8 @@ type expr =
   | Element of expr * expr
   | Dollar of expr * string
   | Function of string list * expr
+  | If of expr * expr * expr
+  | Block of (string * expr) list * expr
   | Located of Syntax.span * expr
 
 and argument =
@@ -99,7 +101,7 @@ let rec precedence = function
   | Binary (op, _, _) -> binding op
   | Negate _ -> 13
   | Not _ -> 7
-  | Function _ -> 1
+  | Function _ | If _ -> 1
   | Located (_, e) -> precedence e
   | _ -> 16
 ;;
@@ -185,7 +187,24 @@ let rec expr d indent level e =
      Document.text d "]]"
    | Function (params, body) ->
      Document.text d ("function(" ^ String.concat ", " params ^ ") ");
-     expr d indent 0 body);
+     expr d indent 0 body
+   | If (test, yes, no) ->
+     Document.text d "if (";
+     expr d indent 0 test;
+     Document.text d ") ";
+     expr d indent 2 yes;
+     Document.text d " else ";
+     expr d indent 1 no
+   | Block (bindings, body) ->
+     Document.text d "local({ ";
+     List.iter
+       (fun (n, e) ->
+          Document.text d (identifier n ^ " <- ");
+          expr d indent 0 e;
+          Document.text d "; ")
+       bindings;
+     expr d indent 0 body;
+     Document.text d " })");
   if wrap then Document.text d ")"
 
 and argument d indent = function

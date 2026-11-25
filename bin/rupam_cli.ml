@@ -91,6 +91,7 @@ let compile target strict path output =
     | Some output ->
       Artifact.write
         ~entry
+        ~program:(Data_file.digest path)
         ~locations
         ~dialect:(Project.require_dialect project)
         ~output

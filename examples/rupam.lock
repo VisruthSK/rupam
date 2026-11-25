@@ -1,0 +1,187 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "source": "shop.rp",
+      "dialect": "r-dplyr",
+      "compiler": "rupam 0.1.0",
+      "strict": true,
+      "inputs": [
+        {
+          "path": "data-dict.yaml",
+          "sha256": "d180b8b0f35664977c0f032f265e90893f022950b2c43cc27f22e46864458865"
+        },
+        {
+          "path": "orders.parquet",
+          "sha256": "c3f8288584fa59a8343ff8d16f01833b42dec6c8fc5a4bb88bfd2a4e60224c35"
+        }
+      ],
+      "schemas": {}
+    },
+    {
+      "source": "shop.rp",
+      "dialect": "python-polars",
+      "compiler": "rupam 0.1.0",
+      "strict": true,
+      "inputs": [
+        {
+          "path": "data-dict.yaml",
+          "sha256": "d180b8b0f35664977c0f032f265e90893f022950b2c43cc27f22e46864458865"
+        },
+        {
+          "path": "orders.parquet",
+          "sha256": "c3f8288584fa59a8343ff8d16f01833b42dec6c8fc5a4bb88bfd2a4e60224c35"
+        }
+      ],
+      "schemas": {}
+    },
+    {
+      "source": "regional-variation.rp",
+      "dialect": "r-dplyr",
+      "compiler": "rupam 0.1.0",
+      "strict": true,
+      "inputs": [
+        {
+          "path": "data-dict.yaml",
+          "sha256": "d180b8b0f35664977c0f032f265e90893f022950b2c43cc27f22e46864458865"
+        },
+        {
+          "path": "orders.parquet",
+          "sha256": "c3f8288584fa59a8343ff8d16f01833b42dec6c8fc5a4bb88bfd2a4e60224c35"
+        }
+      ],
+      "schemas": {}
+    },
+    {
+      "source": "regional-variation.rp",
+      "dialect": "python-polars",
+      "compiler": "rupam 0.1.0",
+      "strict": true,
+      "inputs": [
+        {
+          "path": "data-dict.yaml",
+          "sha256": "d180b8b0f35664977c0f032f265e90893f022950b2c43cc27f22e46864458865"
+        },
+        {
+          "path": "orders.parquet",
+          "sha256": "c3f8288584fa59a8343ff8d16f01833b42dec6c8fc5a4bb88bfd2a4e60224c35"
+        }
+      ],
+      "schemas": {}
+    },
+    {
+      "source": "penguins.rp",
+      "dialect": "r-dplyr",
+      "compiler": "rupam 0.1.0",
+      "strict": true,
+      "inputs": [
+        {
+          "path": "penguins.csv",
+          "sha256": "53ab3f71e1e93e1dc6bc8bda0087dd1cb9cdc473b508c370b663b2565daacb23"
+        },
+        {
+          "path": "species.csv",
+          "sha256": "35b6ba74c284e4974c10fa47a69581ed9e24c2ec46d020d6367a20f62a1a350a"
+        }
+      ],
+      "schemas": {
+        "penguins.csv": {
+          "species": "String",
+          "island": "String",
+          "bill_length_mm": "Float64?",
+          "bill_depth_mm": "Float64?",
+          "flipper_length_mm": "Int64?",
+          "body_mass_g": "Int64?",
+          "sex": "String?",
+          "year": "Int64"
+        },
+        "species.csv": {
+          "species": "String",
+          "genus": "String",
+          "habitat": "String"
+        }
+      }
+    },
+    {
+      "source": "penguins.rp",
+      "dialect": "python-polars",
+      "compiler": "rupam 0.1.0",
+      "strict": true,
+      "inputs": [
+        {
+          "path": "penguins.csv",
+          "sha256": "53ab3f71e1e93e1dc6bc8bda0087dd1cb9cdc473b508c370b663b2565daacb23"
+        },
+        {
+          "path": "species.csv",
+          "sha256": "35b6ba74c284e4974c10fa47a69581ed9e24c2ec46d020d6367a20f62a1a350a"
+        }
+      ],
+      "schemas": {
+        "penguins.csv": {
+          "species": "String",
+          "island": "String",
+          "bill_length_mm": "Float64?",
+          "bill_depth_mm": "Float64?",
+          "flipper_length_mm": "Int64?",
+          "body_mass_g": "Int64?",
+          "sex": "String?",
+          "year": "Int64"
+        },
+        "species.csv": {
+          "species": "String",
+          "genus": "String",
+          "habitat": "String"
+        }
+      }
+    },
+    {
+      "source": "field-notes.rp",
+      "dialect": "r-dplyr",
+      "compiler": "rupam 0.1.0",
+      "strict": true,
+      "inputs": [],
+      "schemas": {}
+    },
+    {
+      "source": "field-notes.rp",
+      "dialect": "python-polars",
+      "compiler": "rupam 0.1.0",
+      "strict": true,
+      "inputs": [],
+      "schemas": {}
+    },
+    {
+      "source": "language-tour.rp",
+      "dialect": "r-dplyr",
+      "compiler": "rupam 0.1.0",
+      "strict": true,
+      "inputs": [],
+      "schemas": {}
+    },
+    {
+      "source": "language-tour.rp",
+      "dialect": "python-polars",
+      "compiler": "rupam 0.1.0",
+      "strict": true,
+      "inputs": [],
+      "schemas": {}
+    },
+    {
+      "source": "square.rp",
+      "dialect": "r-dplyr",
+      "compiler": "rupam 0.1.0",
+      "strict": true,
+      "inputs": [],
+      "schemas": {}
+    },
+    {
+      "source": "square.rp",
+      "dialect": "python-polars",
+      "compiler": "rupam 0.1.0",
+      "strict": true,
+      "inputs": [],
+      "schemas": {}
+    }
+  ]
+}

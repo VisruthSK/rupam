@@ -1,4 +1,4 @@
-let write ~(entry : Lock.entry) ~locations ~(dialect : Project.dialect) ~output ~code declarations =
+let write ~(entry : Lock.entry) ~program ~locations ~(dialect : Project.dialect) ~output ~code declarations =
   let extension, dependencies =
     match dialect, Analysis_program.tabular declarations with
     | R_dplyr, true -> "R", [ "dplyr"; "tidyr"; "bit64"; "jsonlite"; "arrow" ]
@@ -37,7 +37,7 @@ let write ~(entry : Lock.entry) ~locations ~(dialect : Project.dialect) ~output 
       [ "compiler", `String entry.compiler
       ; "dialect", `String entry.dialect
       ; "source", `String entry.source
-      ; "program", `String entry.program
+      ; "program", `String program
       ; ( "inputs"
         , `List
             (List.map
