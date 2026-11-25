@@ -63,15 +63,11 @@ let lock target strict path =
   @@ fun project ->
   with_program path (fun ds ->
     let entry = Lock.lock ~project ~source:path ds in
-    List.iter
-      (fun (file, columns) ->
-         Printf.printf "%s\n" file;
-         List.iter (fun (n, t) -> Printf.printf "  %s  %s\n" n t) columns)
-      entry.schemas;
+    Lock.print_schemas entry;
     Printf.printf
       "Locked %s for %s: %d input%s\n"
       entry.source
-      entry.dialect
+      (Project.dialect_name entry.dialect)
       (List.length entry.inputs)
       (if List.length entry.inputs = 1 then "" else "s"))
 ;;

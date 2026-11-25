@@ -8,6 +8,12 @@ let dialect_name = function
 ;;
 
 let dialects = List.map (fun d -> dialect_name d, d) [ R_dplyr; Python_polars ]
+let yojson_of_dialect d = `String (dialect_name d)
+
+let dialect_of_yojson = function
+  | `String name when List.mem_assoc name dialects -> List.assoc name dialects
+  | json -> Ppx_yojson_conv_lib.Yojson_conv.of_yojson_error "expected a dialect name" json
+;;
 
 type origin =
   | Default

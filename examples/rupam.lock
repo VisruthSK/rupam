@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "entries": [
     {
       "source": "shop.rp",
@@ -16,7 +16,7 @@
           "sha256": "c3f8288584fa59a8343ff8d16f01833b42dec6c8fc5a4bb88bfd2a4e60224c35"
         }
       ],
-      "schemas": {}
+      "schemas": []
     },
     {
       "source": "shop.rp",
@@ -33,7 +33,7 @@
           "sha256": "c3f8288584fa59a8343ff8d16f01833b42dec6c8fc5a4bb88bfd2a4e60224c35"
         }
       ],
-      "schemas": {}
+      "schemas": []
     },
     {
       "source": "regional-variation.rp",
@@ -50,7 +50,7 @@
           "sha256": "c3f8288584fa59a8343ff8d16f01833b42dec6c8fc5a4bb88bfd2a4e60224c35"
         }
       ],
-      "schemas": {}
+      "schemas": []
     },
     {
       "source": "regional-variation.rp",
@@ -67,7 +67,7 @@
           "sha256": "c3f8288584fa59a8343ff8d16f01833b42dec6c8fc5a4bb88bfd2a4e60224c35"
         }
       ],
-      "schemas": {}
+      "schemas": []
     },
     {
       "source": "penguins.rp",
@@ -84,23 +84,29 @@
           "sha256": "35b6ba74c284e4974c10fa47a69581ed9e24c2ec46d020d6367a20f62a1a350a"
         }
       ],
-      "schemas": {
-        "penguins.csv": {
-          "species": "String",
-          "island": "String",
-          "bill_len": "Float64?",
-          "bill_dep": "Float64?",
-          "flipper_len": "Int64?",
-          "body_mass": "Int64?",
-          "sex": "String?",
-          "year": "Int64"
+      "schemas": [
+        {
+          "path": "penguins.csv",
+          "columns": [
+            { "name": "species", "type": "String" },
+            { "name": "island", "type": "String" },
+            { "name": "bill_len", "type": "Float64?" },
+            { "name": "bill_dep", "type": "Float64?" },
+            { "name": "flipper_len", "type": "Int64?" },
+            { "name": "body_mass", "type": "Int64?" },
+            { "name": "sex", "type": "String?" },
+            { "name": "year", "type": "Int64" }
+          ]
         },
-        "species.csv": {
-          "species": "String",
-          "genus": "String",
-          "habitat": "String"
+        {
+          "path": "species.csv",
+          "columns": [
+            { "name": "species", "type": "String" },
+            { "name": "genus", "type": "String" },
+            { "name": "habitat", "type": "String" }
+          ]
         }
-      }
+      ]
     },
     {
       "source": "penguins.rp",
@@ -117,23 +123,29 @@
           "sha256": "35b6ba74c284e4974c10fa47a69581ed9e24c2ec46d020d6367a20f62a1a350a"
         }
       ],
-      "schemas": {
-        "penguins.csv": {
-          "species": "String",
-          "island": "String",
-          "bill_len": "Float64?",
-          "bill_dep": "Float64?",
-          "flipper_len": "Int64?",
-          "body_mass": "Int64?",
-          "sex": "String?",
-          "year": "Int64"
+      "schemas": [
+        {
+          "path": "penguins.csv",
+          "columns": [
+            { "name": "species", "type": "String" },
+            { "name": "island", "type": "String" },
+            { "name": "bill_len", "type": "Float64?" },
+            { "name": "bill_dep", "type": "Float64?" },
+            { "name": "flipper_len", "type": "Int64?" },
+            { "name": "body_mass", "type": "Int64?" },
+            { "name": "sex", "type": "String?" },
+            { "name": "year", "type": "Int64" }
+          ]
         },
-        "species.csv": {
-          "species": "String",
-          "genus": "String",
-          "habitat": "String"
+        {
+          "path": "species.csv",
+          "columns": [
+            { "name": "species", "type": "String" },
+            { "name": "genus", "type": "String" },
+            { "name": "habitat", "type": "String" }
+          ]
         }
-      }
+      ]
     },
     {
       "source": "field-notes.rp",
@@ -141,7 +153,7 @@
       "compiler": "rupam 0.1.0",
       "strict": true,
       "inputs": [],
-      "schemas": {}
+      "schemas": []
     },
     {
       "source": "field-notes.rp",
@@ -149,7 +161,7 @@
       "compiler": "rupam 0.1.0",
       "strict": true,
       "inputs": [],
-      "schemas": {}
+      "schemas": []
     },
     {
       "source": "language-tour.rp",
@@ -157,7 +169,7 @@
       "compiler": "rupam 0.1.0",
       "strict": true,
       "inputs": [],
-      "schemas": {}
+      "schemas": []
     },
     {
       "source": "language-tour.rp",
@@ -165,7 +177,7 @@
       "compiler": "rupam 0.1.0",
       "strict": true,
       "inputs": [],
-      "schemas": {}
+      "schemas": []
     },
     {
       "source": "square.rp",
@@ -173,7 +185,7 @@
       "compiler": "rupam 0.1.0",
       "strict": true,
       "inputs": [],
-      "schemas": {}
+      "schemas": []
     },
     {
       "source": "square.rp",
@@ -181,7 +193,7 @@
       "compiler": "rupam 0.1.0",
       "strict": true,
       "inputs": [],
-      "schemas": {}
+      "schemas": []
     }
   ]
 }

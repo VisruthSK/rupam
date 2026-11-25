@@ -43,7 +43,6 @@ the locked analysis.
 | `:status` | current/stale lock and changed dependencies |
 | `:validate TABLE` | validate the whole source snapshot |
 | `:share` | let `rupam mcp --attach` join this session |
-| `:fixture ID` | write the last interaction as a conformance fixture |
 | `:bindings`, `:reload`, `:help`, `:quit` | |
 
 The prompt highlights syntax as it is typed, completes from a menu, edits
@@ -102,7 +101,7 @@ emit routine warnings for these observations.
 
 ## Diagnostics
 
-A diagnostic has a stable code, a source span, related spans, and resolutions. A resolution is a fix that preserves meaning or a decision between edits with different analytical results ([Agents](agents.md#diagnostics-as-data)):
+A diagnostic has a stable code, a source span, related spans, and resolutions. A resolution is a fix that preserves meaning or a decision between edits with different analytical results ([Agents](agent-interface.md#diagnostics-as-data)):
 
 ```text
 rates.rp:8:28  zero-divisor
@@ -120,7 +119,7 @@ rates.rp:8:28  zero-divisor
 - `rupam explain zero-divisor` prints the full explanation. All codes are
   defined in one catalogue ([Development](development.md#diagnostic-catalogue)).
 - Common R and dplyr forms get a diagnostic naming the Rupam form
-  ([Agents](agents.md#r-idioms)).
+  ([Agents](agent-interface.md#r-idioms)).
 - An unused table expression is a warning. Explicit missing policies and
   ordinary loss of inferred key facts are not warnings. Hover, `:schema`
   and `:explain` show lost keys, ordering, lifting and the reason for a
@@ -140,4 +139,4 @@ pending schema until a probe or full exploration evaluates it.
 
 ## Programmatic access
 
-The session protocol and MCP server are specified in [Agents](agents.md).
+The session protocol and MCP server are specified in [Agents](agent-interface.md).

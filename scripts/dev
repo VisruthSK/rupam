@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+root=$(cd "$(dirname "$0")/.." && pwd)
+switch=${RUPAM_SWITCH:-rupam-552}
+build=${RUPAM_BUILD_DIR:-/root/rupam-build}
+cd "$root"
+
+export OPAMROOTISOK=1
+
+dune() {
+  opam exec --switch="$switch" -- dune "$@" --build-dir "$build"
+}
+
+usage() {
+  cat <<'EOF'
+scripts/dev check     build, check formatting, run unit, cram and conformance tests
+scripts/dev watch     rebuild and rerun tests on every change
+scripts/dev promote   accept the output of changed expect and cram tests
+scripts/dev fmt       format the code
+scripts/dev full      check, then the R and Python integration tests
+EOF
+}
+
+check() {
+  dune build @default @runtest @fmt
+}
+
+full() {
+  check
+  UV_PROJECT_ENVIRONMENT=${RUPAM_VENV:-/tmp/rupam-python} uv sync --frozen --quiet
+  RUPAM_BUILD_DIR="$build" UV_PROJECT_ENVIRONMENT=${RUPAM_VENV:-/tmp/rupam-python} \
+    uv run --frozen python -m unittest discover -s test -p test_contract.py
+}
+
+case "${1:-}" in
+  check) check ;;
+  watch) dune build --watch @default @runtest ;;
+  promote) dune promote ;;
+  fmt) dune fmt || true ;;
+  full) full ;;
+  *) usage; exit 2 ;;
+esac

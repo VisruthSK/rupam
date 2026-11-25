@@ -13,8 +13,13 @@
   (ocaml (>= 5.5))
   menhir
   yojson
+  ppx_yojson_conv
+  ppx_enumerate
+  astring
+  digestif
   uucp
   toml
+  (ppx_expect :with-test)
   (cmdliner (>= 2.0))
   mosaic
   (ocamlformat (and :with-dev-setup (= 0.29.0)))))

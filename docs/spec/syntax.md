@@ -10,7 +10,7 @@
   quote any other name: `` `gross revenue` ``. A backtick inside is doubled.
 - Keywords: `let in fn if else match type new deriving use contract import
   as and or not TRUE FALSE None end todo`.
-- `todo` is a typed hole ([Agents](agents.md#holes)).
+- `todo` is a typed hole ([Agents](agent-interface.md#holes)).
 - A top-level item ends at a newline once complete, or at `;`. A line ending
   in an operator, `=`, `=>`, `,` or an open bracket continues. A line followed
   by one starting with `|>`, `else` or a closing bracket continues.

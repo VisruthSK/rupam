@@ -30,7 +30,7 @@ Resolve each key independently in this order, with later values taking precedenc
 The global file supplies defaults even outside a project. Project environment discovery still starts from the project's own directory. `:options` reports each effective key, value and winning source, including the file path or session flag/command. An explicitly supplied value retains that origin even when it equals the built-in default. Lock semantic settings by effective value. Display preferences and their origins are presentation metadata.
 
 `[agent] data` bounds what the session protocol and MCP server return:
-`schema`, `summaries` (default) or `rows` ([Agents](agents.md#data-exposure)).
+`schema`, `summaries` (default) or `rows` ([Agents](agent-interface.md#data-exposure)).
 `summaries` sends real values from unrestricted columns: minima, maxima, enum
 levels and most frequent values. Use `schema` or restrict sensitive columns
 for sensitive data.
@@ -143,9 +143,8 @@ runtime dependencies, not future draws or timestamps.
 | `rupam fmt FILE` | format |
 | `rupam schema FILE` | describe a contract, or print an inferred schema as a `schema =` literal |
 | `rupam explain NAME` | explain a diagnostic |
-| `rupam session` | JSON-RPC session protocol over stdio ([Agents](agents.md#session-protocol)) |
-| `rupam mcp [--attach]` | MCP server for the project ([Agents](agents.md#mcp-server)) |
-| `rupam debug stages\|conformance FILE` | development tools ([Development](development.md)) |
+| `rupam session` | JSON-RPC session protocol over stdio ([Agents](agent-interface.md#session-protocol)) |
+| `rupam mcp [--attach]` | MCP server for the project ([Agents](agent-interface.md#mcp-server)) |
 | `rupam lsp` | language server (deferred) |
 
 `--target` and `--no-strict` override `rupam.toml` and are included in the lock.

@@ -641,12 +641,11 @@ let dispatch state = function
        ignore
          (diagnostic (Lexing.from_string "") (fun () ->
             let entry = Lock.lock ~project:state.project ~source state.history in
-            List.iter
-              (fun (file, columns) ->
-                 print_endline file;
-                 List.iter (fun (n, t) -> Printf.printf "  %s  %s\n" n t) columns)
-              entry.schemas;
-            Printf.printf "Locked %s for %s\n" entry.source entry.dialect)));
+            Lock.print_schemas entry;
+            Printf.printf
+              "Locked %s for %s\n"
+              entry.source
+              (Project.dialect_name entry.dialect))));
     Some state
   | Reload ->
     Some

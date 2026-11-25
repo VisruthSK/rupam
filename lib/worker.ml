@@ -1,3 +1,18 @@
+open Ppx_yojson_conv_lib.Yojson_conv.Primitives
+
+type request =
+  { revision : int
+  ; script : string
+  }
+[@@deriving yojson_of]
+
+type reply =
+  { revision : int
+  ; output : string option [@yojson.option]
+  ; error : string option [@yojson.option]
+  }
+[@@deriving of_yojson]
+
 type t =
   { pid : int
   ; requests : out_channel
@@ -78,13 +93,7 @@ let active = Hashtbl.create 2
 let () = at_exit (fun () -> Hashtbl.iter (fun _ w -> stop w) active)
 
 let host_error message =
-  let contains needle =
-    let n = String.length needle in
-    let rec scan i =
-      i + n <= String.length message && (String.sub message i n = needle || scan (i + 1))
-    in
-    scan 0
-  in
+  let contains needle = Astring.String.is_infix ~affix:needle message in
   let lines = String.split_on_char '\n' message |> List.map String.trim in
   if contains "to `i64` failed"
   then "arithmetic overflow: Int64 out of range"
@@ -110,24 +119,22 @@ let evaluate runtime language script =
   w.revision <- w.revision + 1;
   let reply =
     try
-      Yojson.Basic.to_channel
+      Yojson.Safe.to_channel
         w.requests
-        (`Assoc [ "revision", `Int w.revision; "script", `String script ]);
+        (yojson_of_request { revision = w.revision; script });
       output_char w.requests '\n';
       flush w.requests;
-      Yojson.Basic.from_string (input_line w.replies)
+      reply_of_yojson (Yojson.Safe.from_string (input_line w.replies))
     with
     | exn ->
       Hashtbl.remove active key;
       stop w;
       raise exn
   in
-  let open Yojson.Basic.Util in
-  if to_int (member "revision" reply) <> w.revision
-  then invalid_arg "Stale backend response";
-  match member "error" reply |> to_string_option with
-  | Some message -> Diagnostic.fail Host_failure (host_error message)
-  | None -> member "output" reply |> to_string
+  if reply.revision <> w.revision then invalid_arg "Stale backend response";
+  match reply.error, reply.output with
+  | Some message, _ -> Diagnostic.fail Host_failure (host_error message)
+  | None, output -> Option.value output ~default:""
 ;;
 
 let run runtime language script =

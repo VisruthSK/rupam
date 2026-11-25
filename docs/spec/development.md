@@ -4,13 +4,21 @@ Tooling for implementing Rupam. A change to the compiler, REPL or viewer must
 be checkable against this specification by a command whose output a person or
 coding agent can act on without reading a terminal session.
 
+All of it is internal. The `dev/` executable links the compiler library and is
+never installed; `scripts/dev` is its only entry point. The installed `rupam`
+command has no debug flags, commands or environment variables.
+
 ## Build and check
 
-`scripts/dev check` builds, formats and runs every fast test, and prints one
-summary line per suite followed by failures only. On Windows it builds in WSL
-from a synchronised copy outside `/mnt/c`. `scripts/dev watch` rebuilds and
+`scripts/dev check` builds, checks formatting and runs the unit, cram and
+conformance tests, printing failures only. `scripts/dev watch` rebuilds and
 reruns affected tests on change. `scripts/dev full` adds the R and Python
-dialect suites. Each command exits nonzero on any failure.
+integration tests. `scripts/dev promote` accepts changed expect and cram
+output. Each command exits nonzero on any failure.
+
+On Windows the commands run in WSL against the working tree, with the build
+directory outside `/mnt/c`. The `rupam` command runs the binary in that build
+directory, so every successful build is immediately the installed version.
 
 ## Code structure
 
@@ -26,8 +34,7 @@ dialect suites. Each command exits nonzero on any failure.
 
 ## Stage dumps
 
-`rupam debug stages FILE --stage STAGE` prints one compiler stage for a source
-file or a REPL submission:
+`scripts/dev stages STAGE FILE` prints one compiler stage for a source file:
 
 | Stage | Contents |
 | --- | --- |
@@ -53,7 +60,7 @@ assert codes, spans and resolution kinds; message wording may change freely.
 
 ## Conformance runner
 
-`rupam debug conformance [--only ID] [--dialect D] [--json]` runs the fixtures
+`scripts/dev conformance [ID...]` runs the fixtures
 in `test/conformance/`. A fixture contains source, public inputs, targets and
 the expected logical type, value or diagnostic code, and a status:
 
@@ -86,29 +93,28 @@ Python is a test dependency only for the `python-polars` dialect.
 
 ## Transcripts and fixture capture
 
-`rupam repl --transcript FILE` reads submissions from a file without a
-terminal and writes deterministic output: no colour, fixed width, no timing.
-`:fixture ID` in the REPL, and `fixture` in the session protocol, write the
-last interaction as a `pending` conformance fixture with its source, public
-input, target and observed logical schema, diagnostic or value. Restricted
-values are never written.
+Without a terminal, `rupam repl` reads submissions from standard input and
+writes deterministic output: no colour, fixed width, no timing. Cram tests use
+this directly. `scripts/dev fixture ID FILE` runs a source file and writes a
+`pending` conformance fixture with its source, public input, target and
+observed logical schema, diagnostic or value. Restricted values are never
+written.
 
 ## Tracing
 
-`RUPAM_TRACE=FILE` records a Chrome trace of parse, check, lower, worker
+`scripts/dev trace FILE` runs a source file or transcript and records a Chrome trace of parse, check, lower, worker
 request, Arrow publication and paint, with the counters required by
 [Performance](performance.md): checker invalidations, worker submissions,
 input scans, Arrow bytes copied, retained mappings, allocations and formatted
 cells. Worker spans include the generated code and the reply's size.
-`RUPAM_LOG=worker,checker,lock,viewer` enables textual logs per subsystem.
+`scripts/dev log worker,checker FILE` prints textual logs for the named subsystems.
 
 ## Developer protocol
 
-`rupam session --debug` and `rupam mcp --debug` add development operations to
-the [session protocol](agents.md#session-protocol): `stages`, `conformance`,
-`fixture`, `trace` and `explain-internal` (the typed core and obligations of an
-item). A coding agent working on the compiler uses the same server an analyst's
-agent uses, against the binary it has just built.
+The `dev/` executable can serve the [session protocol](agent-interface.md#session-protocol)
+with additional operations: `stages`, `conformance`, `fixture`, `trace` and
+`core` (the typed core and obligations of an item). A coding agent working on
+the compiler uses it against the library it has just built.
 
 ## Dependencies
 

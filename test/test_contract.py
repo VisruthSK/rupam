@@ -10,11 +10,12 @@ import polars as pl
 
 ROOT = Path(__file__).resolve().parents[1]
 DIALECT = {"r": "r-dplyr", "python": "python-polars"}
+COMPILER = Path(os.environ.get("RUPAM_BUILD_DIR", ROOT / "_build")) / "default/bin/rupam_cli.exe"
 
 
 class ContractIntegration(unittest.TestCase):
     def test_options_report_the_winning_source_per_key(self):
-        compiler = ROOT / "_build/default/bin/rupam_cli.exe"
+        compiler = COMPILER
         with tempfile.TemporaryDirectory() as tmp:
             work = Path(tmp)
             config = work / "config"
@@ -46,12 +47,11 @@ class ContractIntegration(unittest.TestCase):
             self.assertEqual(resolved["check.strict"], ("false", "session --no-strict"))
 
     def test_compiled_script_refuses_data_changed_since_the_lock(self):
-        subprocess.run(["dune", "build", "bin/rupam_cli.exe"], cwd=ROOT, check=True)
         with tempfile.TemporaryDirectory() as tmp:
             work = Path(tmp)
             for name in ("shop.rp", "orders.parquet", "data-dict.yaml"):
                 shutil.copy(ROOT / "examples" / name, work / name)
-            compiler = ROOT / "_build/default/bin/rupam_cli.exe"
+            compiler = COMPILER
             script = work / "shop.py"
             script.write_bytes(subprocess.check_output(
                 [compiler, "compile", "--target", "python-polars", "shop.rp"], cwd=work))
@@ -89,7 +89,7 @@ class ContractIntegration(unittest.TestCase):
 
 
     def test_csv_analysis_agrees_across_dialects(self):
-        compiler = ROOT / "_build/default/bin/rupam_cli.exe"
+        compiler = COMPILER
         results = {}
         for target, runner in [("python", "python"), ("r", "Rscript")]:
             with tempfile.TemporaryDirectory() as tmp:
@@ -126,7 +126,7 @@ let rights = orders |> select(cost, region)
 let joined = lefts |> left_join(rights, by = cost, relationship = many_to_one) |> arrange(customer_id)
 write_parquet(joined, "joined.parquet")
 """)
-            compiler = ROOT / "_build/default/bin/rupam_cli.exe"
+            compiler = COMPILER
             for target, runner in [("python", "python"), ("r", "Rscript")]:
                 with self.subTest(target=target):
                     script = work / ("join." + target)
@@ -152,7 +152,7 @@ write_parquet(joined, "joined.parquet")
 let orders = load(shop.orders) |> mutate(discount = cost * 0.5)
 write_parquet(orders, "result.parquet")
 """)
-            compiler = ROOT / "_build/default/bin/rupam_cli.exe"
+            compiler = COMPILER
             for target, runner in [("python", "python"), ("r", "Rscript")]:
                 with self.subTest(target=target):
                     script = work / ("private." + target)
@@ -164,7 +164,7 @@ write_parquet(orders, "result.parquet")
                     (work / "result.parquet").unlink()
 
     def test_repl_previews_in_both_persistent_workers(self):
-        compiler = ROOT / "_build/default/bin/rupam_cli.exe"
+        compiler = COMPILER
         commands = ":schema regional\n:preview regional\n:target r-dplyr\n:preview regional\n:preview regional\n:quit\n"
         completed = subprocess.run([compiler, "repl", "--target", "python-polars", ROOT / "examples/shop.rp"],
                                    input=commands, text=True, capture_output=True, check=True)
@@ -183,7 +183,7 @@ let orders = load(shop.orders)
 let result = orders |> mutate(x = if (customer_id > 0) customer_id else customer_id + 9223372036854775807) |> select(x)
 write_parquet(result, "checked.parquet")
 """)
-            compiler = ROOT / "_build/default/bin/rupam_cli.exe"
+            compiler = COMPILER
             subprocess.run([compiler, "compile", "--target", "python-polars", "checked.rp", "-o", "checked.py"], cwd=work, check=True)
             subprocess.run(["python", "checked.py"], cwd=work, check=True)
             self.assertEqual(pl.read_parquet(work / "checked.parquet")["x"].to_list(), [1, 2, 3, 4])
@@ -209,7 +209,7 @@ write_parquet(result, "checked.parquet")
 let t = load(shop.orders) |> mutate(root = polars.sqrt(revenue)) |> select(root)
 write_parquet(t, "sqrt.parquet")
 """
-            compiler = ROOT / "_build/default/bin/rupam_cli.exe"
+            compiler = COMPILER
             source.write_text(body)
             denied = subprocess.run([compiler, "compile", "--target", "python-polars", source], cwd=work, capture_output=True)
             self.assertNotEqual(denied.returncode, 0)
@@ -235,7 +235,7 @@ write_parquet(t, "sqrt.parquet")
 let get(x) = match x { Empty => 0, Just(n) => n }
 get(Just(9007199254740993))
 """)
-            compiler = ROOT / "_build/default/bin/rupam_cli.exe"
+            compiler = COMPILER
             for target,runner in [("r","Rscript"),("python","python")]:
                 script = work / ("variant." + target)
                 script.write_bytes(subprocess.check_output([compiler,"compile","--target",DIALECT[target],source]))
@@ -257,7 +257,7 @@ get(Just(9007199254740993))
         for item in messages:
             data = json.dumps(dict(jsonrpc="2.0", **item)).encode()
             body.extend(f"Content-Length: {len(data)}\r\n\r\n".encode() + data)
-        compiler = ROOT / "_build/default/bin/rupam_cli.exe"
+        compiler = COMPILER
         output = subprocess.check_output([compiler, "lsp"], input=bytes(body))
         replies = []
         while output:
@@ -282,7 +282,7 @@ let tall = t |> select(customer_id, revenue, center) |> pivot_longer(cols = (rev
 let wide = tall |> pivot_wider(names_from = metric, values_from = reading, levels = [revenue, center]) |> rename(centered = center) |> arrange(customer_id)
 write_parquet(wide, "result.parquet")
 """)
-            compiler = ROOT / "_build/default/bin/rupam_cli.exe"
+            compiler = COMPILER
             for target,runner in [("python","python"),("r","Rscript")]:
                 script=work / ("pivot." + target)
                 script.write_bytes(subprocess.check_output([compiler,"compile","--target",DIALECT[target],source],cwd=work))
@@ -304,7 +304,7 @@ write_parquet(wide, "result.parquet")
 let t = load(shop.orders) |> summarize(n=n(), by=cost, group_missing=propagate)
 write_parquet(t, "groups.parquet")
 """)
-            compiler = ROOT / "_build/default/bin/rupam_cli.exe"
+            compiler = COMPILER
             for target, runner in [("r", "Rscript"), ("python", "python")]:
                 script = work / ("groups." + target)
                 script.write_bytes(subprocess.check_output([compiler,"compile","--target",DIALECT[target],source],cwd=work))
@@ -316,7 +316,7 @@ write_parquet(t, "groups.parquet")
 
 class FileSources(unittest.TestCase):
     def test_csv_and_parquet_without_contract_agree_across_dialects(self):
-        compiler = ROOT / "_build/default/bin/rupam_cli.exe"
+        compiler = COMPILER
         big = 9007199254740993
         with tempfile.TemporaryDirectory() as tmp:
             work = Path(tmp)

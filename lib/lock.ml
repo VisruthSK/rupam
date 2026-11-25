@@ -1,5 +1,4 @@
-module Json = Yojson.Basic
-module J = Json.Util
+open Ppx_yojson_conv_lib.Yojson_conv.Primitives
 
 let compiler = "rupam 0.1.0"
 let file_name = "rupam.lock"
@@ -8,15 +7,37 @@ type input =
   { path : string
   ; sha256 : string
   }
+[@@deriving yojson]
+
+type column =
+  { name : string
+  ; type_ : string [@key "type"]
+  }
+[@@deriving yojson]
+
+type schema =
+  { path : string
+  ; columns : column list
+  }
+[@@deriving yojson]
 
 type entry =
   { source : string
-  ; dialect : string
+  ; dialect : Project.dialect
   ; compiler : string
   ; strict : bool
   ; inputs : input list
-  ; schemas : (string * (string * string) list) list
+  ; schemas : schema list
   }
+[@@deriving yojson]
+
+type file =
+  { version : int
+  ; entries : entry list
+  }
+[@@deriving yojson]
+
+let version = 2
 
 let directory (project : Project.t) source =
   Option.value project.root ~default:(Filename.dirname source)
@@ -31,58 +52,35 @@ let relative root path =
   strip "./" (strip (Filename.concat root "") path)
 ;;
 
-let input_json i = `Assoc [ "path", `String i.path; "sha256", `String i.sha256 ]
-
-let entry_json e =
-  `Assoc
-    [ "source", `String e.source
-    ; "dialect", `String e.dialect
-    ; "compiler", `String e.compiler
-    ; "strict", `Bool e.strict
-    ; "inputs", `List (List.map input_json e.inputs)
-    ; ( "schemas"
-      , `Assoc
-          (List.map
-             (fun (path, columns) ->
-                path, `Assoc (List.map (fun (n, t) -> n, `String t) columns))
-             e.schemas) )
-    ]
-;;
-
-let entry_of json =
-  let text key = J.member key json |> J.to_string in
-  { source = text "source"
-  ; dialect = text "dialect"
-  ; compiler = text "compiler"
-  ; strict = J.member "strict" json |> J.to_bool
-  ; inputs =
-      J.member "inputs" json
-      |> J.to_list
-      |> List.map (fun i ->
-        { path = J.member "path" i |> J.to_string
-        ; sha256 = J.member "sha256" i |> J.to_string
-        })
-  ; schemas =
-      J.member "schemas" json
-      |> J.to_assoc
-      |> List.map (fun (path, columns) ->
-        path, J.to_assoc columns |> List.map (fun (n, t) -> n, J.to_string t))
-  }
-;;
-
 let load root =
   let path = Filename.concat root file_name in
-  if Sys.file_exists path
-  then J.member "entries" (Json.from_file path) |> J.to_list |> List.map entry_of
-  else []
+  if not (Sys.file_exists path)
+  then []
+  else (
+    let file = file_of_yojson (Yojson.Safe.from_file path) in
+    if file.version <> version
+    then
+      Diagnostic.fail
+        Stale_lock
+        (Printf.sprintf
+           "%s was written by an older rupam. Run rupam lock again to replace it."
+           path);
+    file.entries)
 ;;
 
 let save root entries =
-  let json =
-    `Assoc [ "version", `Int 1; "entries", `List (List.map entry_json entries) ]
-  in
   Out_channel.with_open_text (Filename.concat root file_name) (fun channel ->
-    output_string channel (Json.pretty_to_string json ^ "\n"))
+    output_string
+      channel
+      (Yojson.Safe.pretty_to_string (yojson_of_file { version; entries }) ^ "\n"))
+;;
+
+let print_schemas entry =
+  List.iter
+    (fun schema ->
+       print_endline schema.path;
+       List.iter (fun c -> Printf.printf "  %s  %s\n" c.name c.type_) schema.columns)
+    entry.schemas
 ;;
 
 let analysis ~(project : Project.t) ~source declarations =
@@ -111,23 +109,26 @@ let analysis ~(project : Project.t) ~source declarations =
     List.concat_map Analysis_program.files datasets
     |> List.sort_uniq compare
     |> List.map (fun (file : Analysis_program.source) ->
-      ( relative root file.path
-      , List.map
-          (fun (n, t, nullable) ->
-             n, Analysis_program.kind t ^ if nullable then "?" else "")
-          file.columns ))
+      { path = relative root file.path
+      ; columns =
+          List.map
+            (fun (name, t, nullable) ->
+               { name; type_ = (Analysis_program.kind t ^ if nullable then "?" else "") })
+            file.columns
+      })
   in
   let contracts =
     List.concat_map Analysis_program.contracts datasets |> List.sort_uniq compare
   in
   let entry =
     { source = relative root source
-    ; dialect = Project.dialect_name (Project.require_dialect project)
+    ; dialect = Project.require_dialect project
     ; compiler
     ; strict = project.strict.value
     ; inputs =
         List.map
-          (fun path -> { path = relative root path; sha256 = Data_file.digest path })
+          (fun path : input ->
+             { path = relative root path; sha256 = Data_file.digest path })
           paths
     ; schemas
     }

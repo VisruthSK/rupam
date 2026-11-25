@@ -16,7 +16,7 @@ between them.
 | [Contracts](contracts.md) | data-dict contracts and validation |
 | [Dialects](dialects.md) | compilation and generated scripts |
 | [Tooling](tooling.md) | REPL, viewer, diagnostics, deferred editor support |
-| [Agents](agents.md) | session model, effects, data exposure, session protocol, MCP server |
+| [Agents](agent-interface.md) | session model, effects, data exposure, session protocol, MCP server |
 | [Projects](projects.md) | `rupam.toml`, environments, locks, command line |
 | [Performance](performance.md) | interactive cost, native execution and compiler optimisation |
 | [Guarantees](guarantees.md) | properties every rupam program has |
