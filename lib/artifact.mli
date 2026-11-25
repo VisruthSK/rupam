@@ -4,5 +4,5 @@ val write
   -> locations:Document.location list
   -> output:string
   -> code:string
-  -> Syntax.declaration list
+  -> Core.item list
   -> unit

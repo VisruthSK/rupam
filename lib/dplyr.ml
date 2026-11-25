@@ -1,326 +1,283 @@
-open Shape
+module C = Core
+module T = Types
 module R = R_syntax
+
+let integer64 e = R.qualified "bit64" "as.integer64" [ R.Positional e ]
+
+let if_else c a b =
+  R.qualified "dplyr" "if_else" [ R.Positional c; R.Positional a; R.Positional b ]
+;;
 
 let all_of names = R.call "all_of" [ R.strings names ]
 
-let apply (row : Prelude.row) args =
-  let call f = R.call f args in
+let missing typ =
+  match T.repr (T.present typ) with
+  | Int64 -> R.Namespaced ("bit64", "NA_integer64_")
+  | Float64 -> R.Name "NA_real_"
+  | String -> R.Name "NA_character_"
+  | _ -> R.Na
+;;
+
+let operator : Syntax.binary -> R.operator = function
+  | Add -> Add
+  | Sub -> Subtract
+  | Mul -> Multiply
+  | Div -> Divide
+  | Mod -> Modulo
+  | Power -> Power
+  | Less -> Less
+  | Greater -> Greater
+  | Less_equal -> Less_equal
+  | Greater_equal -> Greater_equal
+  | Equal -> Equal
+  | Not_equal -> Not_equal
+  | And -> Both
+  | Or -> Either
+;;
+
+let builtin (row : Prelude.row) args =
   match row, args with
-  | Abs, _ -> call "abs"
-  | Sign, [ x ] ->
-    R.qualified "bit64" "as.integer64" [ R.Positional (R.call "sign" [ x ]) ]
-  | Sqrt, _ -> call "sqrt"
-  | Exp, _ -> call "exp"
-  | Log, _ -> call "log"
-  | Log2, _ -> call "log2"
-  | Log10, _ -> call "log10"
-  | Floor, [ x ] -> R.call "floor" [ R.call "as.double" [ x ] ]
-  | Ceiling, [ x ] -> R.call "ceiling" [ R.call "as.double" [ x ] ]
-  | Trunc, [ x ] -> R.call "trunc" [ R.call "as.double" [ x ] ]
-  | Round, [ x ] -> R.call "round" [ R.call "as.double" [ x ] ]
-  | Pmin, _ -> call "pmin"
-  | Pmax, _ -> call "pmax"
+  | Abs, [ x ] -> R.call "abs" [ x ]
+  | Sign, [ x ] -> integer64 (R.call "sign" [ x ])
+  | Sqrt, [ x ] -> R.call "sqrt" [ x ]
+  | Exp, [ x ] -> R.call "exp" [ x ]
+  | Log, [ x ] -> R.call "log" [ x ]
+  | Log2, [ x ] -> R.call "log2" [ x ]
+  | Log10, [ x ] -> R.call "log10" [ x ]
+  | Floor, [ x ] -> R.call "floor" [ x ]
+  | Ceiling, [ x ] -> R.call "ceiling" [ x ]
+  | Trunc, [ x ] -> R.call "trunc" [ x ]
+  | Round, [ x ] -> R.call "round" [ x ]
+  | Pmin, [ a; b ] -> R.call "pmin" [ a; b ]
+  | Pmax, [ a; b ] -> R.call "pmax" [ a; b ]
   | Present, [ x ] -> R.Not (R.call "is.na" [ x ])
-  | Absent, _ -> call "is.na"
+  | Absent, [ x ] -> R.call "is.na" [ x ]
   | Length, [ x ] ->
-    R.qualified
-      "bit64"
-      "as.integer64"
-      [ R.Positional
-          (R.Call (R.Name "nchar", [ R.Positional x; R.Named ("type", R.String "chars") ]))
-      ]
-  | Lower, _ -> call "tolower"
-  | Upper, _ -> call "toupper"
-  | Trim, _ -> call "trimws"
+    integer64
+      (R.Call (R.Name "nchar", [ R.Positional x; R.Named ("type", R.String "chars") ]))
+  | Lower, [ x ] -> R.call "tolower" [ x ]
+  | Upper, [ x ] -> R.call "toupper" [ x ]
+  | Trim, [ x ] -> R.call "trimws" [ x ]
   | Starts, [ x; p ] -> R.call "startsWith" [ x; p ]
   | Ends, [ x; p ] -> R.call "endsWith" [ x; p ]
   | Detect, [ x; p ] ->
+    if_else
+      (R.call "is.na" [ x ])
+      R.Na
+      (R.Call
+         ( R.Name "grepl"
+         , [ R.Positional p; R.Positional x; R.Named ("perl", R.Logical true) ] ))
+  | _ -> invalid_arg "Wrong arguments to a builtin"
+;;
+
+let rec expression names (e : C.expr) : R.expr =
+  let go = expression names in
+  match e.node with
+  | Column n -> R.Name n
+  | Variable { stamp = 0; name } -> R.Name name
+  | Variable id -> R.Name (Host.name names id)
+  | Constant (Int i) -> integer64 (R.String (Int64.to_string i))
+  | Constant (Float f) -> R.Number (R.number f)
+  | Constant (Number s) -> R.Number s
+  | Constant (Bool b) -> R.Logical b
+  | Constant (Text s) -> R.String s
+  | Absent -> missing e.typ
+  | If (c, a, b) -> if_else (go c) (go a) (go b)
+  | Coalesce (a, b) ->
+    R.qualified "dplyr" "coalesce" [ R.Positional (go a); R.Positional (go b) ]
+  | Builtin (row, args) -> builtin row (List.map go args)
+  | Convert x -> R.call "as.double" [ go x ]
+  | Unary (Not, x) -> R.Not (go x)
+  | Unary (Negate, x) -> R.Negate (go x)
+  | Binary (op, a, b) -> R.Binary (operator op, go a, go b)
+  | Require x -> R.call "rp_present" [ go x ]
+  | Count -> integer64 (R.qualified "dplyr" "n" [])
+  | Reduce (r, policy, x) -> reduce names r policy x
+  | Lift (bound, body) ->
+    let substituted =
+      List.fold_left
+        (fun body ((id : C.id), (value : C.expr)) -> C.substitute id value body)
+        body
+        bound
+    in
+    go substituted
+  | Member (x, { node = List items; _ }) ->
+    let x = go x in
+    if_else
+      (R.call "is.na" [ x ])
+      R.Na
+      (R.Binary (In_set, x, R.call "c" (List.map go items)))
+  | Text pieces -> text names pieces
+  | Apply (f, args) -> R.Call (go f, List.map (fun a -> R.Positional (go a)) args)
+  | Foreign (m, f, _) ->
+    Diagnostic.fail
+      ~span:e.span
+      Dialect_capability
+      ("R target cannot execute the Python capability " ^ m ^ "." ^ f)
+  | Member _
+  | Match _
+  | Lambda _
+  | Construct _
+  | Let _
+  | Tuple _
+  | List _
+  | Record _
+  | Field _
+  | Table _ ->
+    Diagnostic.fail
+      ~span:e.span
+      Unsupported_feature
+      "This expression has no dplyr lowering"
+
+and reduce names r policy x =
+  let source = expression names x in
+  let x = if policy = C.Fail then R.call "rp_present" [ source ] else source in
+  let present f = R.Call (f, [ R.Positional x; R.Named ("na.rm", R.Logical true) ]) in
+  let unless_empty value = if_else (R.call "all" [ R.call "is.na" [ x ] ]) R.Na value in
+  let value =
+    match (r : Prelude.reduction) with
+    | Mean ->
+      R.qualified
+        "dplyr"
+        "na_if"
+        [ R.Positional (present (R.Name "mean")); R.Positional (R.Name "NaN") ]
+    | Median -> present (R.Namespaced ("stats", "median"))
+    | Var -> present (R.Namespaced ("stats", "var"))
+    | Sd -> present (R.Namespaced ("stats", "sd"))
+    | Sum -> unless_empty (present (R.Name "sum"))
+    | Min -> unless_empty (present (R.Name "min"))
+    | Max -> unless_empty (present (R.Name "max"))
+    | Distinct ->
+      integer64
+        (R.qualified
+           "dplyr"
+           "n_distinct"
+           [ R.Positional x; R.Named ("na.rm", R.Logical true) ])
+    | Count -> integer64 (R.qualified "dplyr" "n" [])
+  in
+  if policy = C.Propagate then if_else (R.call "anyNA" [ source ]) R.Na value else value
+
+and text names pieces =
+  let shown =
+    List.filter_map
+      (function
+        | C.Shown (x, _) when T.is_optional x.typ -> Some (expression names x)
+        | _ -> None)
+      pieces
+  in
+  let part = function
+    | C.Fixed s -> R.String s
+    | Shown (x, format) ->
+      let v = expression names x in
+      (match format, T.repr (T.present x.typ) with
+       | Some spec, _ -> R.call "rp_format_number" [ v; R.String spec ]
+       | None, String -> v
+       | None, Int64 -> R.call "as.character" [ v ]
+       | None, Float64 -> R.call "rp_float" [ v ]
+       | None, Bool -> if_else v (R.String "TRUE") (R.String "FALSE")
+       | None, _ -> R.call "as.character" [ v ])
+  in
+  let joined = R.call "paste0" (List.map part pieces) in
+  match shown with
+  | [] -> joined
+  | first :: rest ->
+    if_else
+      (List.fold_left
+         (fun a b -> R.Binary (Either, a, R.call "is.na" [ b ]))
+         (R.call "is.na" [ first ])
+         rest)
+      (R.Name "NA_character_")
+      joined
+;;
+
+let checked names e =
+  let v = expression names e in
+  if Host.risky e then R.call "rp_checked" [ v ] else v
+;;
+
+let step names : C.step -> R.expr = function
+  | Filter x -> R.call "filter" [ expression names x ]
+  | Mutate { name; value; by } ->
+    R.Call
+      ( R.Name "mutate"
+      , R.Named (name, checked names value)
+        :: (if by = [] then [] else [ R.Named (".by", all_of by) ]) )
+  | Select columns -> R.call "select" [ all_of columns ]
+  | Rename changes ->
+    R.Call
+      (R.Name "rename", List.map (fun (fresh, old) -> R.Named (fresh, R.Name old)) changes)
+  | Summarize { by; measures } ->
+    R.Call
+      ( R.Name "summarise"
+      , List.map (fun (n, x) -> R.Named (n, checked names x)) measures
+        @ if by = [] then [] else [ R.Named (".by", all_of by) ] )
+  | Arrange keys ->
+    R.call
+      "arrange"
+      (List.map
+         (fun (x, d) ->
+            let x = expression names x in
+            if d = C.Descending then R.call "desc" [ x ] else x)
+         keys)
+  | Take n -> R.Call (R.Name "slice_head", [ R.Named ("n", R.Number (string_of_int n)) ])
+  | Distinct _ -> R.call "distinct" []
+  | Assert_key columns -> R.call "rp_assert_key" [ R.strings columns ]
+  | Pivot_longer { columns; names_to; values_to; _ } ->
     R.qualified
-      "dplyr"
-      "if_else"
-      [ R.Positional (R.call "is.na" [ x ])
-      ; R.Positional R.Na
-      ; R.Positional
-          (R.Call
-             ( R.Name "grepl"
-             , [ R.Positional p; R.Positional x; R.Named ("perl", R.Logical true) ] ))
+      "tidyr"
+      "pivot_longer"
+      [ R.Positional (all_of columns)
+      ; R.Named ("names_to", R.String names_to)
+      ; R.Named ("values_to", R.String values_to)
       ]
-  | _ -> Diagnostic.fail Wrong_arguments ("Wrong arguments to " ^ Prelude.name (Row row))
+  | Pivot_wider { ids; names_from; values_from; levels } ->
+    R.call
+      "rp_wider"
+      [ R.strings ids; R.String names_from; R.String values_from; R.strings levels ]
 ;;
 
-let lower ~fields (plan : Table.t) base =
-  let names = Array.make plan.next "" in
-  List.iteri (fun i n -> names.(i) <- n) fields;
-  let next = ref (List.length fields) in
-  let bind n =
-    names.(!next) <- n;
-    incr next
-  in
-  let rec emit e =
-    match e.node with
-    | Input i -> R.Dollar (R.Name ".data", names.(i))
-    | Broadcast (_, e) -> emit e
-    | Constant (`Int i) ->
-      R.qualified "bit64" "as.integer64" [ R.Positional (R.String (Int64.to_string i)) ]
-    | Constant (`Float f) -> R.Number (R.number f)
-    | Constant (`Bool b) -> R.Logical b
-    | Constant (`String s) -> R.String s
-    | Null ->
-      (match e.typ.primitive with
-       | Int64 -> R.Namespaced ("bit64", "NA_integer64_")
-       | Float64 -> R.Name "NA_real_"
-       | Bool -> R.Na
-       | String -> R.Name "NA_character_")
-    | Choose (c, t, f) ->
-      R.qualified
-        "dplyr"
-        "if_else"
-        [ R.Positional (emit c); R.Positional (emit t); R.Positional (emit f) ]
-    | Coalesce (a, b) ->
-      R.qualified "dplyr" "coalesce" [ R.Positional (emit a); R.Positional (emit b) ]
-    | Polars_sqrt _ ->
-      Diagnostic.fail
-        Dialect_capability
-        "R target cannot execute the Python capability polars.sqrt"
-    | Apply (row, args) -> apply row (List.map emit args)
-    | Convert a -> R.call "as.double" [ emit a ]
-    | Count ->
-      R.qualified "bit64" "as.integer64" [ R.Positional (R.qualified "dplyr" "n" []) ]
-    | Text parts ->
-      let shown =
-        List.filter_map
-          (function
-            | Shape.Shown (x, _) when x.typ.nullable -> Some (emit x)
-            | _ -> None)
-          parts
-      in
-      let part = function
-        | Shape.Fixed s -> R.String s
-        | Shown (x, format) ->
-          let e = emit x in
-          (match format, x.typ.primitive with
-           | Some spec, _ -> R.call "rp_format_number" [ e; R.String spec ]
-           | None, String -> e
-           | None, Int64 -> R.call "as.character" [ e ]
-           | None, Float64 -> R.call "rp_float" [ e ]
-           | None, Bool ->
-             R.qualified
-               "dplyr"
-               "if_else"
-               [ R.Positional e
-               ; R.Positional (R.String "TRUE")
-               ; R.Positional (R.String "FALSE")
-               ])
-      in
-      let joined = R.call "paste0" (List.map part parts) in
-      (match shown with
-       | [] -> joined
-       | first :: rest ->
-         R.qualified
-           "dplyr"
-           "if_else"
-           [ R.Positional
-               (List.fold_left
-                  (fun a b -> R.Binary (R.Either, a, R.call "is.na" [ b ]))
-                  (R.call "is.na" [ first ])
-                  rest)
-           ; R.Positional (R.Name "NA_character_")
-           ; R.Positional joined
-           ])
-    | Member (a, items) ->
-      let a = emit a in
-      R.qualified
-        "dplyr"
-        "if_else"
-        [ R.Positional (R.call "is.na" [ a ])
-        ; R.Positional R.Na
-        ; R.Positional (R.Binary (R.In_set, a, R.call "c" (List.map emit items)))
-        ]
-    | Unary (Not, a) -> R.Not (emit a)
-    | Unary (Negate, a) -> R.Negate (emit a)
-    | Required a -> R.call "rp_present" [ emit a ]
-    | Binary (op, a, b) ->
-      R.Binary
-        ( (match op with
-           | Add -> R.Add
-           | Sub -> R.Subtract
-           | Mul -> R.Multiply
-           | Div -> R.Divide
-           | Mod -> R.Modulo
-           | Power -> R.Power
-           | Less -> R.Less
-           | Greater -> R.Greater
-           | Less_equal -> R.Less_equal
-           | Greater_equal -> R.Greater_equal
-           | Equal -> R.Equal
-           | Not_equal -> R.Not_equal
-           | And -> R.Both
-           | Or -> R.Either)
-        , emit a
-        , emit b )
-    | Reduce (r, policy, a) ->
-      let source = emit a in
-      let x =
-        match policy with
-        | Fail -> R.call "rp_present" [ source ]
-        | Skip | Propagate -> source
-      in
-      let guard value =
-        match policy with
-        | Propagate ->
-          R.qualified
-            "dplyr"
-            "if_else"
-            [ R.Positional (R.call "anyNA" [ source ])
-            ; R.Positional R.Na
-            ; R.Positional value
-            ]
-        | Skip | Fail -> value
-      in
-      guard
-      @@
-      let present f = R.Call (f, [ R.Positional x; R.Named ("na.rm", R.Logical true) ]) in
-      let unless_empty value =
-        R.qualified
-          "dplyr"
-          "if_else"
-          [ R.Positional (R.call "all" [ R.call "is.na" [ x ] ])
-          ; R.Positional R.Na
-          ; R.Positional value
-          ]
-      in
-      (match r with
-       | Mean ->
-         R.qualified
-           "dplyr"
-           "na_if"
-           [ R.Positional (present (R.Name "mean")); R.Positional (R.Name "NaN") ]
-       | Median -> present (R.Namespaced ("stats", "median"))
-       | Var -> present (R.Namespaced ("stats", "var"))
-       | Sd -> present (R.Namespaced ("stats", "sd"))
-       | Sum -> unless_empty (present (R.Name "sum"))
-       | Min -> unless_empty (present (R.Name "min"))
-       | Max -> unless_empty (present (R.Name "max"))
-       | Distinct ->
-         R.qualified
-           "bit64"
-           "as.integer64"
-           [ R.Positional
-               (R.qualified
-                  "dplyr"
-                  "n_distinct"
-                  [ R.Positional x; R.Named ("na.rm", R.Logical true) ])
-           ]
-       | Count -> assert false)
-  in
-  let checked x =
-    if Shape.nonfinite x || Shape.overflows x
-    then R.call "rp_checked" [ emit x ]
-    else emit x
-  in
-  let stage = function
-    | Table.Pivot p ->
-      let ids = List.map fst p.ids in
-      List.iter bind (ids @ if p.wider then p.labels else [ p.key; p.value ]);
-      if p.wider
-      then
-        R.call
-          "rp_wider"
-          [ R.strings ids; R.String p.key; R.String p.value; R.strings p.labels ]
-      else
-        R.qualified
-          "tidyr"
-          "pivot_longer"
-          [ R.Positional (all_of p.labels)
-          ; R.Named ("names_to", R.String p.key)
-          ; R.Named ("values_to", R.String p.value)
-          ]
-    | Table.Rename changes ->
-      List.iter (fun (_, b, i) -> names.(i) <- b) changes;
-      R.Call (R.Name "rename", List.map (fun (a, b, _) -> R.Named (b, R.Name a)) changes)
-    | Window (n, x, keys) ->
-      let value = checked x in
-      bind n;
-      R.Call
-        ( R.Name "mutate"
-        , [ R.Named (n, value); R.Named (".by", all_of (List.map fst keys)) ] )
-    | Table.Take n ->
-      R.Call (R.Name "slice_head", [ R.Named ("n", R.Number (string_of_int n)) ])
-    | Distinct keys ->
-      R.Call
-        ( R.Name "distinct"
-        , List.map (fun k -> R.Positional (emit k)) keys
-          @ [ R.Named (".keep_all", R.Logical true) ] )
-    | Filter x -> R.call "filter" [ emit x ]
-    | Assert_key columns -> R.call "rp_assert_key" [ R.strings columns ]
-    | Select ns -> R.call "select" [ all_of ns ]
-    | Bind (n, x) ->
-      let value = checked x in
-      bind n;
-      R.Call (R.Name "mutate", [ R.Named (n, value) ])
-    | Arrange keys ->
-      R.call
-        "arrange"
-        (List.map (fun (x, d) -> if d then R.call "desc" [ emit x ] else emit x) keys)
-    | Summarize (keys, values) ->
-      let key_names = List.map fst keys in
-      let measures =
-        List.map
-          (fun (n, x) ->
-             R.Named
-               ( n
-               , match x with
-                 | None ->
-                   R.qualified "bit64" "as.integer64" [ R.Positional (R.call "n" []) ]
-                 | Some x -> checked x ))
-          values
-      in
-      List.iter bind (key_names @ List.map fst values);
-      R.Call
-        ( R.Name "summarise"
-        , measures @ if keys = [] then [] else [ R.Named (".by", all_of key_names) ] )
-  in
-  List.fold_left
-    (fun input step ->
-       let e = stage step in
-       R.pipe
-         input
-         (match List.find_opt (fun (s, _) -> s == step) plan.locations with
-          | Some (_, span) -> R.Located (span, e)
-          | None -> e))
-    base
-    (List.rev plan.steps)
+let file (f : C.file) =
+  R.call
+    "rp_read"
+    [ R.String f.path
+    ; R.String f.digest
+    ; R.String (Data_file.format_name f.format)
+    ; R.Call
+        ( R.Name "c"
+        , List.map
+            (fun (n, t) ->
+               R.Named
+                 ( n
+                 , R.String
+                     (match T.repr (T.present t) with
+                      | Int64 -> "Int64"
+                      | Float64 -> "Float64"
+                      | Bool -> "Bool"
+                      | _ -> "String") ))
+            f.columns )
+    ]
 ;;
 
-let rec table d =
-  let open Analysis_program in
+let rec table names (t : C.table) =
   let base =
-    match d.origin with
-    | File source | Contracted { source; _ } ->
-      R.call
-        "rp_read"
-        [ R.String source.path
-        ; R.String source.digest
-        ; R.String (Data_file.format_name source.format)
-        ; R.Call
-            ( R.Name "c"
-            , List.map
-                (fun (n, t, _) -> R.Named (n, R.String (Shape.primitive_name t)))
-                source.columns )
-        ]
-    | Joined { left; right; key; kind; relationship; covered } ->
-      let left =
+    match t.source with
+    | Read f | Load { file = f; _ } -> file f
+    | Bound id -> R.Name (Host.name names id)
+    | Join { left; right; key; kind; relationship; covered } ->
+      let left_table = table names left
+      and right_table = table names right in
+      let left_table =
         if covered
         then
           R.call
             "rp_covered"
-            [ table left; table right; R.String key; R.String (join_name kind) ]
-        else table left
+            [ left_table; right_table; R.String key; R.String (C.join_name kind) ]
+        else left_table
       in
       R.Call
-        ( R.Name (join_name kind ^ "_join")
-        , [ R.Positional left
-          ; R.Positional (table right)
+        ( R.Name (C.join_name kind ^ "_join")
+        , [ R.Positional left_table
+          ; R.Positional right_table
           ; R.Named ("by", R.String key)
           ; R.Named ("na_matches", R.String "never")
           ]
@@ -331,61 +288,15 @@ let rec table d =
             [ R.Named
                 ( "relationship"
                 , R.String
-                    (match r with
-                     | One_to_one -> "one-to-one"
-                     | Many_to_one -> "many-to-one"
-                     | One_to_many -> "one-to-many"
-                     | Many_to_many -> "many-to-many") )
+                    (String.map
+                       (function
+                         | '_' -> '-'
+                         | c -> c)
+                       (C.relationship_name r)) )
             ] )
   in
-  lower ~fields:d.fields d.plan base
+  List.fold_left
+    (fun input (s : C.stage) -> R.pipe input (R.Located (s.at, step names s.step)))
+    base
+    t.stages
 ;;
-
-let compile ?strict ~directory declarations =
-  R.Verbatim Adapters.dplyr
-  :: List.map
-       (fun (d, output) ->
-          let t = table (Analysis_program.public_view d) in
-          R.Expression
-            (match (output : Analysis_program.output) with
-             | Write path -> R.pipe t (R.call "rp_write" [ R.String path ])
-             | Print -> R.call "print" [ R.call "as_tibble" [ t ] ]))
-       (Analysis_program.compile ?strict ~directory declarations)
-;;
-
-let preview ~runtime d ~offset ~limit =
-  let d = Analysis_program.public_view d in
-  let path = Filename.temp_file "rupam" ".parquet" in
-  let total =
-    Worker.evaluate
-      runtime
-      Runtime.R
-      (fst
-         (R.program
-            [ R.Verbatim Adapters.dplyr
-            ; R.Expression
-                (R.call
-                   "cat"
-                   [ R.call
-                       "rp_preview"
-                       [ table d
-                       ; R.Number (string_of_int offset)
-                       ; R.Number (string_of_int limit)
-                       ; R.String path
-                       ]
-                   ])
-            ]))
-  in
-  Fun.protect
-    ~finally:(fun () -> Sys.remove path)
-    (fun () -> Analysis_program.page d ~path ~total ~offset)
-;;
-
-let program ~strict ~directory declarations =
-  R.program
-    (if Analysis_program.tabular declarations
-     then compile ~strict ~directory declarations
-     else R_values.statements declarations)
-;;
-
-let table d = R.render (table d)

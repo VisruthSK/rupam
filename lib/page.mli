@@ -1,6 +1,6 @@
 type column =
   { name : string
-  ; typ : Shape.typ
+  ; typ : Types.t
   ; cells : string option array
   }
 
@@ -24,7 +24,7 @@ val read
   -> total:int
   -> ordered:bool
   -> offset:int
-  -> (string * Shape.typ) list
+  -> (string * Types.t) list
   -> t
 
 val lines : ?limit:int -> digits:int -> t -> (part * string) list list

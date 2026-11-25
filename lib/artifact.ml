@@ -45,7 +45,7 @@ let write_json path json =
     output_string channel (Yojson.Safe.pretty_to_string json ^ "\n"))
 ;;
 
-let write ~(entry : Lock.entry) ~program_sha256 ~locations ~output ~code declarations =
+let write ~(entry : Lock.entry) ~program_sha256 ~locations ~output ~code items =
   let dialect = entry.dialect in
   let extension = Runtime.suffix (Runtime.of_dialect dialect) in
   if not (Filename.check_suffix output extension)
@@ -68,13 +68,8 @@ let write ~(entry : Lock.entry) ~program_sha256 ~locations ~output ~code declara
     ; source = entry.source
     ; program_sha256
     ; inputs = entry.inputs
-    ; dependencies = dependencies dialect ~tabular:(Analysis_program.tabular declarations)
-    ; nonportable =
-        List.filter_map
-          (function
-            | Syntax.Import ("polars", _) -> Some "polars.sqrt"
-            | _ -> None)
-          declarations
+    ; dependencies = dependencies dialect ~tabular:(Core.tabular items)
+    ; nonportable = Host.nonportable items
     }
   in
   Out_channel.with_open_text output (fun channel -> output_string channel code);

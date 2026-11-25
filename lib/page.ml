@@ -1,6 +1,6 @@
 type column =
   { name : string
-  ; typ : Shape.typ
+  ; typ : Types.t
   ; cells : string option array
   }
 
@@ -19,13 +19,15 @@ type part =
   | Index
   | Note
 
-let cell (t : Shape.typ) = function
+let element (c : column) = Types.repr (Types.present c.typ)
+
+let cell t = function
   | None -> None
   | Some text ->
     Some
-      (match t.primitive with
+      (match Types.repr (Types.present t) with
        | Bool -> Display.bool (String.lowercase_ascii text = "true")
-       | Float64 | Int64 | String -> text)
+       | _ -> text)
 ;;
 
 let read ~path ~total ~ordered ~offset fields =
@@ -54,17 +56,17 @@ let lines ?(limit = 100) ~digits page =
     | [] -> 0
     | c :: _ -> Array.length c.cells
   in
-  let numeric (c : column) = c.typ.primitive = Int64 || c.typ.primitive = Float64 in
+  let numeric (c : column) = Types.numeric (element c) in
   let index = string_of_int (page.offset + shown) |> String.length in
   let rec fit first used = function
     | [] -> [], []
     | c :: rest as remaining ->
-      let minimum = max (width c.name) (width (Shape.type_name c.typ) + 2) in
+      let minimum = max (width c.name) (width (Types.display c.typ) + 2) in
       if (not first) && used + minimum + 2 > limit
       then [], remaining
       else (
         let c =
-          match c.typ.primitive with
+          match element c with
           | Float64 ->
             let format s = Printf.sprintf "%.*f" digits (float_of_string s) in
             { c with cells = Array.map (Option.map format) c.cells }
@@ -95,7 +97,7 @@ let lines ?(limit = 100) ~digits page =
       (separated
          (List.map
             (fun (c, size) ->
-               Types, pad (numeric c) size ("<" ^ Shape.type_name c.typ ^ ">"))
+               Types, pad (numeric c) size ("<" ^ Types.display c.typ ^ ">"))
             visible))
   in
   let body =
@@ -138,7 +140,7 @@ let lines ?(limit = 100) ~digits page =
           , "… and "
             ^ String.concat
                 ", "
-                (List.map (fun c -> c.name ^ " <" ^ Shape.type_name c.typ ^ ">") hidden) )
+                (List.map (fun c -> c.name ^ " <" ^ Types.display c.typ ^ ">") hidden) )
         ]
       ]
   in

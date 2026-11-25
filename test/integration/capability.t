@@ -24,6 +24,6 @@ as nonportable, and is rejected by other dialects.
   $ python -c "import json; print(json.load(open('sqrt.py.manifest.json'))['nonportable'])"
   ['polars.sqrt']
   $ rupam compile --no-strict --target r-dplyr sqrt.rp
-  sqrt.rp:5:1  dialect-capability
+  sqrt.rp:3:44  dialect-capability
     R target cannot execute the Python capability polars.sqrt
   [123]

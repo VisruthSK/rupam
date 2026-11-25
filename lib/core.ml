@@ -154,7 +154,8 @@ and step =
   | Take of int
   | Distinct of string list
   | Pivot_longer of
-      { columns : string list
+      { ids : string list
+      ; columns : string list
       ; names_to : string
       ; values_to : string
       }
@@ -213,14 +214,12 @@ let rec exists f e =
   ||
   let any = List.exists (exists f) in
   match e.node with
-  | Constant _ | Absent | Variable _ | Column _ | Count | Table _ -> false
-  | Builtin (_, xs) | Construct (_, xs) | Foreign (_, _, xs) | Tuple xs | List xs -> any xs
-  | Reduce (_, _, x)
-  | Unary (_, x)
-  | Convert x
-  | Require x
-  | Lambda (_, x)
-  | Field (x, _) -> exists f x
+  | Constant _ | Absent | Variable _ | Column _ | Count -> false
+  | Table t -> exists_table f t
+  | Builtin (_, xs) | Construct (_, xs) | Foreign (_, _, xs) | Tuple xs | List xs ->
+    any xs
+  | Reduce (_, _, x) | Unary (_, x) | Convert x | Require x | Lambda (_, x) | Field (x, _)
+    -> exists f x
   | Binary (_, a, b) | Coalesce (a, b) | Let (_, a, b) | Member (a, b) -> any [ a; b ]
   | If (a, b, c) -> any [ a; b; c ]
   | Lift (bound, body) -> any (body :: List.map snd bound)
@@ -235,6 +234,25 @@ let rec exists f e =
            | Shown (x, _) -> Some x
            | Fixed _ -> None)
          pieces)
+
+and exists_table f t =
+  (match t.source with
+   | Join j -> exists_table f j.left || exists_table f j.right
+   | Read _ | Load _ | Bound _ -> false)
+  || List.exists
+       (fun s ->
+          match s.step with
+          | Filter x | Mutate { value = x; _ } -> exists f x
+          | Summarize { measures; _ } -> List.exists (fun (_, x) -> exists f x) measures
+          | Arrange keys -> List.exists (fun (x, _) -> exists f x) keys
+          | Select _
+          | Rename _
+          | Take _
+          | Distinct _
+          | Pivot_longer _
+          | Pivot_wider _
+          | Assert_key _ -> false)
+       t.stages
 ;;
 
 let columns e =
@@ -277,4 +295,42 @@ let rec contracts table =
   | Load { contract; _ } -> [ contract.path ]
   | Read _ | Bound _ -> []
   | Join { left; right; _ } -> contracts left @ contracts right
+;;
+
+let rec substitute (id : id) (value : expr) (e : expr) : expr =
+  let go = substitute id value in
+  let node : node =
+    match e.node with
+    | Variable v when v.stamp = id.stamp -> value.node
+    | Builtin (r, xs) -> Builtin (r, List.map go xs)
+    | Unary (op, x) -> Unary (op, go x)
+    | Binary (op, a, b) -> Binary (op, go a, go b)
+    | Convert x -> Convert (go x)
+    | If (a, b, c) -> If (go a, go b, go c)
+    | Coalesce (a, b) -> Coalesce (go a, go b)
+    | Apply (f, xs) -> Apply (go f, List.map go xs)
+    | Text pieces ->
+      Text
+        (List.map
+           (function
+             | Shown (x, f) -> Shown (go x, f)
+             | p -> p)
+           pieces)
+    | node -> node
+  in
+  { e with node }
+;;
+
+let tabular items =
+  List.exists
+    (function
+      | Define (_, e) | Show e | Write (e, _) ->
+        exists
+          (fun e ->
+             match e.node with
+             | Table _ -> true
+             | _ -> false)
+          e
+      | Variant _ -> false)
+    items
 ;;

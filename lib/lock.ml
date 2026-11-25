@@ -83,42 +83,35 @@ let print_schemas entry =
     entry.schemas
 ;;
 
-let analysis ~(project : Project.t) ~source declarations =
+let tables items =
+  let found = ref [] in
+  List.iter
+    (function
+      | Core.Define (_, e) | Show e | Write (e, _) ->
+        ignore
+          (Core.exists
+             (fun e ->
+                (match e.node with
+                 | Table t -> found := t :: !found
+                 | _ -> ());
+                false)
+             e)
+      | Variant _ -> ())
+    items;
+  List.rev !found
+;;
+
+let analysis ~(project : Project.t) ~source items =
   let root = directory project source in
-  let env, outputs =
-    if Analysis_program.tabular declarations
-    then
-      Analysis_program.analyze
-        ~strict:project.strict.value
-        ~directory:(Filename.dirname source)
-        declarations
-    else [], []
-  in
-  let datasets =
-    List.filter_map
-      (function
-        | _, Analysis_program.Dataset d -> Some d
-        | _ -> None)
-      env
-    @ List.map fst outputs
-  in
-  let paths =
-    List.concat_map Analysis_program.sources datasets |> List.sort_uniq compare
-  in
+  let tables = tables items in
+  let unique f = List.concat_map f tables |> List.sort_uniq compare in
   let schemas =
-    List.concat_map Analysis_program.files datasets
-    |> List.sort_uniq compare
-    |> List.map (fun (file : Analysis_program.source) ->
+    unique Core.files
+    |> List.map (fun (file : Core.file) ->
       { path = relative root file.path
       ; columns =
-          List.map
-            (fun (name, t, nullable) ->
-               { name; type_ = (Shape.primitive_name t ^ if nullable then "?" else "") })
-            file.columns
+          List.map (fun (name, t) -> { name; type_ = Types.display t }) file.columns
       })
-  in
-  let contracts =
-    List.concat_map Analysis_program.contracts datasets |> List.sort_uniq compare
   in
   let entry =
     { source = relative root source
@@ -129,11 +122,11 @@ let analysis ~(project : Project.t) ~source declarations =
         List.map
           (fun path : input ->
              { path = relative root path; sha256 = Data_file.digest path })
-          paths
+          (unique Core.sources)
     ; schemas
     }
   in
-  root, entry, contracts
+  root, entry, unique Core.contracts
 ;;
 
 let write root entry =
@@ -145,8 +138,8 @@ let write root entry =
   save root (others @ [ entry ])
 ;;
 
-let establish ~project ~source declarations =
-  let root, entry, contracts = analysis ~project ~source declarations in
+let establish ~project ~source items =
+  let root, entry, contracts = analysis ~project ~source items in
   List.iter Contract.validate contracts;
   write root entry;
   entry
@@ -165,8 +158,8 @@ let differences locked current =
       current.inputs
 ;;
 
-let require ~project ~source declarations =
-  let root, current, contracts = analysis ~project ~source declarations in
+let require ~project ~source items =
+  let root, current, contracts = analysis ~project ~source items in
   match
     List.find_opt
       (fun e -> e.source = current.source && e.dialect = current.dialect)

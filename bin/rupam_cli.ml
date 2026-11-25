@@ -38,31 +38,32 @@ let targeted directory target strict action =
     action project)
 ;;
 
-let generate (project : Project.t) path ds =
-  Dialect.program
-    (Project.require_dialect project)
-    ~strict:project.strict.value
-    ~directory:(Filename.dirname path)
-    ds
+let elaborate (project : Project.t) path ds =
+  snd
+    (Elaborate.program
+       (Elaborate.empty ~directory:(Filename.dirname path) ~strict:project.strict.value)
+       ds)
+;;
+
+let generate (project : Project.t) items =
+  Dialect.script (Project.require_dialect project) items
 ;;
 
 let run target strict path =
   targeted (Filename.dirname path) target strict
   @@ fun project ->
   with_program path (fun ds ->
-    ignore (Lock.require ~project ~source:path ds);
+    let items = elaborate project path ds in
+    ignore (Lock.require ~project ~source:path items);
     let language = Runtime.of_dialect (Project.require_dialect project) in
-    Runtime.run
-      (Runtime.resolve project language)
-      language
-      (fst (generate project path ds)))
+    Runtime.run (Runtime.resolve project language) language (fst (generate project items)))
 ;;
 
 let lock target strict path =
   targeted (Filename.dirname path) target strict
   @@ fun project ->
   with_program path (fun ds ->
-    let entry = Lock.establish ~project ~source:path ds in
+    let entry = Lock.establish ~project ~source:path (elaborate project path ds) in
     Lock.print_schemas entry;
     Printf.printf
       "Locked %s for %s: %d input%s\n"
@@ -76,8 +77,9 @@ let compile target strict path output =
   targeted (Filename.dirname path) target strict
   @@ fun project ->
   with_program path (fun ds ->
-    let entry = Lock.require ~project ~source:path ds in
-    let code, locations = generate project path ds in
+    let items = elaborate project path ds in
+    let entry = Lock.require ~project ~source:path items in
+    let code, locations = generate project items in
     match output with
     | None -> print_string code
     | Some output ->
@@ -87,7 +89,13 @@ let compile target strict path output =
         ~locations
         ~output
         ~code
-        ds)
+        items)
+;;
+
+let check strict path =
+  guarded (fun () ->
+    let project = settings (Filename.dirname path) None strict in
+    with_program path (fun ds -> ignore (elaborate project path ds)))
 ;;
 
 let fmt path = with_program path (fun ds -> print_endline (Format.program ds))
@@ -147,6 +155,10 @@ let commands =
       "Validate a program's inputs and record them, with any inferred schemas, in        \
        rupam.lock."
       Term.(const lock $ target $ strict $ program)
+  ; command
+      "check"
+      "Parse and type-check a program without running it."
+      Term.(const check $ strict $ program)
   ; command "fmt" "Print a program in canonical form." Term.(const fmt $ program)
   ; command
       "compile"

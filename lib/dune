@@ -16,26 +16,24 @@
 (rule
  (target adapters.ml)
  (deps
-  runtime/polars.py
   runtime/numbers.R
   runtime/display.R
+  runtime/r.R
   runtime/dplyr.R
   runtime/python.py
-  runtime/r.R)
+  runtime/polars.py)
  (action
   (with-stdout-to
    %{target}
    (progn
-    (echo "let polars = {rupam|")
-    (cat runtime/polars.py)
-    (echo "|rupam}\n\nlet dplyr = {rupam|")
-    (cat runtime/numbers.R)
-    (cat runtime/display.R)
-    (cat runtime/dplyr.R)
-    (echo "|rupam}\n\nlet python = {rupam|")
-    (cat runtime/python.py)
-    (echo "|rupam}\n\nlet r = {rupam|")
+    (echo "let r = {rupam|")
     (cat runtime/numbers.R)
     (cat runtime/display.R)
     (cat runtime/r.R)
+    (echo "|rupam}\n\nlet dplyr = {rupam|")
+    (cat runtime/dplyr.R)
+    (echo "|rupam}\n\nlet python = {rupam|")
+    (cat runtime/python.py)
+    (echo "|rupam}\n\nlet polars = {rupam|")
+    (cat runtime/polars.py)
     (echo "|rupam}\n")))))

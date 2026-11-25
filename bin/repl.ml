@@ -32,7 +32,7 @@ let views =
 let help =
   [ ":type EXPR", "inferred type, without running anything"
   ; ":schema [TABLE]", "columns and types; every table when no name is given"
-  ; ":preview TABLE", "first rows, after contract validation"
+  ; ":preview TABLE", "first rows"
   ; ":explain TABLE", "plan from source to result"
   ; ":contract TABLE", "where a table's rows come from"
   ; ":validate TABLE", "run data-dict validation now"
@@ -133,153 +133,151 @@ let diagnostic buf f =
 ;;
 
 type session =
-  { scalar : Infer.env
-  ; history : Syntax.declaration list
-  ; tables : Analysis_program.environment
-  ; lexical : Check.env
+  { env : Elaborate.env
+  ; declarations : Syntax.declaration list
+  ; worker : Dialect.session option
   ; directory : string
   ; project : Project.t
   ; source_path : string option
-  ; definitions : Syntax.declaration list
   ; show : digits:int -> Page.t -> unit
   }
 
-let empty =
-  { scalar = Infer.empty
-  ; history = []
-  ; tables = []
-  ; lexical = []
+let fresh_env ~directory (project : Project.t) =
+  Elaborate.empty ~directory ~strict:project.strict.value
+;;
+
+let empty project =
+  { env = fresh_env ~directory:"." project
+  ; declarations = []
+  ; worker = None
   ; directory = "."
-  ; project = Project.standalone
+  ; project
   ; source_path = None
-  ; definitions = []
   ; show = (fun ~digits page -> List.iter print_endline (Page.plain ~digits page))
   }
 ;;
 
-let dataset state x =
-  Analysis_program.dataset ~directory:state.directory state.tables state.lexical x
+let runtime state =
+  let language = Runtime.of_dialect (Project.require_dialect state.project) in
+  Runtime.resolve state.project language, language
 ;;
 
-let preview state d =
-  let dialect = Project.require_dialect state.project in
-  let runtime = Runtime.resolve state.project (Runtime.of_dialect dialect) in
-  state.show
-    ~digits:state.project.preview_digits.value
-    (match dialect with
-     | dialect -> Dialect.preview dialect ~runtime d ~offset:0 ~limit:20)
+let execute state code =
+  let runtime, language = runtime state in
+  Worker.evaluate runtime language code
 ;;
 
-let compute state d =
-  let dialect = Project.require_dialect state.project in
-  let language = Runtime.of_dialect dialect in
-  let script =
-    match dialect with
-    | dialect -> Dialect.value dialect (state.definitions @ [ d ])
-  in
-  String.trim (Worker.evaluate (Runtime.resolve state.project language) language script)
+let worker state =
+  match state.worker with
+  | Some w -> state, w
+  | None ->
+    let dialect = Project.require_dialect state.project in
+    let state = { state with worker = Some (Dialect.session dialect) } in
+    ignore (execute state (Dialect.preamble dialect));
+    state, Option.get state.worker
 ;;
 
-let echo ?(announce = true) state d =
-  let scalar, t = Infer.declaration state.scalar d in
-  let state = { state with scalar } in
+let preview state (t : Core.table) =
+  let state, w = worker state in
+  let path = Filename.temp_file "rupam" ".parquet" in
+  Fun.protect
+    ~finally:(fun () -> if Sys.file_exists path then Sys.remove path)
+    (fun () ->
+       let total = execute state (Dialect.preview w t ~offset:0 ~limit:20 ~path) in
+       state.show
+         ~digits:state.project.preview_digits.value
+         (Page.read
+            ~path
+            ~total:(int_of_string (String.trim total))
+            ~ordered:(t.order <> None)
+            ~offset:0
+            t.schema));
+  state
+;;
+
+let print_schema state (t : Core.table) =
+  let width = List.fold_left (fun w (n, _) -> max w (String.length n)) 0 t.schema in
+  List.iter
+    (fun (n, typ) -> Printf.printf "%-*s  %s\n" width n (Types.display typ))
+    t.schema;
+  Printf.printf
+    "%d columns from %s\n"
+    (List.length t.schema)
+    (Elaborate.origin state.env t)
+;;
+
+let announce env (d : Syntax.declaration) =
   match d with
-  | Syntax.Evaluate _ ->
-    if announce then Printf.printf "%s : %s\n" (compute state d) (Infer.display t);
-    state
   | Let (name, _, _) ->
-    if announce then Printf.printf "%s : %s\n" name (Infer.display t);
-    { state with definitions = state.definitions @ [ d ] }
-  | Type _ | Alias _ -> { state with definitions = state.definitions @ [ d ] }
-  | Import _ | Contract _ | Setting _ -> state
+    (match Elaborate.lookup env name with
+     | Some (Table_value _) | None -> ()
+     | Some b ->
+       Option.iter (fun t -> Printf.printf "%s : %s\n" name t) (Elaborate.describe b))
+  | _ -> ()
 ;;
 
-let extend state ds =
-  let tables, lexical, _ =
-    Analysis_program.extend
-      ~strict:state.project.strict.value
-      ~directory:state.directory
-      state.tables
-      state.lexical
-      ds
-  in
-  { state with tables; lexical }
-;;
-
-let tabular state =
-  let table name =
-    match List.assoc_opt name state.tables with
-    | Some (Analysis_program.Dataset _ | Dictionary _) -> true
-    | Some (Function _) | None -> false
-  in
-  function
-  | Syntax.Contract _ | Import _ | Setting _ -> true
-  | Let (_, None, x) | Evaluate x -> Analysis_program.uses table x
-  | Let (_, Some _, _) | Alias _ | Type _ -> false
-;;
-
-let writes = function
-  | Syntax.Evaluate { form = Call ({ form = Name (Bare, "write_parquet"); _ }, _); _ } ->
-    true
+let observe state (d : Syntax.declaration) =
+  match d with
+  | Evaluate { form = Name (Bare, name); _ } ->
+    (match Elaborate.lookup state.env name with
+     | Some (Contract contract) ->
+       Contract.describe contract;
+       true
+     | Some (Function _ as f) ->
+       Option.iter (fun t -> Printf.printf "%s : %s\n" name t) (Elaborate.describe f);
+       true
+     | _ -> false)
+  | Evaluate { form = Field ({ form = Name (Bare, owner); _ }, name); _ } ->
+    (match Elaborate.lookup state.env owner with
+     | Some (Contract contract) ->
+       (match
+          List.find_opt (fun (t : Contract.table) -> t.name = name) contract.tables
+        with
+        | Some t ->
+          Contract.describe_table t;
+          true
+        | None -> false)
+     | _ -> false)
   | _ -> false
 ;;
 
-let observe state name =
-  match List.assoc_opt name state.tables with
-  | Some (Analysis_program.Dictionary contract) ->
-    Contract.describe contract;
-    true
-  | Some (Function (params, _, _, _)) ->
-    Printf.printf "%s : fn(%s)\n" name (String.concat ", " params);
-    true
-  | Some (Dataset _) | None -> false
-;;
-
-let declare ~announce state d =
-  let state = { state with history = state.history @ [ d ] } in
-  match d with
-  | Syntax.Evaluate { form = Field ({ form = Name (Bare, owner); _ }, name); _ }
-    when match List.assoc_opt owner state.tables with
-         | Some (Analysis_program.Dictionary contract) ->
-           List.exists (fun (t : Contract.table) -> t.name = name) contract.tables
-         | _ -> false ->
-    (match List.assoc owner state.tables with
-     | Analysis_program.Dictionary contract ->
-       Contract.describe_table
-         (List.find (fun (t : Contract.table) -> t.name = name) contract.tables)
-     | _ -> ());
-    state
-  | Syntax.Evaluate { form = Name (Bare, name); _ } when observe state name -> state
-  | Syntax.Let (name, Some params, _) ->
-    let state = extend state [ d ] in
-    (match echo ~announce state d with
-     | state -> state
-     | exception Diagnostic.Error _ ->
-       if announce then Printf.printf "%s : fn(%s)\n" name (String.concat ", " params);
-       state)
-  | d when Option.is_some (Analysis_program.printed d) ->
-    let x = Option.get (Analysis_program.printed d) in
-    if tabular state (Syntax.Evaluate x)
-    then (
-      preview state (dataset state x);
-      state)
-    else echo ~announce state (Syntax.Evaluate x)
-  | Evaluate x when tabular state d && not (writes d) ->
-    preview state (dataset state x);
-    state
-  | d when tabular state d -> extend state [ d ]
-  | Let (_, None, { form = Literal _; _ }) -> echo ~announce (extend state [ d ]) d
-  | d -> echo ~announce state d
+let declare ~announce:loud state d =
+  if loud && observe state d
+  then state
+  else (
+    let env, items = Elaborate.item state.env d in
+    let definitions =
+      List.filter
+        (function
+          | Core.Define _ | Write _ -> true
+          | Show _ | Variant _ -> false)
+        items
+    in
+    let state =
+      if definitions = []
+      then state
+      else (
+        let state, w = worker state in
+        print_string (execute state (Dialect.statements w definitions));
+        state)
+    in
+    let state = { state with env; declarations = state.declarations @ [ d ] } in
+    if loud then announce env d;
+    List.fold_left
+      (fun state (item : Core.item) ->
+         match item with
+         | Show { node = Table t; _ } -> if loud then preview state t else state
+         | Show e ->
+           let state, w = worker state in
+           let value = String.trim (execute state (Dialect.statements w [ item ])) in
+           if loud then Printf.printf "%s : %s\n" value (Types.display e.typ);
+           state
+         | Define _ | Write _ | Variant _ -> state)
+      state
+      items)
 ;;
 
 let submit ?(announce = true) state ds = List.fold_left (declare ~announce) state ds
-
-let user_values state =
-  let builtins = List.length Infer.empty.values in
-  List.filteri
-    (fun i _ -> i < List.length state.scalar.values - builtins)
-    state.scalar.values
-;;
 
 type suggestion =
   { text : string
@@ -289,7 +287,7 @@ type suggestion =
 let verbs =
   [ "filter", "condition, missing = skip | propagate | error", [ "missing" ]
   ; "select", "columns to keep, in order", []
-  ; "mutate", "name = value, ..., by = key", [ "by" ]
+  ; "mutate", "name = value, ..., by = key", [ "by"; "missing"; "group_missing" ]
   ; "rename", "new = old", []
   ; "summarize", "name = reduction, ..., by = key", [ "by"; "missing"; "group_missing" ]
   ; "arrange", "key, desc(key)", []
@@ -372,62 +370,66 @@ let trim_right s =
   String.sub s 0 (go (String.length s))
 ;;
 
-let ends_with_pipe s =
-  let s = trim_right s in
-  String.ends_with ~suffix:"|>" s
+let ends_with_pipe s = String.ends_with ~suffix:"|>" (trim_right s)
+
+let table state source =
+  match Frontend.parse (Lexing.from_string source) with
+  | [ (Syntax.Evaluate _ as d) ] ->
+    (match Elaborate.item state.env d with
+     | _, [ Show { node = Table t; _ } ] -> t
+     | _ -> Diagnostic.fail Not_a_table "Expected a table expression")
+  | _ -> Diagnostic.fail Not_a_table "Expected a table expression"
 ;;
 
 let piped state line pipe =
   let start = expression_start line (pipe - 1) in
-  let source = String.trim (String.sub line start (pipe - start)) in
-  match Frontend.parse (Lexing.from_string source) with
-  | [ Syntax.Evaluate x ] ->
-    (try Some (dataset state x) with
-     | _ -> None)
-  | _ -> None
+  match table state (String.trim (String.sub line start (pipe - start))) with
+  | t -> Some t
   | exception _ -> None
 ;;
 
-let columns (d : Analysis_program.dataset) =
+let columns (t : Core.table) =
+  List.map (fun (n, typ) -> { text = n; detail = Types.display typ }) t.schema
+;;
+
+let bindings state =
   List.map
-    (fun n -> { text = n; detail = Shape.type_name (List.assoc n d.plan.schema).typ })
-    (Table.names d.plan)
+    (fun (n, (b : Elaborate.binding), detail) ->
+       let detail =
+         match b with
+         | Table_value _ -> "table"
+         | _ -> detail
+       in
+       n, b, { text = n; detail })
+    (Elaborate.bindings state.env)
 ;;
 
 let functions state =
-  List.map
-    (fun (n, b) -> { text = n; detail = Infer.display (snd (Infer.signature b)) })
-    Prelude.all
+  List.map (fun (text, detail) -> { text; detail }) (Elaborate.builtins ())
   @ List.filter_map
-      (fun (n, b) ->
+      (fun (_, (b : Elaborate.binding), s) ->
          match b with
-         | Analysis_program.Function (ps, _, _, _) ->
-           Some { text = n; detail = "fn(" ^ String.concat ", " ps ^ ")" }
+         | Function _ -> Some s
          | _ -> None)
-      state.tables
+      (bindings state)
 ;;
 
 let values state =
   List.filter_map
-    (fun (n, b) ->
+    (fun (_, (b : Elaborate.binding), s) ->
        match b with
-       | Analysis_program.Dataset _ -> Some { text = n; detail = "table" }
-       | Dictionary _ -> Some { text = n; detail = "contract" }
-       | Function _ -> None)
-    state.tables
-  @ List.map
-      (fun (n, (_, t)) -> { text = n; detail = Infer.display t })
-      (user_values state)
+       | Function _ -> None
+       | _ -> Some s)
+    (bindings state)
 ;;
 
 let tables state =
   List.filter_map
-    (fun (n, b) ->
+    (fun (_, (b : Elaborate.binding), s) ->
        match b with
-       | Analysis_program.Dataset _ -> Some { text = n; detail = "table" }
-       | Dictionary _ -> Some { text = n; detail = "contract" }
-       | Function _ -> None)
-    state.tables
+       | Table_value _ | Contract _ -> Some s
+       | _ -> None)
+    (bindings state)
 ;;
 
 let dialects = List.map (fun (n, _) -> { text = n; detail = "dialect" }) Project.dialects
@@ -495,8 +497,8 @@ let complete state line =
       let owner =
         String.sub base (word_start base) (String.length base - word_start base)
       in
-      match List.assoc_opt owner state.tables with
-      | Some (Analysis_program.Dictionary contract) ->
+      match Elaborate.lookup state.env owner with
+      | Some (Contract contract) ->
         ( List.map
             (fun (t : Contract.table) -> { text = t.name; detail = "table" })
             contract.tables
@@ -506,9 +508,7 @@ let complete state line =
     else if ends_with_pipe (String.sub line 0 start)
     then
       ( List.map (fun (v, d, _) -> { text = v; detail = d }) verbs
-        @ List.filter
-            (fun s -> String.starts_with ~prefix:"fn" s.detail)
-            (functions state)
+        @ List.filter (fun s -> String.contains s.detail '>') (functions state)
       , start
       , word )
     else (
@@ -572,41 +572,33 @@ let evaluate state source =
     ~default:state
 ;;
 
-let table state source =
-  match Frontend.parse (Lexing.from_string source) with
-  | [ Syntax.Evaluate x ] -> dataset state x
-  | _ -> Diagnostic.fail Not_a_table "Expected a table expression"
-;;
-
-let schemas state =
-  List.iter
-    (fun (name, binding) ->
-       match binding with
-       | Analysis_program.Dataset d ->
-         print_endline name;
-         Analysis_program.schema d
-       | Dictionary contract -> Contract.describe contract
-       | Function _ -> ())
-    (List.rev state.tables)
-;;
-
-let reload state =
-  let history =
+let replay state =
+  let declarations =
     match state.source_path with
-    | None -> state.history
+    | None -> state.declarations
     | Some p ->
       In_channel.with_open_text p (fun ch -> Frontend.parse (Lexing.from_channel ch))
   in
   submit
     ~announce:false
     { state with
-      history = []
-    ; tables = []
-    ; lexical = []
-    ; scalar = Infer.empty
-    ; definitions = []
+      env = fresh_env ~directory:state.directory state.project
+    ; declarations = []
+    ; worker = None
     }
-    history
+    declarations
+;;
+
+let schemas state =
+  List.iter
+    (fun (name, (b : Elaborate.binding), _) ->
+       match b with
+       | Table_value { table; _ } ->
+         print_endline name;
+         print_schema state table
+       | Contract contract -> Contract.describe contract
+       | _ -> ())
+    (bindings state)
 ;;
 
 let dispatch state = function
@@ -627,20 +619,33 @@ let dispatch state = function
          "No dialect yet. Choose one with :target r-dplyr or :target python-polars.");
     Some state
   | Target (Some dialect) ->
-    Some
+    let state =
       { state with
         project =
           { state.project with
             dialect = { value = Some dialect; origin = Session ":target" }
           }
       }
+    in
+    Some
+      (if state.declarations = []
+       then { state with worker = None }
+       else
+         Result.value
+           (diagnostic (Lexing.from_string "") (fun () -> replay state))
+           ~default:{ state with worker = None })
   | Lock ->
     (match state.source_path with
      | None -> report "No file loaded. Start the REPL with a program to lock it."
      | Some source ->
        ignore
          (diagnostic (Lexing.from_string "") (fun () ->
-            let entry = Lock.establish ~project:state.project ~source state.history in
+            let _, items =
+              Elaborate.program
+                (fresh_env ~directory:state.directory state.project)
+                state.declarations
+            in
+            let entry = Lock.establish ~project:state.project ~source items in
             Lock.print_schemas entry;
             Printf.printf
               "Locked %s for %s\n"
@@ -650,64 +655,74 @@ let dispatch state = function
   | Reload ->
     Some
       (Result.value
-         (diagnostic (Lexing.from_string "") (fun () -> reload state))
+         (diagnostic (Lexing.from_string "") (fun () -> replay state))
          ~default:state)
   | Bindings ->
     List.iter
-      (fun (name, b) ->
-         Printf.printf
-           "%s : %s\n"
-           name
-           (match b with
-            | Analysis_program.Dataset _ -> "Table"
-            | Dictionary _ -> "Contract"
-            | Function _ -> "function"))
-      (List.rev state.tables);
-    List.iter
-      (fun (name, (_, t)) -> Printf.printf "%s : %s\n" name (Infer.display t))
-      (List.rev (user_values state));
+      (fun (name, _, s) -> Printf.printf "%s : %s\n" name s.detail)
+      (bindings state);
     Some state
   | Type source ->
     let buf = Lexing.from_string source in
     ignore
       (diagnostic buf (fun () ->
          match Frontend.parse buf with
-         | [ (Syntax.Evaluate x as d) ] when tabular state d ->
-           Analysis_program.schema (dataset state x)
-         | [ Syntax.Evaluate x ] ->
-           print_endline (Infer.display (Infer.expression state.scalar 1 x))
+         | [ (Syntax.Evaluate _ as d) ] ->
+           (match Elaborate.item state.env d with
+            | _, [ Show { node = Table t; _ } ] -> print_schema state t
+            | _, [ Show e ] -> print_endline (Types.display e.typ)
+            | _ -> ())
          | _ -> Diagnostic.fail Wrong_arguments "Expected one expression"));
     Some state
   | Code (chosen, source) ->
     ignore
       (diagnostic (Lexing.from_string source) (fun () ->
-         let d = table state source in
-         print_endline
-           (match
-              Option.value chosen ~default:(Project.require_dialect state.project)
-            with
-            | dialect -> Dialect.table dialect d)));
+         let dialect =
+           Option.value chosen ~default:(Project.require_dialect state.project)
+         in
+         let session =
+           match state.worker with
+           | Some w when w.dialect = dialect -> w
+           | _ -> Dialect.session dialect
+         in
+         print_endline (Dialect.table session (table state source))));
     Some state
   | View (Schema, "") ->
     schemas state;
     Some state
-  | View (Schema, name) when List.mem_assoc name state.tables ->
-    (match List.assoc name state.tables with
-     | Analysis_program.Dictionary contract -> Contract.describe contract
-     | Dataset d -> Analysis_program.schema d
-     | Function _ -> report (name ^ " is a function, not a table"));
-    Some state
   | View (view, source) ->
-    ignore
-      (diagnostic (Lexing.from_string source) (fun () ->
-         let d = table state source in
-         match view with
-         | Schema -> Analysis_program.schema d
-         | Contract -> print_endline (Analysis_program.origin d)
-         | Validate -> Analysis_program.validate d
-         | Explain -> Analysis_program.explain d
-         | Preview -> preview state d));
-    Some state
+    Some
+      (Result.value
+         (diagnostic (Lexing.from_string source) (fun () ->
+            match view, Elaborate.lookup state.env source with
+            | Schema, Some (Contract contract) ->
+              Contract.describe contract;
+              state
+            | (Schema | Contract), Some (Table_value { table; _ }) ->
+              if view = Schema
+              then print_schema state table
+              else print_endline (Elaborate.origin state.env table);
+              state
+            | _ ->
+              let t = table state source in
+              (match view with
+               | Schema ->
+                 print_schema state t;
+                 state
+               | Contract ->
+                 print_endline (Elaborate.origin state.env t);
+                 state
+               | Validate ->
+                 List.iter Contract.validate (List.sort_uniq compare (Core.contracts t));
+                 print_endline "The data matches its contract";
+                 state
+               | Explain ->
+                 List.iteri
+                   (fun i s -> Printf.printf "%2d  %s\n" (i + 1) s)
+                   (Elaborate.explain t);
+                 state
+               | Preview -> preview state t)))
+         ~default:state)
   | Source "" -> Some state
   | Source source -> Some (evaluate state source)
 ;;
@@ -723,16 +738,21 @@ let run state command =
 ;;
 
 let open_session ~project ?path () =
-  let session = { empty with project } in
+  let session = empty project in
   match path with
   | None -> Some session
   | Some path ->
     let buf = Lexing.from_string (In_channel.with_open_text path In_channel.input_all) in
     Lexing.set_filename buf path;
+    let directory = Filename.dirname path in
     diagnostic buf (fun () ->
       submit
         ~announce:false
-        { session with directory = Filename.dirname path; source_path = Some path }
+        { session with
+          directory
+        ; source_path = Some path
+        ; env = fresh_env ~directory project
+        }
         (Frontend.parse buf))
     |> Result.to_option
 ;;

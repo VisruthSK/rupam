@@ -6,7 +6,7 @@ type format =
   | Tsv
 
 type physical =
-  | Supported of Shape.primitive
+  | Supported of Types.t
   | Unsupported of string
 
 type column =
@@ -78,10 +78,10 @@ let columns path =
        ^ reader path)
   in
   let typ = function
-    | "BIGINT" | "INTEGER" -> Supported Shape.Int64
-    | "DOUBLE" -> Supported Float64
-    | "BOOLEAN" -> Supported Bool
-    | "VARCHAR" -> Supported String
+    | "BIGINT" | "INTEGER" -> Supported Types.Int64
+    | "DOUBLE" -> Supported Types.Float64
+    | "BOOLEAN" -> Supported Types.Bool
+    | "VARCHAR" -> Supported Types.String
     | other -> Unsupported other
   in
   List.mapi

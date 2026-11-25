@@ -97,7 +97,7 @@ let binary e (op : Syntax.binary) a b =
   | Mul, Int a, Int b -> checked e (fun () -> Int (Integer.mul a b))
   | Mod, Int a, Int b ->
     let r = Int64.rem a b in
-    Int (if r <> 0L && (r < 0L) <> (b < 0L) then Int64.add r b else r)
+    Int (if r <> 0L && r < 0L <> (b < 0L) then Int64.add r b else r)
   | Add, a, b -> checked e (fun () -> Float (number a +. number b))
   | Sub, a, b -> checked e (fun () -> Float (number a -. number b))
   | Mul, a, b -> checked e (fun () -> Float (number a *. number b))
@@ -127,7 +127,8 @@ let builtin e (row : Prelude.row) args =
   | _, args when List.mem Missing args -> Missing
   | Abs, [ Int i ] -> checked e (fun () -> Int (if i < 0L then Integer.sub 0L i else i))
   | Abs, [ v ] -> Float (Float.abs (number v))
-  | Sign, [ v ] -> Int (Int64.of_float (Float.copy_sign (if number v = 0. then 0. else 1.) (number v)))
+  | Sign, [ v ] ->
+    Int (Int64.of_float (Float.copy_sign (if number v = 0. then 0. else 1.) (number v)))
   | Sqrt, [ v ] -> checked e (fun () -> Float (sqrt (number v)))
   | Exp, [ v ] -> checked e (fun () -> Float (exp (number v)))
   | Log, [ v ] -> checked e (fun () -> Float (log (number v)))
@@ -206,7 +207,9 @@ let rec matches env (p : C.pattern) v =
   | Present p, v -> matches env p v
   | Equals c, v -> if compare_values (constant c) v = 0 then Some env else None
   | Between (low, high, inclusive), v when v <> Missing ->
-    let above = Option.fold ~none:true ~some:(fun l -> compare_values v (constant l) >= 0) low in
+    let above =
+      Option.fold ~none:true ~some:(fun l -> compare_values v (constant l) >= 0) low
+    in
     let below =
       Option.fold
         ~none:true
@@ -264,7 +267,11 @@ let rec eval env ?rows (e : C.expr) =
   | Reduce (r, policy, x) ->
     (match rows with
      | Some ({ group; _ } as at) ->
-       aggregate e r policy (Array.map (fun row -> eval env ~rows:{ at with row } x) group)
+       aggregate
+         e
+         r
+         policy
+         (Array.map (fun row -> eval env ~rows:{ at with row } x) group)
      | None -> invalid_arg "A reduction outside a table")
   | Builtin (row, xs) -> builtin e row (List.map here xs)
   | Unary (op, x) ->
@@ -300,8 +307,7 @@ let rec eval env ?rows (e : C.expr) =
      | v -> v)
   | Require x ->
     (match here x with
-     | Missing ->
-       fail e Missing_under_error "A condition is missing and missing = error"
+     | Missing -> fail e Missing_under_error "A condition is missing and missing = error"
      | v -> v)
   | Match (x, arms) ->
     let v = here x in
@@ -333,7 +339,8 @@ let rec eval env ?rows (e : C.expr) =
      | v, List items -> Bool (List.exists (fun i -> compare_values i v = 0) items)
      | _ -> invalid_arg "Expected a list")
   | Foreign (_, "sqrt", [ x ]) -> builtin e Sqrt [ here x ]
-  | Foreign (m, f, _) -> fail e Dialect_capability (m ^ "." ^ f ^ " has no reference semantics")
+  | Foreign (m, f, _) ->
+    fail e Dialect_capability (m ^ "." ^ f ^ " has no reference semantics")
   | Text pieces ->
     let parts =
       List.map
@@ -348,7 +355,9 @@ let rec eval env ?rows (e : C.expr) =
              | v -> Some (display v)))
         pieces
     in
-    if List.mem None parts then Missing else Text (String.concat "" (List.filter_map Fun.id parts))
+    if List.mem None parts
+    then Missing
+    else Text (String.concat "" (List.filter_map Fun.id parts))
   | Table t -> Frame (table env t)
 
 and apply e f args =
@@ -402,9 +411,7 @@ and read (file : C.file) =
   ; columns =
       List.map
         (fun (n, typ) ->
-           let i =
-             Option.get (Array.find_index (String.equal n) names)
-           in
+           let i = Option.get (Array.find_index (String.equal n) names) in
            n, Array.map (fun row -> parse typ row.(i)) rows)
         file.columns
   }
@@ -418,7 +425,10 @@ and join env (j : C.join) =
   let matches i =
     if lk.(i) = Missing
     then []
-    else List.filter (fun k -> rk.(k) <> Missing && compare_values rk.(k) lk.(i) = 0) (List.init right.rows Fun.id)
+    else
+      List.filter
+        (fun k -> rk.(k) <> Missing && compare_values rk.(k) lk.(i) = 0)
+        (List.init right.rows Fun.id)
   in
   let pairs =
     List.concat_map
@@ -436,7 +446,9 @@ and join env (j : C.join) =
     | Right | Full ->
       List.filter_map
         (fun k ->
-           if List.exists (fun (_, r) -> r = Some k) pairs then None else Some (None, Some k))
+           if List.exists (fun (_, r) -> r = Some k) pairs
+           then None
+           else Some (None, Some k))
         (List.init right.rows Fun.id)
     | _ -> []
   in
@@ -454,10 +466,13 @@ and join env (j : C.join) =
       (fun (n, _) ->
          if n = j.key
          then
-           n, Array.map (function
-             | Some i, _ -> lk.(i)
-             | None, Some k -> rk.(k)
-             | None, None -> Missing) pairs
+           ( n
+           , Array.map
+               (function
+                 | Some i, _ -> lk.(i)
+                 | None, Some k -> rk.(k)
+                 | None, None -> Missing)
+               pairs )
          else n, pick left fst n)
       j.left.schema
     @
@@ -477,7 +492,8 @@ and stage env frame (step : C.step) =
   in
   let subset indices =
     { rows = Array.length indices
-    ; columns = List.map (fun (n, vs) -> n, Array.map (Array.get vs) indices) frame.columns
+    ; columns =
+        List.map (fun (n, vs) -> n, Array.map (Array.get vs) indices) frame.columns
     }
   in
   let groups keys =
@@ -492,10 +508,14 @@ and stage env frame (step : C.step) =
            order := key :: !order;
            Hashtbl.replace table key [ i ])
       all;
-    List.rev_map (fun key -> key, Array.of_list (List.rev (Hashtbl.find table key))) !order
+    List.rev_map
+      (fun key -> key, Array.of_list (List.rev (Hashtbl.find table key)))
+      !order
   in
   match step with
-  | Filter x -> subset (Array.of_seq (Seq.filter (fun i -> (column x).(i) = Bool true) (Array.to_seq all)))
+  | Filter x ->
+    subset
+      (Array.of_seq (Seq.filter (fun i -> (column x).(i) = Bool true) (Array.to_seq all)))
   | Mutate { name; value; by } ->
     let out = Array.make frame.rows Missing in
     let groups = if by = [] then [ [], all ] else groups by in
@@ -509,7 +529,8 @@ and stage env frame (step : C.step) =
       else frame.columns @ [ name, out ]
     in
     { frame with columns }
-  | Select names -> { frame with columns = List.map (fun n -> n, List.assoc n frame.columns) names }
+  | Select names ->
+    { frame with columns = List.map (fun n -> n, List.assoc n frame.columns) names }
   | Rename changes ->
     { frame with
       columns =
@@ -522,12 +543,27 @@ and stage env frame (step : C.step) =
     }
   | Summarize { by; measures } ->
     let groups = if by = [] then [ [], all ] else groups by in
-    let keyed = List.mapi (fun k n -> n, Array.of_list (List.map (fun (key, _) -> List.nth key k) groups)) by in
+    let keyed =
+      List.mapi
+        (fun k n -> n, Array.of_list (List.map (fun (key, _) -> List.nth key k) groups))
+        by
+    in
     let measured =
       List.map
         (fun (n, x) ->
-           n, Array.of_list (List.map (fun (_, group) ->
-             eval env ~rows:{ frame; group; row = (if Array.length group = 0 then 0 else group.(0)) } x) groups))
+           ( n
+           , Array.of_list
+               (List.map
+                  (fun (_, group) ->
+                     eval
+                       env
+                       ~rows:
+                         { frame
+                         ; group
+                         ; row = (if Array.length group = 0 then 0 else group.(0))
+                         }
+                       x)
+                  groups) ))
         measures
     in
     { rows = List.length groups; columns = keyed @ measured }
@@ -545,25 +581,33 @@ and stage env frame (step : C.step) =
                 | Missing, Missing -> 0
                 | Missing, _ -> 1
                 | _, Missing -> -1
-                | a, b -> if d = C.Descending then compare_values b a else compare_values a b))
+                | a, b ->
+                  if d = C.Descending then compare_values b a else compare_values a b))
            0
            keys)
       order;
     subset order
   | Take n -> subset (Array.sub all 0 (min n frame.rows))
   | Distinct names ->
-    let selected = { frame with columns = List.map (fun n -> n, List.assoc n frame.columns) names } in
+    let selected =
+      { frame with columns = List.map (fun n -> n, List.assoc n frame.columns) names }
+    in
     let seen = Hashtbl.create 16 in
     let keep =
       Array.of_seq
         (Seq.filter
            (fun i ->
               let key = List.map (fun (_, vs) -> vs.(i)) selected.columns in
-              if Hashtbl.mem seen key then false else (Hashtbl.add seen key (); true))
+              if Hashtbl.mem seen key
+              then false
+              else (
+                Hashtbl.add seen key ();
+                true))
            (Array.to_seq all))
     in
     { rows = Array.length keep
-    ; columns = List.map (fun (n, vs) -> n, Array.map (Array.get vs) keep) selected.columns
+    ; columns =
+        List.map (fun (n, vs) -> n, Array.map (Array.get vs) keep) selected.columns
     }
   | Assert_key names ->
     let seen = Hashtbl.create 16 in
@@ -578,8 +622,8 @@ and stage env frame (step : C.step) =
          Hashtbl.add seen key ())
       all;
     frame
-  | Pivot_longer { columns; names_to; values_to } ->
-    let ids = List.filter (fun (n, _) -> not (List.mem n columns)) frame.columns in
+  | Pivot_longer { ids; columns; names_to; values_to } ->
+    let ids = List.map (fun n -> n, List.assoc n frame.columns) ids in
     let width = List.length columns in
     let rows = frame.rows * width in
     let at i = i / width
@@ -588,7 +632,8 @@ and stage env frame (step : C.step) =
     ; columns =
         List.map (fun (n, vs) -> n, Array.init rows (fun i -> vs.(at i))) ids
         @ [ names_to, Array.init rows (fun i -> Text (which i))
-          ; values_to, Array.init rows (fun i -> (List.assoc (which i) frame.columns).(at i))
+          ; ( values_to
+            , Array.init rows (fun i -> (List.assoc (which i) frame.columns).(at i)) )
           ]
     }
   | Pivot_wider { ids; names_from; values_from; levels } ->
@@ -596,9 +641,7 @@ and stage env frame (step : C.step) =
     let names = List.assoc names_from frame.columns
     and values = List.assoc values_from frame.columns in
     let cell group level =
-      match
-        List.filter (fun i -> names.(i) = Text level) (Array.to_list group)
-      with
+      match List.filter (fun i -> names.(i) = Text level) (Array.to_list group) with
       | [] -> Missing
       | [ i ] -> values.(i)
       | _ -> Diagnostic.fail Duplicate_pivot_cell "Two rows produce the same pivot cell"
@@ -611,8 +654,12 @@ and stage env frame (step : C.step) =
       all;
     { rows = List.length groups
     ; columns =
-        List.mapi (fun k n -> n, Array.of_list (List.map (fun (key, _) -> List.nth key k) groups)) ids
-        @ List.map (fun l -> l, Array.of_list (List.map (fun (_, g) -> cell g l) groups)) levels
+        List.mapi
+          (fun k n -> n, Array.of_list (List.map (fun (key, _) -> List.nth key k) groups))
+          ids
+        @ List.map
+            (fun l -> l, Array.of_list (List.map (fun (_, g) -> cell g l) groups))
+            levels
     }
 ;;
 

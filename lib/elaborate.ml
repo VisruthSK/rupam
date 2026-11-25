@@ -66,13 +66,6 @@ let fresh_id name =
 ;;
 
 let fail span code message = Diagnostic.fail ~span code message
-
-let primitive : Shape.primitive -> T.t = function
-  | Int64 -> Int64
-  | Float64 -> Float64
-  | Bool -> Bool
-  | String -> String
-;;
 let bind env name binding = { env with names = (name, binding) :: env.names }
 
 let expect span expected actual =
@@ -89,7 +82,9 @@ let make span shape typ node = { C.node; typ; shape; span }
 let align span a b =
   match a, b with
   | C.Scalar, s | s, C.Scalar -> s
-  | Columnar, Columnar -> ignore span; C.Columnar
+  | Columnar, Columnar ->
+    ignore span;
+    C.Columnar
 ;;
 
 let shape_of span xs =
@@ -116,7 +111,9 @@ let column level span row name =
     fail
       span
       Unknown_column
-      ("No column named " ^ name ^ did_you_mean (closest name (List.map fst (T.known row))))
+      ("No column named "
+       ^ name
+       ^ did_you_mean (closest name (List.map fst (T.known row))))
 ;;
 
 let exact_float span s =
@@ -146,7 +143,9 @@ let to_float (x : C.expr) =
     x
   | Int64, Constant (Int i) ->
     { x with node = Constant (Float (exact_float x.span (Int64.to_string i))); typ }
-  | Int64, _ -> { x with node = Convert x; typ }
+  | (Int64 | Var _), _ ->
+    expect x.span (T.fresh ~kind:Number max_int) (T.present x.typ);
+    { x with node = Convert x; typ }
   | _ ->
     expect x.span T.Float64 (T.present x.typ);
     x
@@ -176,18 +175,13 @@ let lift span shape operands build =
            if T.is_optional x.typ
            then (
              let id = fresh_id "v" in
-             ( Some (id, x)
-             , make x.span x.shape (T.present x.typ) (C.Variable id) ))
+             Some (id, x), make x.span x.shape (T.present x.typ) (C.Variable id))
            else None, x)
         operands
       |> List.split
     in
     let body : C.expr = build values in
-    make
-      span
-      shape
-      (T.optional body.typ)
-      (Lift (List.filter_map Fun.id bound, body)))
+    make span shape (T.optional body.typ) (Lift (List.filter_map Fun.id bound, body)))
 ;;
 
 let row_signature level (row : Prelude.row) =
@@ -386,7 +380,9 @@ let uncovered env level subject (arms : Syntax.arm list) =
            cases)
   in
   let unguarded = List.filter (fun (arm : Syntax.arm) -> arm.guard = None) arms in
-  match missing [ subject ] (List.map (fun (arm : Syntax.arm) -> [ arm.pattern ]) unguarded) with
+  match
+    missing [ subject ] (List.map (fun (arm : Syntax.arm) -> [ arm.pattern ]) unguarded)
+  with
   | Some [ p ] -> Some p
   | _ -> None
 ;;
@@ -430,8 +426,7 @@ let rec expr ctx (x : Syntax.expr) : C.expr =
   | Call ({ form = Field ({ form = Name (Bare, m); _ }, f); _ }, args)
     when match List.assoc_opt m ctx.env.names with
          | Some (Module _) -> true
-         | _ -> false ->
-    foreign ctx span m f args
+         | _ -> false -> foreign ctx span m f args
   | Call (f, args) -> call ctx span f args
   | Pipe (v, { form = Call (f, args); _ }) -> call ctx span f ((None, v) :: args)
   | Pipe (v, f) -> call ctx span f [ None, v ]
@@ -456,10 +451,7 @@ let rec expr ctx (x : Syntax.expr) : C.expr =
     expect c.span T.Bool c.typ;
     let a, b, t = common span (here a) (here b) in
     let optional = T.is_optional a.typ || T.is_optional b.typ in
-    make
-      (shape_of span [ c; a; b ])
-      (if optional then T.optional t else t)
-      (If (c, a, b))
+    make (shape_of span [ c; a; b ]) (if optional then T.optional t else t) (If (c, a, b))
   | Member (v, set) ->
     let v = here v
     and set = here set in
@@ -542,7 +534,8 @@ and name ctx span reference n =
   let as_column t = make Columnar t (C.Column n) in
   let lexical () =
     match List.assoc_opt n ctx.env.names with
-    | Some (Value { id; scheme }) -> Some (make Scalar (T.instantiate ctx.level scheme) (Variable id))
+    | Some (Value { id; scheme }) ->
+      Some (make Scalar (T.instantiate ctx.level scheme) (Variable id))
     | Some (Inline v) -> Some v
     | Some (Table_value { id; table }) ->
       Some
@@ -576,7 +569,10 @@ and name ctx span reference n =
   | (Bare | Lexical), _ ->
     (match lexical (), ctx.columns with
      | Some v, _ -> v
-     | None, Some row when reference = Bare && Option.is_none (Prelude.find n) && Option.is_some (T.field ctx.level row n) ->
+     | None, Some row
+       when reference = Bare
+            && Option.is_none (Prelude.find n)
+            && Option.is_some (T.field ctx.level row n) ->
        as_column (Option.get (T.field ctx.level row n))
      | None, _ ->
        (match Prelude.find n with
@@ -591,31 +587,33 @@ and name ctx span reference n =
 
 and binary ctx span op a b =
   let make = make span in
-  let a, b, t = common span a b in
-  let shape = shape_of span [ a; b ] in
-  let result =
+  let number t = expect span (T.fresh ~kind:Number ctx.level) t in
+  let a, b, result =
     match op with
-    | And | Or ->
-      expect span T.Bool t;
-      T.Bool
-    | Equal | Not_equal -> T.Bool
-    | Less | Greater | Less_equal | Greater_equal ->
-      (match T.repr t with
-       | String -> ()
-       | _ -> expect span (T.fresh ~kind:Number ctx.level) t);
-      T.Bool
-    | Add | Sub | Mul | Mod ->
-      expect span (T.fresh ~kind:Number ctx.level) t;
-      t
     | Div | Power ->
-      expect span (T.fresh ~kind:Number ctx.level) t;
-      T.Float64
+      number (T.present a.typ);
+      number (T.present b.typ);
+      to_float a, to_float b, T.Float64
+    | _ ->
+      let a, b, t = common span a b in
+      ( a
+      , b
+      , (match op with
+         | And | Or ->
+           expect span T.Bool t;
+           T.Bool
+         | Equal | Not_equal -> T.Bool
+         | Less | Greater | Less_equal | Greater_equal ->
+           (match T.repr t with
+            | String -> ()
+            | _ -> number t);
+           T.Bool
+         | Add | Sub | Mul | Mod ->
+           number t;
+           t
+         | Div | Power -> assert false) )
   in
-  let a, b =
-    match op with
-    | Div | Power -> to_float a, to_float b
-    | _ -> a, b
-  in
+  let shape = shape_of span [ a; b ] in
   lift span shape [ a; b ] (function
     | [ a; b ] -> make shape result (Binary (op, a, b))
     | _ -> assert false)
@@ -640,7 +638,8 @@ and call ctx span (f : Syntax.expr) args =
   match f.form with
   | Name (Bare, n) when List.mem_assoc n Core.join_kinds || Verbs.mem n ->
     (match args with
-     | (None, input) :: rest -> make Scalar (T.fresh ctx.level) (verb ctx span n input rest)
+     | (None, input) :: rest ->
+       make Scalar (T.fresh ctx.level) (verb ctx span n input rest)
      | _ -> fail span Wrong_arguments (n ^ " needs a table"))
     |> fun e -> retype_table e
   | Name (Bare, ("read_csv" | "read_tsv" | "read_parquet" | "load")) ->
@@ -677,7 +676,11 @@ and call ctx span (f : Syntax.expr) args =
        in
        (match inline, id, scheme with
         | false, Some id, Some scheme ->
-          apply ctx span (make Scalar (T.instantiate ctx.level scheme) (Variable id)) values
+          apply
+            ctx
+            span
+            (make Scalar (T.instantiate ctx.level scheme) (Variable id))
+            values
         | _ ->
           let closure = template.closure in
           let env =
@@ -695,7 +698,13 @@ and call ctx span (f : Syntax.expr) args =
                | Some p -> Some (policy_of p)
                | None -> ctx.missing)
           in
-          expr { ctx with env; missing; columns = Option.map (fun _ -> T.closed []) ctx.columns } template.body)
+          expr
+            { ctx with
+              env
+            ; missing
+            ; columns = Option.map (fun _ -> T.closed []) ctx.columns
+            }
+            template.body)
      | Some (Constructor { scheme; arity }) ->
        let values = List.map (fun (_, a) -> expr ctx a) args in
        if List.length values <> arity
@@ -706,7 +715,8 @@ and call ctx span (f : Syntax.expr) args =
           make (shape_of span values) result (Construct (n, values))
         | t -> make Scalar t (Construct (n, [])))
      | _ -> apply ctx span (expr ctx f) (List.map (fun (_, a) -> expr ctx a) args))
-  | Lambda (params, body) when List.length params = List.length args && ctx.columns <> None ->
+  | Lambda (params, body)
+    when List.length params = List.length args && ctx.columns <> None ->
     let env =
       List.fold_left2
         (fun env p (_, a) -> bind env p (Inline (expr ctx a)))
@@ -748,7 +758,10 @@ and apply ctx span (f : C.expr) values =
         (T.optional result)
         (Lift (List.filter_map Fun.id bound, make Scalar result (Apply (f, args)))))
     else
-      make shape (if List.mem true lifted then T.optional result else result) (Apply (f, values))
+      make
+        shape
+        (if List.mem true lifted then T.optional result else result)
+        (Apply (f, values))
   | Arrow (params, _) ->
     fail
       span
@@ -857,9 +870,10 @@ and interpolate ctx span pieces =
           (match T.repr element, format with
            | (Int64 | Float64), _ | Var _, None | (Bool | String), None -> ()
            | Var _, Some _ -> expect span (T.fresh ~kind:Number ctx.level) element
-           | String, Some f when not (String.exists (fun c -> String.contains "dfeg%" c) f)
-             -> ()
-           | _, Some _ -> fail v.span Type_mismatch "A format spec like :.2f applies to numbers"
+           | String, Some f
+             when not (String.exists (fun c -> String.contains "dfeg%" c) f) -> ()
+           | _, Some _ ->
+             fail v.span Type_mismatch "A format spec like :.2f applies to numbers"
            | t, None ->
              fail
                v.span
@@ -1005,7 +1019,10 @@ and match_ ctx span (subject : C.expr) syntax_arms =
   in
   (match uncovered ctx.env ctx.level subject.typ syntax_arms with
    | Some p ->
-     fail span Nonexhaustive_match ("Non-exhaustive match. Missing case " ^ Format.pattern p)
+     fail
+       span
+       Nonexhaustive_match
+       ("Non-exhaustive match. Missing case " ^ Format.pattern p)
    | None -> ());
   let optional = List.exists (fun (a : C.arm) -> T.is_optional a.body.typ) arms in
   let typ = if optional then T.optional result else result in
@@ -1016,7 +1033,11 @@ and match_ ctx span (subject : C.expr) syntax_arms =
 
 and decide _ctx span subject arms typ shape =
   let known (e : C.expr) =
-    make e.span e.shape T.Bool (Coalesce (e, make e.span Scalar T.Bool (Constant (Bool false))))
+    make
+      e.span
+      e.shape
+      T.Bool
+      (Coalesce (e, make e.span Scalar T.Bool (Constant (Bool false))))
   in
   let both a b =
     match a, b with
@@ -1041,7 +1062,10 @@ and decide _ctx span subject arms typ shape =
     | C.Wildcard | Bind _ | Fields _ -> None
     | Named (_, p) -> test p
     | Missing -> Some (make span subject.shape T.Bool (Builtin (Absent, [ subject ])))
-    | Present p -> both (Some (make span subject.shape T.Bool (Builtin (Present, [ subject ])))) (test p)
+    | Present p ->
+      both
+        (Some (make span subject.shape T.Bool (Builtin (Present, [ subject ]))))
+        (test p)
     | Equals c -> Some (compare Equal c)
     | Between (low, high, inclusive) ->
       both
@@ -1056,12 +1080,16 @@ and decide _ctx span subject arms typ shape =
         | t :: rest ->
           Some
             (List.fold_left
-               (fun (a : C.expr) b -> make span (shape_of span [ a; b ]) T.Bool (Binary (Or, a, b)))
+               (fun (a : C.expr) b ->
+                  make span (shape_of span [ a; b ]) T.Bool (Binary (Or, a, b)))
                t
                rest)
         | [] -> None)
     | Tag _ | Elements _ ->
-      fail span Unsupported_feature "This pattern is not available inside a table verb yet"
+      fail
+        span
+        Unsupported_feature
+        "This pattern is not available inside a table verb yet"
   in
   match List.rev arms with
   | [] -> fail span Wrong_arguments "match needs at least one branch"
@@ -1104,9 +1132,12 @@ and table ctx (x : Syntax.expr) : C.table =
 
 and source ctx span (f : Syntax.expr) args : C.table =
   let directory = ctx.env.directory in
-  let plain path = if Filename.is_relative path then Filename.concat directory path else path in
+  let plain path =
+    if Filename.is_relative path then Filename.concat directory path else path
+  in
   match f.form, args with
-  | Name (_, (("read_csv" | "read_tsv" | "read_parquet") as reader)), [ (None, { form = Literal (Text path); _ }) ] ->
+  | ( Name (_, (("read_csv" | "read_tsv" | "read_parquet") as reader))
+    , [ (None, { form = Literal (Text path); _ }) ] ) ->
     let path = plain path in
     let format = Data_file.format path in
     let expected : Data_file.format =
@@ -1121,7 +1152,7 @@ and source ctx span (f : Syntax.expr) args : C.table =
       List.map
         (fun (c : Data_file.column) ->
            match c.typ with
-           | Supported t -> c.name, if c.nullable then T.Option (primitive t) else primitive t
+           | Supported t -> c.name, if c.nullable then T.Option t else t
            | Unsupported other ->
              fail
                span
@@ -1151,7 +1182,8 @@ and source ctx span (f : Syntax.expr) args : C.table =
     let path =
       match table.parquet with
       | Some p -> p
-      | None -> fail span Wrong_arguments ("Contracted table " ^ n ^ " has no Parquet source")
+      | None ->
+        fail span Wrong_arguments ("Contracted table " ^ n ^ " has no Parquet source")
     in
     let physical =
       List.map (fun (c : Data_file.column) -> c.name, c.typ) (Data_file.columns path)
@@ -1161,19 +1193,26 @@ and source ctx span (f : Syntax.expr) args : C.table =
         (fun (c : Contract.column) ->
            let t =
              match List.assoc_opt c.name physical with
-             | Some (Supported t) -> primitive t
+             | Some (Supported t) -> t
              | Some (Unsupported other) ->
                fail
                  span
                  Unsupported_column_type
                  (Printf.sprintf "Column %s has unsupported type %s" c.name other)
              | None ->
-               fail span Unknown_column ("Contract column " ^ c.name ^ " is missing from the file")
+               fail
+                 span
+                 Unknown_column
+                 ("Contract column " ^ c.name ^ " is missing from the file")
            in
            c.name, if c.required then t else T.Option t)
         table.columns
     in
-    let flagged f = List.filter_map (fun (c : Contract.column) -> if f c then Some c.name else None) table.columns in
+    let flagged f =
+      List.filter_map
+        (fun (c : Contract.column) -> if f c then Some c.name else None)
+        table.columns
+    in
     let primary = flagged (fun c -> c.primary) in
     { source =
         Load
@@ -1184,7 +1223,9 @@ and source ctx span (f : Syntax.expr) args : C.table =
     ; stages = []
     ; schema = columns
     ; rest = None
-    ; keys = (if primary = [] then [] else [ primary ]) @ List.map (fun n -> [ n ]) (flagged (fun c -> c.unique))
+    ; keys =
+        (if primary = [] then [] else [ primary ])
+        @ List.map (fun n -> [ n ]) (flagged (fun c -> c.unique))
     ; order = None
     ; restricted = flagged (fun c -> c.restricted)
     }
@@ -1224,7 +1265,8 @@ let rec settle (e : C.expr) : C.expr =
     | Unary (op, x) -> Unary (op, settle x)
     | Binary (op, a, b) -> Binary (op, settle a, settle b)
     | Convert x -> Convert (settle x)
-    | Lift (bound, body) -> Lift (List.map (fun (id, x) -> id, settle x) bound, settle body)
+    | Lift (bound, body) ->
+      Lift (List.map (fun (id, x) -> id, settle x) bound, settle body)
     | If (c, a, b) -> If (settle c, settle a, settle b)
     | Coalesce (a, b) -> Coalesce (settle a, settle b)
     | Require x -> Require (settle x)
@@ -1263,7 +1305,12 @@ and settle_table (t : C.table) =
     | Summarize s ->
       Summarize { s with measures = List.map (fun (n, x) -> n, settle x) s.measures }
     | Arrange keys -> Arrange (List.map (fun (x, d) -> settle x, d) keys)
-    | ( Select _ | Rename _ | Take _ | Distinct _ | Pivot_longer _ | Pivot_wider _
+    | ( Select _
+      | Rename _
+      | Take _
+      | Distinct _
+      | Pivot_longer _
+      | Pivot_wider _
       | Assert_key _ ) as s -> s
   in
   let source : C.source =
@@ -1317,7 +1364,8 @@ let function_ env name params body =
     bind env name (Function { id = None; scheme = Some scheme; template }), []
   in
   try host () with
-  | Diagnostic.Error { code = Column_required | Missing_policy_required; _ } -> contextual ()
+  | Diagnostic.Error { code = Column_required | Missing_policy_required; _ } ->
+    contextual ()
 ;;
 
 let printed (x : Syntax.expr) =
@@ -1343,7 +1391,25 @@ let written (x : Syntax.expr) =
   | _ -> None
 ;;
 
+let public span (t : C.table) =
+  if t.restricted = []
+  then t
+  else (
+    let visible = List.filter (fun n -> not (List.mem n t.restricted)) (C.names t) in
+    if visible = []
+    then
+      fail
+        span
+        Restricted_output
+        "Every column is restricted, so there is nothing to show";
+    { t with
+      stages = t.stages @ [ { step = Select visible; at = span } ]
+    ; schema = List.filter (fun (n, _) -> List.mem n visible) t.schema
+    })
+;;
+
 let table_expr span (t : C.table) =
+  let t = public span t in
   make span C.Scalar (T.Table (T.closed t.schema)) (C.Table t)
 ;;
 
@@ -1363,8 +1429,13 @@ let item env (d : Syntax.declaration) =
     (match written x, printed x with
      | Some (t, path), _ ->
        env, [ C.Write (finish ~default:true (table_expr x.span (table ctx t)), path) ]
-     | None, Some t -> env, [ C.Show (finish ~default:true (table_expr x.span (table ctx t))) ]
-     | None, None -> env, [ C.Show (finish ~default:true (expr ctx x)) ])
+     | None, Some t ->
+       env, [ C.Show (finish ~default:true (table_expr x.span (table ctx t))) ]
+     | None, None ->
+       let e = expr ctx x in
+       (match e.node with
+        | Table t -> env, [ C.Show (finish ~default:true (table_expr x.span t)) ]
+        | _ -> env, [ C.Show (finish ~default:true e) ]))
   | Alias (name, params, body) ->
     if List.mem_assoc name env.types
     then Diagnostic.fail Duplicate_name ("Duplicate type " ^ name);
@@ -1433,7 +1504,8 @@ let item env (d : Syntax.declaration) =
     let policy =
       match List.assoc_opt value C.policies with
       | Some p -> p
-      | None -> Diagnostic.fail Invalid_policy "A missing policy is skip, propagate or error"
+      | None ->
+        Diagnostic.fail Invalid_policy "A missing policy is skip, propagate or error"
     in
     (match name with
      | "missing" -> { env with missing = Some policy }, []
@@ -1451,4 +1523,92 @@ let program env declarations =
        env, items @ more)
     (env, [])
     declarations
+;;
+
+let describe = function
+  | Value { scheme; _ } -> Some (T.display scheme.body)
+  | Table_value { table; _ } -> Some (T.display (T.Table (T.closed table.schema)))
+  | Function { scheme = Some scheme; _ } -> Some (T.display scheme.body)
+  | Function { template; _ } -> Some ("fn(" ^ String.concat ", " template.params ^ ")")
+  | Constructor { scheme; _ } -> Some (T.display scheme.body)
+  | Contract _ -> Some "contract"
+  | Module m -> Some ("module " ^ m)
+  | Inline _ -> None
+;;
+
+let bindings env =
+  let seen = Hashtbl.create 16 in
+  List.filter_map
+    (fun (n, b) ->
+       if Hashtbl.mem seen n
+       then None
+       else (
+         Hashtbl.add seen n ();
+         Option.map (fun d -> n, b, d) (describe b)))
+    env.names
+  |> List.rev
+;;
+
+let lookup env name = List.assoc_opt name env.names
+let builtins () = List.map (fun (n, b) -> n, T.display (builtin_type 1 b)) Prelude.all
+
+let explain (t : C.table) =
+  let rec source (t : C.table) =
+    match t.source with
+    | Read f -> [ Printf.sprintf "read %s" (Filename.basename f.path) ]
+    | Load { table; contract; _ } ->
+      [ Printf.sprintf "load %s from %s" table.name (Filename.basename contract.path) ]
+    | Bound id -> [ "start from " ^ id.name ]
+    | Join j ->
+      source j.left
+      @ source j.right
+      @ [ Printf.sprintf "%s join on %s" (C.join_name j.kind) j.key ]
+  in
+  let step (s : C.stage) =
+    match s.step with
+    | Filter _ -> "filter rows"
+    | Mutate { name; by = []; _ } -> "mutate " ^ name
+    | Mutate { name; by; _ } ->
+      Printf.sprintf "mutate %s by %s" name (String.concat ", " by)
+    | Select names -> "select " ^ String.concat ", " names
+    | Rename changes ->
+      "rename "
+      ^ String.concat ", " (List.map (fun (fresh, old) -> old ^ " to " ^ fresh) changes)
+    | Summarize { by; measures } ->
+      "summarize "
+      ^ String.concat ", " (List.map fst measures)
+      ^ if by = [] then "" else " by " ^ String.concat ", " by
+    | Arrange _ -> "arrange"
+    | Take n -> Printf.sprintf "take the first %d rows" n
+    | Distinct _ -> "distinct rows"
+    | Assert_key columns -> "check that " ^ String.concat ", " columns ^ " is a key"
+    | Pivot_longer _ -> "pivot longer"
+    | Pivot_wider _ -> "pivot wider"
+  in
+  source t @ List.map step t.stages
+;;
+
+let rec origin env (t : C.table) =
+  match t.source with
+  | Read f -> Filename.basename f.path ^ ", schema read from the file"
+  | Load { table; contract; _ } ->
+    Printf.sprintf "%s in %s" table.name (Filename.basename contract.path)
+  | Bound id ->
+    (match
+       List.find_map
+         (function
+           | _, Table_value { id = bound; table } when bound.stamp = id.stamp ->
+             Some table
+           | _ -> None)
+         env.names
+     with
+     | Some table -> origin env table
+     | None -> id.name)
+  | Join j ->
+    Printf.sprintf
+      "%s join of %s and %s on %s"
+      (C.join_name j.kind)
+      (origin env j.left)
+      (origin env j.right)
+      j.key
 ;;

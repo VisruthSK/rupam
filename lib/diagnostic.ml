@@ -151,7 +151,8 @@ let explanation = function
     "No binding, function or column with this name is in scope. A suggestion is given \
      when a similar name exists."
   | Ambiguous_name ->
-    "A bare name inside a verb refers to both a column and a binding in scope. Write \n     `$name` for the column or `^name` for the binding."
+    "A bare name inside a verb refers to both a column and a binding in scope. Write \n\
+    \     `$name` for the column or `^name` for the binding."
   | Unknown_column ->
     "The table at this stage has no column with this name. Column names match exactly, \
      including case."

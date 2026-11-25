@@ -23,6 +23,6 @@ type entry =
   ; schemas : schema list
   }
 
-val establish : project:Project.t -> source:string -> Syntax.declaration list -> entry
-val require : project:Project.t -> source:string -> Syntax.declaration list -> entry
+val establish : project:Project.t -> source:string -> Core.item list -> entry
+val require : project:Project.t -> source:string -> Core.item list -> entry
 val print_schemas : entry -> unit

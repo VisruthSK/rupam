@@ -97,7 +97,9 @@ and resolve_row row =
        | t -> fields, Some t)
   in
   let fields, rest = flatten row.fields row.rest in
-  { fields = List.map (fun (n, t) -> n, resolve t) fields; rest = Option.map resolve rest }
+  { fields = List.map (fun (n, t) -> n, resolve t) fields
+  ; rest = Option.map resolve rest
+  }
 ;;
 
 let default_numbers t =
@@ -177,7 +179,8 @@ let rec unify a b =
   | Var ({ contents = Unbound { level; kind } } as v), t
   | t, Var ({ contents = Unbound { level; kind } } as v) ->
     (match kind, t with
-     | Number, Var ({ contents = Unbound u } as w) -> w := Unbound { u with kind = Number }
+     | Number, Var ({ contents = Unbound u } as w) ->
+       w := Unbound { u with kind = Number }
      | Number, t when not (numeric t) -> raise Mismatch
      | _ -> ());
     occurs_and_adjust v level t;
@@ -197,9 +200,7 @@ and unify_rows r s =
   let r = resolve_row r
   and s = resolve_row s in
   let missing xs ys = List.filter (fun (n, _) -> not (List.mem_assoc n ys)) xs in
-  List.iter
-    (fun (n, t) -> Option.iter (unify t) (List.assoc_opt n s.fields))
-    r.fields;
+  List.iter (fun (n, t) -> Option.iter (unify t) (List.assoc_opt n s.fields)) r.fields;
   let only_r = missing r.fields s.fields
   and only_s = missing s.fields r.fields in
   let open_row fields rest = Record { fields; rest } in

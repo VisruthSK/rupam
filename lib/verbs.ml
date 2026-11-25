@@ -87,7 +87,10 @@ let restrict keep (t : C.table) =
   }
 ;;
 
-let private_ (t : C.table) e = List.exists (fun n -> List.mem n t.restricted) (C.columns e)
+let private_ (t : C.table) e =
+  List.exists (fun n -> List.mem n t.restricted) (C.columns e)
+;;
+
 let everything (t : C.table) = { t with restricted = C.names t }
 let add span step (t : C.table) = { t with stages = t.stages @ [ { C.step; at = span } ] }
 
@@ -116,7 +119,8 @@ let select span (t : C.table) (arguments : arguments) =
   in
   let range first last =
     let rec from = function
-      | [] -> fail span Invalid_selector "The range starts at a column that does not exist"
+      | [] ->
+        fail span Invalid_selector "The range starts at a column that does not exist"
       | n :: rest -> if n = first then through (n :: rest) else from rest
     and through = function
       | [] -> fail span Invalid_selector "The range ends before its start"
@@ -220,7 +224,11 @@ let present span (t : C.table) keys =
          if T.is_optional typ
          then
            Some
-             (make span Columnar T.Bool (Builtin (Present, [ make span Columnar typ (Column k) ])))
+             (make
+                span
+                Columnar
+                T.Bool
+                (Builtin (Present, [ make span Columnar typ (Column k) ])))
          else None)
       keys
   in
@@ -237,7 +245,9 @@ let group_policy context span (t : C.table) ~missing ~group_missing keys =
   | [] -> None
   | first :: _ ->
     (match
-       List.find_map Fun.id [ group_missing; missing; context.group_missing; context.missing ]
+       List.find_map
+         Fun.id
+         [ group_missing; missing; context.group_missing; context.missing ]
      with
      | Some p -> Some p
      | None ->
@@ -246,8 +256,8 @@ let group_policy context span (t : C.table) ~missing ~group_missing keys =
          Missing_policy_required
          ("The grouping key "
           ^ first
-          ^ " can be missing. Say what to do with those rows: group_missing = skip leaves \
-             them out, propagate makes missing a group, error stops the run"))
+          ^ " can be missing. Say what to do with those rows: group_missing = skip \
+             leaves them out, propagate makes missing a group, error stops the run"))
 ;;
 
 let apply_group_policy span policy (t : C.table) keys =
@@ -314,7 +324,8 @@ let mutate context span (t : C.table) arguments =
   List.fold_left
     (fun (t : C.table) -> function
        | Some "by", _ -> t
-       | None, (x : Syntax.expr) -> fail x.span Wrong_arguments "mutate needs named columns"
+       | None, (x : Syntax.expr) ->
+         fail x.span Wrong_arguments "mutate needs named columns"
        | Some name, x ->
          let value = context.expression ?missing (C.row t) x in
          let value =
@@ -324,7 +335,10 @@ let mutate context span (t : C.table) arguments =
                value.span
                Columnar
                (T.optional value.typ)
-               (If (present span t keys, value, make span Scalar (T.optional value.typ) Absent))
+               (If
+                  ( present span t keys
+                  , value
+                  , make span Scalar (T.optional value.typ) Absent ))
            else value
          in
          let exists = List.mem_assoc name t.schema in
@@ -335,7 +349,8 @@ let mutate context span (t : C.table) arguments =
            else t.schema @ [ name, value.typ ]
          in
          let restricted =
-           List.filter (( <> ) name) t.restricted @ if private_ t value then [ name ] else []
+           List.filter (( <> ) name) t.restricted
+           @ if private_ t value then [ name ] else []
          in
          add x.span (Mutate { name; value; by = keys }) { t with schema; restricted })
     t
@@ -351,26 +366,30 @@ let filter context span (t : C.table) = function
         (match p.form with
          | Name (_, n) when List.mem_assoc n C.policies -> Some (List.assoc n C.policies)
          | _ -> fail p.span Invalid_policy "A missing policy is skip, propagate or error")
-      | _ -> fail span Wrong_arguments "filter takes one condition and an optional missing ="
+      | _ ->
+        fail span Wrong_arguments "filter takes one condition and an optional missing ="
     in
     let predicate = context.expression ?missing:policy (C.row t) x in
     if predicate.shape <> Columnar
-    then fail x.span Row_domain_mismatch "filter needs a condition on this table's columns";
+    then
+      fail x.span Row_domain_mismatch "filter needs a condition on this table's columns";
     T.unify T.Bool (T.present predicate.typ);
     let constant b = make span Scalar T.Bool (Constant (Bool b)) in
     let predicate =
       match T.is_optional predicate.typ, policy with
       | false, _ -> predicate
-      | true, Some Skip -> make span Columnar T.Bool (Coalesce (predicate, constant false))
-      | true, Some Propagate -> make span Columnar T.Bool (Coalesce (predicate, constant true))
+      | true, Some Skip ->
+        make span Columnar T.Bool (Coalesce (predicate, constant false))
+      | true, Some Propagate ->
+        make span Columnar T.Bool (Coalesce (predicate, constant true))
       | true, Some Fail -> make span Columnar T.Bool (Require predicate)
       | true, None ->
         fail
           x.span
           Optional_condition
           "This condition is missing where its inputs are missing. Say what happens to \
-           those rows: missing = skip drops them, missing = propagate keeps them, missing \
-           = error stops the run"
+           those rows: missing = skip drops them, missing = propagate keeps them, \
+           missing = error stops the run"
     in
     let rec present (x : Syntax.expr) =
       match x.form with
@@ -456,8 +475,11 @@ let pivot span (t : C.table) wider arguments =
     then fail span Pivot_shape "names_from must be a String column";
     let value = T.optional (column span t values_from) in
     let ids = List.filter (fun n -> n <> names_from && n <> values_from) (C.names t) in
-    let schema = List.map (fun n -> n, typ t n) ids @ List.map (fun l -> l, value) levels in
-    if not (distinct (List.map fst schema)) then fail span Pivot_shape "The pivot repeats a column name";
+    let schema =
+      List.map (fun n -> n, typ t n) ids @ List.map (fun l -> l, value) levels
+    in
+    if not (distinct (List.map fst schema))
+    then fail span Pivot_shape "The pivot repeats a column name";
     let hidden = List.mem values_from t.restricted || List.mem names_from t.restricted in
     let t = add span (Pivot_wider { ids; names_from; values_from; levels }) t in
     { t with
@@ -465,7 +487,8 @@ let pivot span (t : C.table) wider arguments =
     ; keys = []
     ; order = None
     ; restricted =
-        List.filter (fun n -> List.mem n ids) t.restricted @ if hidden then levels else []
+        (List.filter (fun n -> List.mem n ids) t.restricted
+         @ if hidden then levels else [])
     })
   else (
     let columns = column_names (argument "cols")
@@ -491,15 +514,17 @@ let pivot span (t : C.table) wider arguments =
     let schema =
       List.map (fun n -> n, typ t n) ids @ [ names_to, T.String; values_to, value ]
     in
-    if not (distinct (List.map fst schema)) then fail span Pivot_shape "The pivot repeats a column name";
+    if not (distinct (List.map fst schema))
+    then fail span Pivot_shape "The pivot repeats a column name";
     let hidden = List.exists (fun c -> List.mem c t.restricted) columns in
-    let t = add span (Pivot_longer { columns; names_to; values_to }) t in
+    let t = add span (Pivot_longer { ids; columns; names_to; values_to }) t in
     { t with
       schema
     ; keys = []
     ; order = None
     ; restricted =
-        List.filter (fun n -> List.mem n ids) t.restricted @ if hidden then [ values_to ] else []
+        (List.filter (fun n -> List.mem n ids) t.restricted
+         @ if hidden then [ values_to ] else [])
     })
 ;;
 
@@ -513,8 +538,9 @@ let join context span kind (left : C.table) arguments : C.table =
   let key, right_key =
     match List.assoc_opt (Some "by") options with
     | Some { form = Name (_, k); _ } -> k, k
-    | Some { form = Binary (Equal, { form = Name (_, l); _ }, { form = Name (_, r); _ }); _ } ->
-      l, r
+    | Some
+        { form = Binary (Equal, { form = Name (_, l); _ }, { form = Name (_, r); _ }); _ }
+      -> l, r
     | _ -> fail span Join_keys (verb ^ " needs by = key, or by = (left_key == right_key)")
   in
   let covered =
@@ -530,7 +556,10 @@ let join context span kind (left : C.table) arguments : C.table =
     | Some { form = Name (_, name); _ } when List.mem_assoc name C.relationships ->
       Some (List.assoc name C.relationships)
     | Some _ ->
-      fail span Wrong_arguments "relationship is one_to_one, many_to_one, one_to_many or many_to_many"
+      fail
+        span
+        Wrong_arguments
+        "relationship is one_to_one, many_to_one, one_to_many or many_to_many"
     | None -> None
   in
   (match
@@ -541,7 +570,11 @@ let join context span kind (left : C.table) arguments : C.table =
    | Some (Some n, _) -> fail span Unknown_option (verb ^ " takes no option named " ^ n)
    | Some (None, _) -> fail span Wrong_arguments (verb ^ " takes one table")
    | None -> ());
-  let right = if key = right_key then right else rename span right [ Some key, { Syntax.form = Name (Bare, right_key); span } ] in
+  let right =
+    if key = right_key
+    then right
+    else rename span right [ Some key, { Syntax.form = Name (Bare, right_key); span } ]
+  in
   let lk = column span left key
   and rk = column span right key in
   if T.present lk <> T.present rk && T.resolve (T.present lk) <> T.resolve (T.present rk)
@@ -558,8 +591,8 @@ let join context span kind (left : C.table) arguments : C.table =
         span
         Join_relationship
         (verb
-         ^ " needs relationship = one_to_one, many_to_one, one_to_many or many_to_many: no \
-            key proves how many rows match on "
+         ^ " needs relationship = one_to_one, many_to_one, one_to_many or many_to_many: \
+            no key proves how many rows match on "
          ^ key)
   in
   let optional_left = kind = Right || kind = Full
@@ -568,7 +601,10 @@ let join context span kind (left : C.table) arguments : C.table =
   let schema =
     List.map
       (fun (n, typ) ->
-         n, if n = key then lift (T.is_optional rk && optional_left) typ else lift optional_left typ)
+         ( n
+         , if n = key
+           then lift (T.is_optional rk && optional_left) typ
+           else lift optional_left typ ))
       left.schema
     @ List.filter_map
         (fun (n, typ) ->
@@ -590,11 +626,13 @@ let join context span kind (left : C.table) arguments : C.table =
     | _ -> false
   in
   let keys =
-    (if at_most_one_right && kind <> Right && kind <> Full then left.keys else [])
-    @ (if at_most_one_left && (kind = Right || kind = Inner) then right.keys else [])
+    ((if at_most_one_right && kind <> Right && kind <> Full then left.keys else [])
+     @ if at_most_one_left && (kind = Right || kind = Inner) then right.keys else [])
     |> List.filter (List.for_all (fun c -> List.mem_assoc c schema))
   in
-  let hidden = left.restricted @ List.filter (fun n -> List.mem_assoc n schema) right.restricted in
+  let hidden =
+    left.restricted @ List.filter (fun n -> List.mem_assoc n schema) right.restricted
+  in
   { source = Join { left; right; key; kind; relationship; covered }
   ; stages = []
   ; schema

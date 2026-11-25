@@ -61,30 +61,21 @@ let inspect text =
   let diagnostics =
     try
       let ds = Frontend.parse buf in
-      let table =
-        List.exists
-          (function
-            | Syntax.Contract _ -> true
-            | _ -> false)
+      let env =
+        List.fold_left
+          (fun env d -> fst (Elaborate.item env d))
+          (Elaborate.empty ~directory:"." ~strict:false)
           ds
       in
-      ignore
-        (List.fold_left
-           (fun env decl ->
-              if table
-              then (
-                (match decl with
-                 | Let (n, _, _) | Contract (_, n) -> symbols := (n, "") :: !symbols
-                 | _ -> ());
-                env)
-              else (
-                let env, t = Infer.declaration env decl in
-                (match decl with
-                 | Let (n, _, _) -> symbols := (n, Infer.display t) :: !symbols
-                 | _ -> ());
-                env))
-           Infer.empty
-           ds);
+      symbols
+      := List.filter_map
+           (function
+             | Let (n, _, _) ->
+               Option.map
+                 (fun b -> n, Option.value (Elaborate.describe b) ~default:"")
+                 (Elaborate.lookup env n)
+             | _ -> None)
+           ds;
       []
     with
     | Diagnostic.Error { span = Some span; message; _ } -> issue span message

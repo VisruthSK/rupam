@@ -36,3 +36,5 @@ rp_format <- function(v, shape) {
 }
 
 rp_show <- function(v, shape) rp_format(v, jsonlite::fromJSON(shape, simplifyVector = FALSE))
+
+rp_coalesce <- function(x, fallback) if (is.null(x)) fallback else x

@@ -29,42 +29,27 @@ let syntax path =
     (Frontend.parse (source path))
 ;;
 
+let elaborate path =
+  let project = Project.load (Filename.dirname path) in
+  snd
+    (Elaborate.program
+       (Elaborate.empty ~directory:(Filename.dirname path) ~strict:project.strict.value)
+       (Frontend.parse (source path)))
+;;
+
 let typed path =
-  let declarations = Frontend.parse (source path) in
-  if Analysis_program.tabular declarations
-  then (
-    let env, _ =
-      Analysis_program.analyze ~directory:(Filename.dirname path) declarations
-    in
-    List.iter
-      (function
-        | name, Analysis_program.Dataset d ->
-          print_endline name;
-          Analysis_program.schema d
-        | _ -> ())
-      env)
-  else
-    ignore
-      (List.fold_left
-         (fun env d ->
-            let env, t = Infer.declaration env d in
-            (match d with
-             | Syntax.Let (name, _, _) -> Printf.printf "%s : %s\n" name (Infer.display t)
-             | _ -> Printf.printf "- : %s\n" (Infer.display t));
-            env)
-         Infer.empty
-         declarations)
+  List.iter
+    (function
+      | Core.Define (id, e) -> Printf.printf "%s : %s\n" id.name (Types.display e.typ)
+      | Show e -> Printf.printf "show : %s\n" (Types.display e.typ)
+      | Write (e, file) -> Printf.printf "write %s : %s\n" file (Types.display e.typ)
+      | Variant (name, tags) ->
+        Printf.printf "type %s = %s\n" name (String.concat " | " (List.map fst tags)))
+    (elaborate path)
 ;;
 
 let code dialect path =
-  let project = Project.load (Filename.dirname path) in
-  let text, locations =
-    Dialect.program
-      dialect
-      ~strict:project.strict.value
-      ~directory:(Filename.dirname path)
-      (Frontend.parse (source path))
-  in
+  let text, locations = Dialect.script dialect (elaborate path) in
   print_string text;
   print_endline "# source map";
   List.iter

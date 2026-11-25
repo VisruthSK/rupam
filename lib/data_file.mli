@@ -6,7 +6,7 @@ type format =
   | Tsv
 
 type physical =
-  | Supported of Shape.primitive
+  | Supported of Types.t
   | Unsupported of string
 
 type column =

@@ -65,7 +65,8 @@ let evaluate source =
       ( Some (Types.display e.typ)
       , Option.map Reference.display (List.assoc_opt id.stamp env) )
     | (Show e | Write (e, _)) :: _ ->
-      Some (Types.display e.typ), Option.map (fun (_, v) -> Reference.display v) (List.nth_opt (List.rev shown) 0)
+      ( Some (Types.display e.typ)
+      , Option.map (fun (_, v) -> Reference.display v) (List.nth_opt (List.rev shown) 0) )
     | Variant _ :: _ | [] -> None, None
   with
   | typ, value -> { typ; value; diagnostic = None }
