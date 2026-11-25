@@ -165,8 +165,7 @@ let preview state d =
   let runtime = Runtime.resolve state.project (Runtime.of_dialect dialect) in
   state.show
     (match dialect with
-     | R_dplyr -> Tidyverse.preview ~runtime d ~offset:0 ~limit:20
-     | Python_polars -> Analysis_program.preview ~runtime d ~offset:0 ~limit:20)
+     | dialect -> Dialect.preview dialect ~runtime d ~offset:0 ~limit:20)
 ;;
 
 let compute state d =
@@ -174,8 +173,7 @@ let compute state d =
   let language = Runtime.of_dialect dialect in
   let script =
     match dialect with
-    | Project.R_dplyr -> R_scalar.compile (state.definitions @ [ d ])
-    | Python_polars -> Python.compile (state.definitions @ [ d ])
+    | dialect -> Dialect.value dialect (state.definitions @ [ d ])
   in
   String.trim (Worker.evaluate (Runtime.resolve state.project language) language script)
 ;;
@@ -676,8 +674,7 @@ let run state = function
            (match
               Option.value chosen ~default:(Project.require_dialect state.project)
             with
-            | Project.R_dplyr -> R_syntax.render (Tidyverse.table d)
-            | Python_polars -> Python_syntax.render (Analysis_program.python_table d))));
+            | dialect -> Dialect.table dialect d)));
     Some state
   | View (Schema, "") ->
     schemas state;

@@ -525,76 +525,6 @@ let public_view d =
     })
 ;;
 
-module P = Python_syntax
-
-let rec python_stages d =
-  let base =
-    match d.origin with
-    | File source | Contracted { source; _ } ->
-      P.call
-        "read_locked"
-        [ P.Str source.path
-        ; P.Str source.digest
-        ; P.Str (Data_file.format_name source.format)
-        ; P.Dict (List.map (fun (n, t, _) -> P.Str n, P.Str (kind t)) source.columns)
-        ]
-    | Joined { left; right; key; kind; relationship; covered } ->
-      P.Chain
-        ( (if covered
-           then
-             P.call
-               "rp_covered"
-               [ python_table left; python_table right; P.Str key; P.Str (join_name kind) ]
-           else python_table left)
-        , [ P.link
-              "join"
-              ([ P.Positional (python_table right)
-               ; P.Keyword ("on", P.Str key)
-               ; P.Keyword ("how", P.Str (join_name kind))
-               ]
-               @ (match relationship with
-                  | None -> []
-                  | Some r ->
-                    [ P.Keyword
-                        ( "validate"
-                        , P.Str
-                            (match r with
-                             | One_to_one -> "1:1"
-                             | Many_to_one -> "m:1"
-                             | One_to_many -> "1:m"
-                             | Many_to_many -> "m:m") )
-                    ])
-               @ [ P.Keyword ("nulls_equal", P.Bool false)
-                 ; P.Keyword ("coalesce", P.Bool true)
-                 ])
-          ; P.link "select" [ P.Positional (P.names d.fields) ]
-          ] )
-  in
-  base, Polars.lower ~fields:d.fields d.plan
-
-and python_table d =
-  let base, links = python_stages d in
-  P.Chain (base, links)
-;;
-
-let python ?strict ~directory declarations =
-  P.Verbatim Adapters.polars
-  :: List.map
-       (fun (d, output) ->
-          let base, links = python_stages (public_view d) in
-          let collected = P.Chain (base, links @ [ P.link "collect" [] ]) in
-          P.Expression
-            (match output with
-             | Write path ->
-               P.Chain
-                 ( base
-                 , links
-                   @ [ P.link "collect" []
-                     ; P.link "write_parquet" [ P.Positional (P.Str path) ]
-                     ] )
-             | Print -> P.call "print" [ collected ]))
-       (compile ?strict ~directory declarations)
-;;
 
 let bound env name =
   match List.assoc_opt name env with
@@ -637,32 +567,6 @@ let page d ~path ~total ~offset =
     ~ordered:(d.plan.order <> None)
     ~offset
     (List.map (fun n -> n, (List.assoc n d.plan.schema).typ) (Table.names d.plan))
-;;
-
-let preview ~runtime d ~offset ~limit =
-  let d = public_view d in
-  let path = Filename.temp_file "rupam" ".parquet" in
-  let total =
-    Worker.evaluate
-      runtime
-      Runtime.Python
-      (fst
-         (P.program
-            [ P.Verbatim Adapters.polars
-            ; P.Expression
-                (P.call
-                   "print"
-                   [ P.call
-                       "rp_preview"
-                       [ python_table d
-                       ; P.Int (string_of_int offset)
-                       ; P.Int (string_of_int limit)
-                       ; P.Str path
-                       ]
-                   ])
-            ]))
-  in
-  Fun.protect ~finally:(fun () -> Sys.remove path) (fun () -> page d ~path ~total ~offset)
 ;;
 
 let explain d =

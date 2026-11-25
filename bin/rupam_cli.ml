@@ -33,18 +33,11 @@ let targeted directory target strict action =
 ;;
 
 let generate (project : Project.t) path ds =
-  let directory = Filename.dirname path
-  and strict = project.strict in
-  let scalar compile =
-    let mapping = Source_map.create () in
-    Source_map.finish mapping (compile (Source_map.mark mapping) ds)
-  in
-  match Project.require_dialect project, Analysis_program.tabular ds with
-  | R_dplyr, true -> R_syntax.program (Tidyverse.compile ~strict ~directory ds)
-  | R_dplyr, false -> scalar (fun annotate -> R_scalar.compile ~annotate)
-  | Python_polars, true ->
-    Python_syntax.program (Analysis_program.python ~strict ~directory ds)
-  | Python_polars, false -> scalar (fun annotate -> Python.compile ~annotate)
+  Dialect.program
+    (Project.require_dialect project)
+    ~strict:project.strict
+    ~directory:(Filename.dirname path)
+    ds
 ;;
 
 let run target strict path =
