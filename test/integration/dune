@@ -1,0 +1,8 @@
+(cram
+ (runtest_alias false)
+ (alias integration)
+ (deps
+  %{bin:rupam}
+  show.py
+  lsp.py
+  (source_tree ../../examples)))

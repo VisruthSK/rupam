@@ -4,6 +4,7 @@ set -euo pipefail
 root=$(cd "$(dirname "$0")/.." && pwd)
 switch=${RUPAM_SWITCH:-rupam-552}
 build=${RUPAM_BUILD_DIR:-/root/rupam-build}
+venv=${RUPAM_VENV:-/root/rupam-python}
 cd "$root"
 
 export OPAMROOTISOK=1
@@ -14,13 +15,14 @@ dune() {
 
 usage() {
   cat <<'EOF'
-scripts/dev check     build, check formatting, run unit, cram and conformance tests
-scripts/dev watch     rebuild and rerun tests on every change
-scripts/dev promote   accept the output of changed expect and cram tests
-scripts/dev fmt       format the code
-scripts/dev conformance   run conformance fixtures, including why pending ones fail
+scripts/dev check               build, check formatting, run unit, cram and conformance tests
+scripts/dev integration         run the R and Python integration tests
+scripts/dev full                check, then integration
+scripts/dev watch               rebuild and rerun tests on every change
+scripts/dev promote             accept changed expect and cram output
+scripts/dev fmt                 format the code
+scripts/dev conformance         run conformance fixtures, showing why runnable pending ones fail
 scripts/dev stages STAGE FILE   print tokens, syntax, typed or code for a source file
-scripts/dev full      check, then the R and Python integration tests
 EOF
 }
 
@@ -28,27 +30,26 @@ check() {
   dune build @default @runtest @fmt
 }
 
-full() {
-  check
-  UV_PROJECT_ENVIRONMENT=${RUPAM_VENV:-/tmp/rupam-python} uv sync --frozen --quiet
-  RUPAM_BUILD_DIR="$build" UV_PROJECT_ENVIRONMENT=${RUPAM_VENV:-/tmp/rupam-python} \
-    uv run --frozen python -m unittest discover -s test -p test_contract.py
+integration() {
+  UV_PROJECT_ENVIRONMENT=$venv uv sync --frozen --quiet
+  PATH=$venv/bin:$PATH dune build @integration
 }
 
 case "${1:-}" in
   check) check ;;
+  integration) integration ;;
+  full) check && integration ;;
   watch) dune build --watch @default @runtest ;;
   promote) dune promote ;;
   fmt) dune fmt || true ;;
+  conformance)
+    dune build test/conformance.exe
+    (cd test && "$build/default/test/conformance.exe" --pending)
+    ;;
   stages)
     shift
     dune build dev/rupam_dev.exe
     "$build/default/dev/rupam_dev.exe" "$@"
     ;;
-  conformance)
-    dune build test/conformance.exe
-    (cd test && "$build/default/test/conformance.exe" --pending)
-    ;;
-  full) full ;;
   *) usage; exit 2 ;;
 esac
