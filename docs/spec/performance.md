@@ -14,6 +14,23 @@ Rupam's interactive and standalone execution paths share the language semantics 
 
 Exercise a cold session, a warm edit, repeated inspection, a wide table, a deep scroll and cancellation during a grouped computation. Record work at each boundary: checker invalidations, worker submissions, input scans, Arrow bytes copied, retained mappings, allocations and formatted cells. Compare full typed results alongside these observations. Separate host execution, compiler time, transport and terminal paint so an improvement in one cannot conceal a regression in another.
 
+## Parallelism (deferred until after the MVP)
+
+Run independent work on OCaml 5 domains through a `domainslib` task pool, never
+hand-spawned domains or a custom pool. Each task returns its evidence or
+structured diagnostic, and results merge in a deterministic order, never in
+completion order.
+
+| Work | Benefit |
+| --- | --- |
+| full-snapshot validation and contract checking | high on large datasets |
+| independent proof obligations | high for expensive checks |
+| column profiling for the viewer | high on wide tables |
+| differential conformance tests | high |
+| independent analytical branches | potentially high |
+| dataset hashing | moderate; bounded by storage |
+| type inference, logical optimisation, terminal rendering | low |
+
 ## OxCaml and Flambda 2
 
 First compare an unchanged native compiler built with the stock OCaml toolchain and a compatible OxCaml toolchain using Flambda 2. Record compiler revision, optimisation flags, dependency compatibility, build time, executable size, allocations and profiles on identical workloads. Speedups in Rupam's OCaml stages must be measured separately from time in R, DuckDB and terminal I/O. Keep normal builds and conformance available on supported platforms during evaluation. [OxCaml compiler documentation](https://oxcaml.org/documentation/)
