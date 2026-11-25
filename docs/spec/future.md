@@ -53,6 +53,34 @@ release policy is defined, these outputs remain restricted.
 
 Named `test` blocks with inline tables, run on every dialect by `rupam test`.
 
+## Logical optimiser
+
+A pass over the typed core, after checking and before any lowering, that
+rewrites table pipelines using facts only the checker has. Every rewrite
+preserves the results, diagnostics, evaluation scope and effects defined in
+[Guarantees](guarantees.md), and the source map still points each generated
+stage at the Rupam stage it came from.
+
+- **Projection pruning.** Drop columns no later stage, output or restriction
+  needs, including through joins and pivots, so readers request fewer columns.
+- **Predicate pushdown.** Move a filter before a mutate it does not depend on,
+  into both sides of a join when its columns allow, and into a reader as a
+  row-group filter.
+- **Proved-work elimination.** Remove sorts whose order is already established,
+  `distinct` over a proved key, `assert_key` on a proved key, missing-value
+  handling on columns proved present, and conversions proved exact.
+- **Common work.** Share repeated pure subexpressions and identical pipeline
+  prefixes between bindings, and fuse adjacent mutates and selects.
+- **Join planning.** Choose join order and side by key facts and known
+  cardinality without changing the result's row multiset or order guarantees.
+- **Reduction rewriting.** Combine reductions over the same group into one
+  grouped pass, and turn a filter followed by a count into a conditional sum.
+
+Each rewrite has a named rule, a conformance fixture showing the result is
+unchanged, and an entry in `:explain` so the analyst can see which rewrites
+applied. Generated code stays readable: an optimised pipeline is still one
+idiomatic pipeline per binding.
+
 ## Join coverage
 
 Independent coverage requirements for each side of a join, for example
