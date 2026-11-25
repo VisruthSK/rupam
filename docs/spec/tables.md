@@ -1,7 +1,9 @@
 # Tables
 
 A table has named, typed columns in a fixed schema order and, by default,
-unordered rows. Rows form a bag (duplicates are meaningful). Its type lists
+unordered rows. Schema order is deterministic and drives selector ranges,
+printing and written files, but it is not part of the table's type: table
+types, like record types, compare by column name. Rows form a bag (duplicates are meaningful). Its type lists
 columns, refinements, keys, row-domain identity, order, and whether the schema
 is established or inferred. Columns inherit the domain and order of their
 rows; these properties are inferred, not separate user-visible containers.

@@ -170,6 +170,7 @@ check that proved obligations emit no redundant runtime assertions.
 | C134 | `page` of a table with a restricted column at `rows` exposure | column absent; omission reported |
 | C135 | `fork`, define in the fork, `context` on both | original session unchanged |
 | C136 | `save` after defines, replacements and a removal | canonical `.rp` in dependency order that checks to the same schemas |
+| C137 | helper annotated `(t: Table<{a: Int64, b: String}>)` applied to a table whose columns are `b, a` | accepted; the result keeps the order `b, a` |
 
 ## Additional implementation requirements
 

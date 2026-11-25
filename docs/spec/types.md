@@ -328,7 +328,7 @@ arbitrary Float64 does not. Parsers explicitly return `T?` on invalid input
 
 Records are immutable and structurally typed. A row type
 `{revenue: Float64, ..r}` contains `revenue` and any other fields. Table rows
-are records.
+are records. Field order is not part of a record or table type.
 
 ## Variants and enums
 
