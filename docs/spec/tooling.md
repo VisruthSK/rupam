@@ -99,6 +99,13 @@ and cannot establish a proof. Reuse worker computations where possible.
 Restricted values and derived restricted statistics remain hidden. Do not
 emit routine warnings for these observations.
 
+The REPL and viewer show the consequences of the last submission
+unobtrusively, beneath its result: rows each filter kept and dropped,
+unmatched rows on each side of a join, missing values each policy skipped or
+propagated, and groups formed. These counts are dim, never warnings, and come
+from the evaluation that already ran. A count that changes the reading of the
+result, such as a join that matched no rows, is shown first.
+
 ## Diagnostics
 
 A diagnostic has a stable code, a source span, related spans, and resolutions. A resolution is a fix that preserves meaning or a decision between edits with different analytical results ([Agents](agent-interface.md#diagnostics-as-data)):

@@ -53,6 +53,20 @@ release policy is defined, these outputs remain restricted.
 
 Named `test` blocks with inline tables, run on every dialect by `rupam test`.
 
+## Join coverage
+
+Independent coverage requirements for each side of a join, for example
+requiring every left row to match while allowing unmatched right rows.
+
+## Typed effects
+
+Rupam restricts I/O, randomness and clock access to the top level. An inferred
+effect system could permit effectful user-defined functions while preserving
+purity wherever it is required, including lifting, snapshot proofs and
+speculative evaluation. Effects would propagate through function composition
+without annotations. Introduce this only when concrete analytical use cases
+justify relaxing the restriction.
+
 ## Recursion
 
 Recursive functions, compiled as host functions without vectorisation.
