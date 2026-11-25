@@ -8,7 +8,7 @@ Build the [development tooling](spec/development.md) before further features, so
 
 - Add `.mli` files. Replace string-typed dialects, types and settings with variants.
 - Create the diagnostic catalogue and move every `failwith` and `Error of span * string` onto a code. Tests assert codes and spans.
-- Add the internal `dev/` tool with stage dumps and fixture capture, cram tests for the CLI and REPL, and `scripts/dev`. Move `test/test_contract.py` to cram tests.
+- Add the internal `dev/` tool with stage dumps and fixture capture, cram tests for the CLI and REPL, and `scripts/dev`.
 - Give the conformance runner `pending`/`now passes` reporting and run it on every check.
 - Adopt `ppx_yojson_conv`, `digestif`, `ppx_expect` and `logs` where they replace existing code.
 

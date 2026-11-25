@@ -79,7 +79,10 @@ the dialect it occurred in.
 - **Expect tests** (`ppx_expect`) for printers, type display, stage dumps and
   the lowering of single expressions.
 - **Cram tests** (`test/cli/*.t`) for the command line, the session protocol
-  and REPL transcripts. `dune promote` accepts intended changes.
+  and REPL transcripts. **Integration tests** (`test/integration/*.t`, the
+  `@integration` alias) compile and run programs in R and Python and print
+  their results, so agreement between dialects is a snapshot diff.
+  `scripts/dev promote` accepts intended changes.
 - **Viewer frames.** The viewer renders to an in-memory cell grid at a fixed
   size. A test drives it with keys and compares frames as text.
 - **Differential tests** (`qcheck`). Generate well-typed core programs and
@@ -89,7 +92,8 @@ the dialect it occurred in.
 - **Round trips.** `fmt` is idempotent and preserves the syntax tree; printing
   a type and parsing it gives the same type.
 
-Python is a test dependency only for the `python-polars` dialect.
+The integration tests use the project's `uv` environment for Polars, which
+also reads their Parquet outputs.
 
 ## Transcripts and fixture capture
 
