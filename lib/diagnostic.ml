@@ -5,6 +5,7 @@ type code =
   | Incomplete_input
   | Bad_interpolation
   | Unknown_name
+  | Ambiguous_name
   | Unknown_column
   | Unknown_table
   | Unknown_constructor
@@ -84,6 +85,7 @@ let name = function
   | Incomplete_input -> "incomplete-input"
   | Bad_interpolation -> "bad-interpolation"
   | Unknown_name -> "unknown-name"
+  | Ambiguous_name -> "ambiguous-name"
   | Unknown_column -> "unknown-column"
   | Unknown_table -> "unknown-table"
   | Unknown_constructor -> "unknown-constructor"
@@ -148,6 +150,8 @@ let explanation = function
   | Unknown_name ->
     "No binding, function or column with this name is in scope. A suggestion is given \
      when a similar name exists."
+  | Ambiguous_name ->
+    "A bare name inside a verb refers to both a column and a binding in scope. Write \n     `$name` for the column or `^name` for the binding."
   | Unknown_column ->
     "The table at this stage has no column with this name. Column names match exactly, \
      including case."

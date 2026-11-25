@@ -1,5 +1,5 @@
 id = "C45"
-status = "pending"
+status = "active"
 case = '''`1e308 * 1e308`'''
 expected = '''arithmetic-overflow; never infinity or `None`'''
 

@@ -5,6 +5,7 @@ type code =
   | Incomplete_input
   | Bad_interpolation
   | Unknown_name
+  | Ambiguous_name
   | Unknown_column
   | Unknown_table
   | Unknown_constructor

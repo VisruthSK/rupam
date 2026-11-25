@@ -16,6 +16,7 @@
   ppx_yojson_conv
   ppx_enumerate
   astring
+  re
   digestif
   uucp
   toml

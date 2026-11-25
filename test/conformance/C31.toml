@@ -1,5 +1,5 @@
 id = "C31"
-status = "pending"
+status = "active"
 case = '''`round(2.5)`, `round(-0.5)`'''
 expected = '''`2.0`, `-0.0`'''
 

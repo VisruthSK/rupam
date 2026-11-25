@@ -56,16 +56,17 @@ let all directory =
 let evaluate source =
   match
     let declarations = Frontend.parse (Lexing.from_string source) in
-    let _, typ =
-      List.fold_left
-        (fun (env, _) d ->
-           let env, t = Infer.declaration env d in
-           env, Some t)
-        (Infer.empty, None)
-        declarations
+    let _, items =
+      Elaborate.program (Elaborate.empty ~directory:"." ~strict:true) declarations
     in
-    let _, value = Eval.run [] declarations in
-    Option.map Infer.display typ, Option.map Eval.display value
+    let env, shown = Reference.run [] items in
+    match List.rev items with
+    | Core.Define (id, e) :: _ ->
+      ( Some (Types.display e.typ)
+      , Option.map Reference.display (List.assoc_opt id.stamp env) )
+    | (Show e | Write (e, _)) :: _ ->
+      Some (Types.display e.typ), Option.map (fun (_, v) -> Reference.display v) (List.nth_opt (List.rev shown) 0)
+    | Variant _ :: _ | [] -> None, None
   with
   | typ, value -> { typ; value; diagnostic = None }
   | exception exn ->
