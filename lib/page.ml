@@ -19,23 +19,13 @@ type part =
   | Index
   | Note
 
-let abbreviation (t : Shape.typ) =
-  (match t.primitive with
-   | Int64 -> "int"
-   | Float64 -> "dbl"
-   | Bool -> "lgl"
-   | String -> "chr")
-  ^ if t.nullable then "?" else ""
-;;
-
 let cell (t : Shape.typ) = function
   | None -> None
   | Some text ->
     Some
       (match t.primitive with
-       | Float64 -> Display.float (float_of_string text)
        | Bool -> Display.bool (String.lowercase_ascii text = "true")
-       | Int64 | String -> text)
+       | Float64 | Int64 | String -> text)
 ;;
 
 let read ~path ~total ~ordered ~offset fields =
@@ -56,26 +46,30 @@ let pad right size text =
   if right then gap ^ text else text ^ gap
 ;;
 
-let lines ?(limit = 100) page =
+let lines ?(limit = 100) ~digits page =
   let shown = match page.columns with [] -> 0 | c :: _ -> Array.length c.cells in
   let numeric (c : column) = c.typ.primitive = Int64 || c.typ.primitive = Float64 in
   let index = string_of_int (page.offset + shown) |> String.length in
-  let measured =
-    List.map
-      (fun c ->
-         let cells = Array.map (Option.value ~default:"None") c.cells in
-         let size =
-           Array.fold_left (fun w s -> max w (width s)) (max (width c.name) (width (abbreviation c.typ) + 2)) cells
-         in
-         c, size)
-      page.columns
+  let rec fit first used = function
+    | [] -> [], []
+    | c :: rest as remaining ->
+      let minimum = max (width c.name) (width (Shape.type_name c.typ) + 2) in
+      if not first && used + minimum + 2 > limit then [], remaining
+      else
+        let c = match c.typ.primitive with
+          | Float64 ->
+            let format s = Printf.sprintf "%.*f" digits (float_of_string s) in
+            { c with cells = Array.map (Option.map format) c.cells }
+          | _ -> c
+        in
+        let size = Array.fold_left (fun size cell ->
+          max size (width (Option.value cell ~default:"None"))) minimum c.cells in
+        if not first && used + size + 2 > limit then [], remaining
+        else
+          let visible, hidden = fit false (used + size + 2) rest in
+          (c, size) :: visible, hidden
   in
-  let rec fit used = function
-    | (c, size) :: rest when used + size + 2 <= limit || used = index -> (c, size) :: fit (used + size + 2) rest
-    | _ -> []
-  in
-  let visible = fit index measured in
-  let hidden = List.filteri (fun i _ -> i >= List.length visible) page.columns in
+  let visible, hidden = fit true index page.columns in
   let row cells = (Note, String.make index ' ') :: cells in
   let separated parts = List.concat_map (fun p -> [ Plain, "  "; p ]) parts in
   let header =
@@ -84,7 +78,7 @@ let lines ?(limit = 100) page =
   let types =
     row
       (separated
-         (List.map (fun (c, size) -> Types, pad (numeric c) size ("<" ^ abbreviation c.typ ^ ">")) visible))
+         (List.map (fun (c, size) -> Types, pad (numeric c) size ("<" ^ Shape.type_name c.typ ^ ">")) visible))
   in
   let body =
     List.init shown (fun r ->
@@ -119,13 +113,13 @@ let lines ?(limit = 100) page =
         , "… and "
           ^ String.concat
               ", "
-              (List.map (fun c -> c.name ^ " <" ^ abbreviation c.typ ^ ">") hidden)
+              (List.map (fun c -> c.name ^ " <" ^ Shape.type_name c.typ ^ ">") hidden)
         ]
       ]
   in
   ([ Note, summary ] :: header :: types :: body) @ more
 ;;
 
-let plain page =
-  List.map (fun parts -> String.concat "" (List.map snd parts)) (lines page)
+let plain ~digits page =
+  List.map (fun parts -> String.concat "" (List.map snd parts)) (lines ~digits page)
 ;;

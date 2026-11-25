@@ -86,19 +86,20 @@ let output_line line =
     | _ -> text line)
 ;;
 
-let page_view page =
+let page_view ~digits page =
   let open Rupam.Page in
   let styled (part, text) =
     match part with
     | Plain -> Mosaic.text text
     | Heading -> Mosaic.text ~style:(style ~bold:true typed) text
-    | Types | Index | Missing -> Mosaic.text ~style:(style faint) text
+    | Types -> Mosaic.text ~style:(style subtle) text
+    | Index | Missing -> Mosaic.text ~style:(style faint) text
     | Note -> Mosaic.text ~style:(style subtle) text
   in
-  List.map (fun line -> box ~flex_direction:Row (List.map styled line)) (lines page)
+  List.map (fun line -> box ~flex_direction:Row (List.map styled line)) (lines ~digits page)
 ;;
 
-let transcript source output pages =
+let transcript ~digits source output pages =
   let lines = String.split_on_char '\n' source in
   let echoed =
     List.mapi
@@ -119,12 +120,12 @@ let transcript source output pages =
     ~flex_direction:Column
     ~size:full
     ~margin:(margin_lrtb 0 0 0 1)
-    (echoed @ results @ List.concat_map page_view pages)
+    (echoed @ results @ List.concat_map (page_view ~digits) pages)
 ;;
 
 let status session =
   let dialect =
-    match session.Repl.project.dialect with
+    match session.Repl.project.dialect.value with
     | Some d -> Rupam.Project.dialect_name d
     | None -> "no dialect"
   in
@@ -237,7 +238,7 @@ let evaluate model source =
           Some model.session
         | Ok command -> Repl.run model.session command)
     in
-    let committed = Cmd.static_commit (transcript entry output (List.rev !(model.pages))) in
+    let committed = Cmd.static_commit (transcript ~digits:model.session.project.preview_digits.value entry output (List.rev !(model.pages))) in
     match next with
     | None -> model, Cmd.batch [ committed; Cmd.quit ]
     | Some session ->
@@ -339,7 +340,7 @@ let start ~project ?path () =
   | None -> ()
   | Some session ->
     let pages = ref [] in
-    let session = { session with show = (fun page -> pages := page :: !pages) } in
+    let session = { session with show = (fun ~digits:_ page -> pages := page :: !pages) } in
     let config = Matrix.config ~mode:`Primary ~mouse:`Off () in
     run
       ~config

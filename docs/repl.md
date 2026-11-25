@@ -29,6 +29,14 @@ rupam ❯ orders |> filter(cost > 1.0, missing = skip) |> print()
 rupam ❯ shop
 ```
 
+Table previews show the checked type below each column name. Float64 cells
+use two decimal places by default. To change them for a project:
+
+```toml
+[preview]
+digits = 4
+```
+
 ## Completion
 
 Tab completes from what the cursor is in, and a second Tab cycles through the
@@ -54,6 +62,7 @@ Ctrl+L clears the screen and Ctrl+D leaves.
 
 | Command | |
 | --- | --- |
+| `:options` | effective settings and their sources |
 | `:type EXPR` | type, or the schema of a table expression; runs nothing |
 | `:schema [TABLE]` | columns and types; every table when no name is given |
 | `:preview TABLE` | the first 20 rows, after validation |
@@ -73,7 +82,7 @@ Ctrl+L clears the screen and Ctrl+D leaves.
 An unfinished line (an open parenthesis, a trailing `|>`) continues on the
 next one. A definition that fails to check leaves the session as it was.
 
-## Editors
+## Editors (further LSP work deferred)
 
 `rupam lsp` speaks the Language Server Protocol over stdio. It reports parse
 and type errors as you type and completes top-level names.

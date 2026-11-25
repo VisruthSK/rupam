@@ -1,13 +1,14 @@
 let write ~(entry : Lock.entry) ~program ~locations ~(dialect : Project.dialect) ~output ~code declarations =
-  let extension, dependencies =
+  let extension = Runtime.suffix (Runtime.of_dialect dialect) in
+  let dependencies =
     match dialect, Analysis_program.tabular declarations with
-    | R_dplyr, true -> "R", [ "dplyr"; "tidyr"; "bit64"; "jsonlite"; "arrow" ]
-    | R_dplyr, false -> "R", [ "bit64"; "jsonlite" ]
-    | Python_polars, true -> "py", [ "polars"; "pyarrow" ]
-    | Python_polars, false -> "py", []
+    | R_dplyr, true -> [ "dplyr"; "tidyr"; "bit64"; "jsonlite"; "arrow" ]
+    | R_dplyr, false -> [ "bit64"; "jsonlite" ]
+    | Python_polars, true -> [ "polars"; "pyarrow" ]
+    | Python_polars, false -> []
   in
-  if not (Filename.check_suffix output ("." ^ extension))
-  then failwith ("Expected a ." ^ extension ^ " output file");
+  if not (Filename.check_suffix output extension)
+  then failwith ("Expected a " ^ extension ^ " output file");
   let strings xs = `List (List.map (fun s -> `String s) xs) in
   let point (p : Lexing.position) =
     `Assoc [ "line", `Int p.pos_lnum; "column", `Int (1 + p.pos_cnum - p.pos_bol) ]

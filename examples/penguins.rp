@@ -1,18 +1,19 @@
+# Data: datasets::penguins, exported from R 4.6.2 (344 observations).
 let penguins = read_csv("penguins.csv")
 
 let standardize(x) = (x - mean(x)) / sd(x)
 
 let measured = penguins
-  |> filter(some(body_mass_g) and some(bill_length_mm))
+  |> filter(some(body_mass) and some(bill_len))
   |> mutate(
-       mass_kg = body_mass_g / 1000.0,
-       bill_ratio = bill_length_mm / bill_depth_mm,
-       size = match body_mass_g {
+       mass_kg = body_mass / 1000.0,
+       bill_ratio = bill_len / bill_dep,
+       size = match body_mass {
          ..<3500 => "small",
          3500..<4500 => "medium",
          _ => "large",
        },
-       mass_z = standardize(body_mass_g),
+       mass_z = standardize(body_mass),
        by = species
      )
 
@@ -21,7 +22,7 @@ let by_species = measured
        n = n(),
        mean_mass = mean(mass_kg),
        sd_mass = sd(mass_kg),
-       median_bill = median(bill_length_mm),
+       median_bill = median(bill_len),
        islands = n_distinct(island, missing = skip),
        by = species
      )
@@ -47,8 +48,8 @@ print(described)
 
 let long = measured
   |> mutate(group_size = n(), by = species)
-  |> select(species, island, bill_length_mm, bill_depth_mm)
-  |> pivot_longer(cols = [bill_length_mm, bill_depth_mm], names_to = measure, values_to = mm)
+  |> select(species, island, bill_len, bill_dep)
+  |> pivot_longer(cols = [bill_len, bill_dep], names_to = measure, values_to = mm)
   |> filter(island == "Biscoe")
   |> arrange(species, island, measure, mm)
 

@@ -1,4 +1,5 @@
 """Run with uv run python -m unittest discover -s test."""
+import os
 import shutil
 import subprocess
 import tempfile
@@ -12,6 +13,38 @@ DIALECT = {"r": "r-dplyr", "python": "python-polars"}
 
 
 class ContractIntegration(unittest.TestCase):
+    def test_options_report_the_winning_source_per_key(self):
+        compiler = ROOT / "_build/default/bin/rupam_cli.exe"
+        with tempfile.TemporaryDirectory() as tmp:
+            work = Path(tmp)
+            config = work / "config"
+            global_file = config / "rupam" / "rupam.toml"
+            project = work / "analysis"
+            project.mkdir()
+            global_file.parent.mkdir(parents=True)
+            env = dict(os.environ, XDG_CONFIG_HOME=str(config), APPDATA=str(config))
+
+            def options(commands=":options", *flags):
+                output = subprocess.check_output(
+                    [compiler, "repl", *flags], cwd=project, env=env,
+                    input=commands + "\n:quit\n", text=True)
+                return {k: (v, source) for k, v, source in
+                        (line.split(maxsplit=2) for line in output.splitlines())}
+
+            self.assertEqual(options()["preview.digits"], ("2", "default"))
+            global_file.write_text('[target]\ndialect="r-dplyr"\n[preview]\ndigits=4\n')
+            self.assertEqual(options()["preview.digits"], ("4", f"global {global_file}"))
+            local_file = project / "rupam.toml"
+            local_file.write_text("[preview]\ndigits=2\n")
+            resolved = options()
+            self.assertEqual(resolved["preview.digits"], ("2", f"project {local_file}"))
+            self.assertEqual(resolved["target.dialect"], ("r-dplyr", f"global {global_file}"))
+            self.assertEqual(options(":options", "--target", "r-dplyr")["target.dialect"],
+                             ("r-dplyr", "session --target"))
+            resolved = options(":target python-polars\n:options", "--no-strict")
+            self.assertEqual(resolved["target.dialect"], ("python-polars", "session :target"))
+            self.assertEqual(resolved["check.strict"], ("false", "session --no-strict"))
+
     def test_compiled_script_refuses_data_changed_since_the_lock(self):
         subprocess.run(["dune", "build", "bin/rupam_cli.exe"], cwd=ROOT, check=True)
         with tempfile.TemporaryDirectory() as tmp:
@@ -71,7 +104,7 @@ class ContractIntegration(unittest.TestCase):
                 subprocess.run([runner, script], cwd=work, check=True, capture_output=True)
                 results[target] = pl.read_parquet(work / "penguins-by-species.parquet").sort("species")
         self.assertEqual(results["python"]["species"].to_list(), ["Adelie", "Chinstrap", "Gentoo"])
-        self.assertEqual(results["python"]["n"].to_list(), [7, 5, 5])
+        self.assertEqual(results["python"]["n"].to_list(), [151, 68, 123])
         for column in results["python"].columns:
             left, right = results["python"][column].to_list(), results["r"][column].to_list()
             if results["python"][column].dtype == pl.Float64:

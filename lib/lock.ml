@@ -89,7 +89,7 @@ let analysis ~(project : Project.t) ~source declarations =
     if Analysis_program.tabular declarations
     then
       Analysis_program.analyze
-        ~strict:project.strict
+        ~strict:project.strict.value
         ~directory:(Filename.dirname source)
         declarations
     else [], []
@@ -117,7 +117,7 @@ let analysis ~(project : Project.t) ~source declarations =
     { source = relative root source
     ; dialect = Project.dialect_name (Project.require_dialect project)
     ; compiler
-    ; strict = project.strict
+    ; strict = project.strict.value
     ; inputs =
         List.map (fun path -> { path = relative root path; sha256 = Data_file.digest path }) paths
     ; schemas

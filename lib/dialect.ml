@@ -5,9 +5,9 @@ let program (dialect : Project.dialect) =
 ;;
 
 let value (dialect : Project.dialect) =
-  match dialect with
-  | R_dplyr -> Dplyr.value
-  | Python_polars -> Polars.value
+  match Runtime.of_dialect dialect with
+  | R -> R_values.render
+  | Python -> Polars.value
 ;;
 
 let table (dialect : Project.dialect) =

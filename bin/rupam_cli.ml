@@ -12,8 +12,8 @@ let with_program path action =
 let settings directory target strict =
   let project = Project.load directory in
   { project with
-    dialect = (if Option.is_some target then target else project.dialect)
-  ; strict = project.strict && strict
+    dialect = (match target with None -> project.dialect | Some _ -> { value = target; origin = Session "--target" })
+  ; strict = (if strict then project.strict else { value = false; origin = Session "--no-strict" })
   }
 ;;
 
@@ -35,7 +35,7 @@ let targeted directory target strict action =
 let generate (project : Project.t) path ds =
   Dialect.program
     (Project.require_dialect project)
-    ~strict:project.strict
+    ~strict:project.strict.value
     ~directory:(Filename.dirname path)
     ds
 ;;
@@ -124,7 +124,7 @@ let repl target strict path =
   let directory = Option.fold ~none:(Sys.getcwd ()) ~some:Filename.dirname path in
   guarded (fun () ->
     let project = settings directory target strict in
-    ignore (Project.require_dialect project);
+    Option.iter (fun _ -> ignore (Project.require_dialect project)) path;
     if Lazy.force Line.interactive
     then Console.start ~project ?path ()
     else Repl.start ~project ?path ();

@@ -10,6 +10,7 @@ type view =
 type command =
   | Quit
   | Help
+  | Options
   | Reload
   | Lock
   | Bindings
@@ -37,6 +38,7 @@ let help =
   ; ":validate TABLE", "run data-dict validation now"
   ; ":code [DIALECT] TABLE", "generated code for a table"
   ; ":target [DIALECT]", "show or set the dialect: r-dplyr or python-polars"
+  ; ":options", "effective settings and their sources"
   ; ":bindings", "everything defined in this session"
   ; ":reload", "re-read the loaded file"
   ; ":lock", "validate the loaded file's inputs and record them in rupam.lock"
@@ -77,6 +79,7 @@ let parse line =
     | "quit" | "q" -> Ok Quit
     | "help" | "h" -> Ok Help
     | "reload" -> Ok Reload
+    | "options" when rest = "" -> Ok Options
     | "lock" -> Ok Lock
     | "bindings" -> Ok Bindings
     | "target" when rest = "" -> Ok (Target None)
@@ -140,7 +143,7 @@ type session =
   ; project : Project.t
   ; source_path : string option
   ; definitions : Syntax.declaration list
-  ; show : Page.t -> unit
+  ; show : digits:int -> Page.t -> unit
   }
 
 let empty =
@@ -152,7 +155,7 @@ let empty =
   ; project = Project.standalone
   ; source_path = None
   ; definitions = []
-  ; show = (fun page -> List.iter print_endline (Page.plain page))
+  ; show = (fun ~digits page -> List.iter print_endline (Page.plain ~digits page))
   }
 ;;
 
@@ -163,7 +166,7 @@ let dataset state x =
 let preview state d =
   let dialect = Project.require_dialect state.project in
   let runtime = Runtime.resolve state.project (Runtime.of_dialect dialect) in
-  state.show
+  state.show ~digits:state.project.preview_digits.value
     (match dialect with
      | dialect -> Dialect.preview dialect ~runtime d ~offset:0 ~limit:20)
 ;;
@@ -195,7 +198,7 @@ let echo ?(announce = true) state d =
 let extend state ds =
   let tables, lexical, _ =
     Analysis_program.extend
-      ~strict:state.project.strict
+      ~strict:state.project.strict.value
       ~directory:state.directory
       state.tables
       state.lexical
@@ -612,15 +615,19 @@ let run state = function
   | Help ->
     List.iter (fun (usage, text) -> Printf.printf "  %-24s %s\n" usage text) help;
     Some state
+  | Options ->
+    List.iter (fun (name, value, source) -> Printf.printf "%-16s %-14s %s\n" name value source)
+      (Project.options state.project);
+    Some state
   | Target None ->
     print_endline
-      (match state.project.dialect with
+      (match state.project.dialect.value with
        | Some d -> Project.dialect_name d
        | None ->
          "No dialect yet. Choose one with :target r-dplyr or :target python-polars.");
     Some state
   | Target (Some dialect) ->
-    Some { state with project = { state.project with dialect = Some dialect } }
+    Some { state with project = { state.project with dialect = { value = Some dialect; origin = Session ":target" } } }
   | Lock ->
     (match state.source_path with
      | None -> report "No file loaded. Start the REPL with a program to lock it."

@@ -77,7 +77,7 @@
       "inputs": [
         {
           "path": "penguins.csv",
-          "sha256": "53ab3f71e1e93e1dc6bc8bda0087dd1cb9cdc473b508c370b663b2565daacb23"
+          "sha256": "310b5783fe528ad4b7635bad2973b31ed0aafa02619492978bc14bab5c3d7f64"
         },
         {
           "path": "species.csv",
@@ -88,10 +88,10 @@
         "penguins.csv": {
           "species": "String",
           "island": "String",
-          "bill_length_mm": "Float64?",
-          "bill_depth_mm": "Float64?",
-          "flipper_length_mm": "Int64?",
-          "body_mass_g": "Int64?",
+          "bill_len": "Float64?",
+          "bill_dep": "Float64?",
+          "flipper_len": "Int64?",
+          "body_mass": "Int64?",
           "sex": "String?",
           "year": "Int64"
         },
@@ -110,7 +110,7 @@
       "inputs": [
         {
           "path": "penguins.csv",
-          "sha256": "53ab3f71e1e93e1dc6bc8bda0087dd1cb9cdc473b508c370b663b2565daacb23"
+          "sha256": "310b5783fe528ad4b7635bad2973b31ed0aafa02619492978bc14bab5c3d7f64"
         },
         {
           "path": "species.csv",
@@ -121,10 +121,10 @@
         "penguins.csv": {
           "species": "String",
           "island": "String",
-          "bill_length_mm": "Float64?",
-          "bill_depth_mm": "Float64?",
-          "flipper_length_mm": "Int64?",
-          "body_mass_g": "Int64?",
+          "bill_len": "Float64?",
+          "bill_dep": "Float64?",
+          "flipper_len": "Int64?",
+          "body_mass": "Int64?",
           "sex": "String?",
           "year": "Int64"
         },
