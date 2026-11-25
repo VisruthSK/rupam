@@ -12,6 +12,6 @@
 (test
  (name conformance)
  (modules conformance)
- (libraries rupam toml)
+ (libraries rupam_fixture)
  (deps
   (glob_files conformance/*.toml)))

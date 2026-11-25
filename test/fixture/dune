@@ -1,0 +1,3 @@
+(library
+ (name rupam_fixture)
+ (libraries rupam toml astring))

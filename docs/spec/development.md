@@ -100,9 +100,10 @@ also reads their Parquet outputs.
 Without a terminal, `rupam repl` reads submissions from standard input and
 writes deterministic output: no colour, fixed width, no timing. Cram tests use
 this directly. `scripts/dev fixture ID FILE` runs a source file and writes a
-`pending` conformance fixture with its source, public input, target and
-observed logical schema, diagnostic or value. Restricted values are never
-written.
+`pending` conformance fixture with its source and, under `[observed]`, the
+logical type, value or diagnostic it produced. The correct outcome goes under
+`[expect]` by hand, so a captured failure never counts as a pass. Restricted
+values are never written.
 
 ## Tracing
 

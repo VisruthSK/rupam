@@ -77,6 +77,20 @@ let code dialect path =
     locations
 ;;
 
+let fixture id path =
+  let outcome =
+    Rupam_fixture.Fixture.capture
+      ~directory:"test/conformance"
+      ~id
+      (In_channel.with_open_text path In_channel.input_all)
+  in
+  let show name = Option.iter (Printf.printf "%s  %s\n" name) in
+  Printf.printf "test/conformance/%s.toml\n" id;
+  show "type" outcome.typ;
+  show "value" outcome.value;
+  show "diagnostic" outcome.diagnostic
+;;
+
 let guarded f path =
   match f path with
   | () -> Cmd.Exit.ok
@@ -106,5 +120,15 @@ let () =
           ; Cmd.v
               (Cmd.info "code" ~doc:"Generated code and source map.")
               Term.(const (fun d -> guarded (code d)) $ dialect $ file)
+          ; Cmd.v
+              (Cmd.info
+                 "fixture"
+                 ~doc:
+                   "Record a source file as a pending conformance fixture with its \
+                    observed outcome.")
+              Term.(
+                const (fun id -> guarded (fixture id))
+                $ Arg.(required & pos 0 (some string) None & info [] ~docv:"ID")
+                $ Arg.(required & pos 1 (some file) None & info [] ~docv:"FILE"))
           ]))
 ;;
