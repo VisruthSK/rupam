@@ -137,6 +137,20 @@ let compile ?(annotate = Source_map.plain) ds =
         | _ -> assert false)
     | Pipe (v, { form = Call (g, vs); _ }) -> operate (v :: List.map snd vs) (callee g)
     | Pipe (v, f) -> operate [ v ] (callee f)
+    | Member (v, set) ->
+      operate [ v; set ] (function
+        | [ v; set ] ->
+          let item = fresh () in
+          "any(vapply("
+          ^ set
+          ^ ", function("
+          ^ item
+          ^ ") identical("
+          ^ item
+          ^ ", "
+          ^ v
+          ^ "), TRUE))"
+        | _ -> assert false)
     | Binary (op, a, b) ->
       operate [ a; b ] (function
         | [ a; b ] ->
@@ -169,6 +183,30 @@ let compile ?(annotate = Source_map.plain) ds =
           let ts, vs = parts path ps in
           ("identical(attr(" ^ path ^ ", 'tag'), " ^ q n ^ ")") :: ts, vs
         | Ptuple ps -> parts path ps
+        | Prange { low; high; inclusive } ->
+          ( Option.to_list (Option.map (fun l -> literal_text l ^ " <= " ^ path) low)
+            @ Option.to_list
+                (Option.map
+                   (fun h ->
+                      path ^ (if inclusive then " <= " else " < ") ^ literal_text h)
+                   high)
+          , [] )
+        | Pas (n, p) ->
+          let ts, vs = pattern path p in
+          ts, (n, path) :: vs
+        | Palt alternatives ->
+          let each = List.map (pattern path) alternatives in
+          let vs = snd (List.hd each) in
+          if List.exists (fun (ts, _) -> ts = []) each
+          then [], vs
+          else
+            ( [ "("
+                ^ String.concat
+                    " || "
+                    (List.map (fun (ts, _) -> "(" ^ String.concat " && " ts ^ ")") each)
+                ^ ")"
+              ]
+            , vs )
       and parts path ps =
         let ts, vs =
           List.mapi (fun i p -> pattern (Printf.sprintf "%s[[%d]]" path (i + 1)) p) ps
@@ -176,8 +214,11 @@ let compile ?(annotate = Source_map.plain) ds =
         in
         List.concat ts, List.concat vs
       in
-      let branch (p, b) rest =
-        let tests, vars = pattern id p in
+      let branch arm rest =
+        let tests, vars = pattern id arm.pattern in
+        let inner = vars @ env in
+        let tests = tests @ Option.to_list (Option.map (emit inner) arm.guard) in
+        let b = arm.body in
         if tests = []
         then emit (vars @ env) b
         else

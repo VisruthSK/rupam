@@ -81,6 +81,15 @@ let lower ~fields (plan : Table.t) base =
     | Polars_sqrt _ ->
       raise (Error "R target cannot execute the Python capability polars.sqrt")
     | Apply (row, args) -> apply row (List.map emit args)
+    | Member (a, items) ->
+      let a = emit a in
+      R.qualified
+        "dplyr"
+        "if_else"
+        [ R.Positional (R.call "is.na" [ a ])
+        ; R.Positional R.Na
+        ; R.Positional (R.Binary (R.In_set, a, R.call "c" (List.map emit items)))
+        ]
     | Unary (Not, a) -> R.Not (emit a)
     | Unary (Negate, a) -> R.Negate (emit a)
     | Required a -> R.call "rp_present" [ emit a ]

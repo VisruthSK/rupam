@@ -113,7 +113,7 @@ write_parquet(orders, "result.parquet")
                 shutil.copy(ROOT / "examples" / name, work)
             (work / "checked.rp").write_text("""use contract "data-dict.yaml" as shop
 let orders = load(shop.orders)
-let result = orders |> mutate(x = if customer_id > 0 then customer_id else customer_id + 9223372036854775807) |> select(x)
+let result = orders |> mutate(x = if (customer_id > 0) customer_id else customer_id + 9223372036854775807) |> select(x)
 write_parquet(result, "checked.parquet")
 """)
             compiler = ROOT / "_build/default/bin/rupam_cli.exe"
@@ -184,7 +184,7 @@ get(Just(9007199254740993))
                 "uri": uri, "version": 1, "text": "let square(x)=x*x"}}},
             {"id": 2, "method": "textDocument/completion", "params": {"textDocument": {"uri": uri}}},
             {"method": "textDocument/didChange", "params": {"textDocument": {"uri": uri, "version": 2},
-                "contentChanges": [{"text": "let x = true + 1"}]}},
+                "contentChanges": [{"text": "let x = TRUE + 1"}]}},
             {"id": 3, "method": "shutdown", "params": {}}, {"method": "exit"}]
         body = bytearray()
         for item in messages:

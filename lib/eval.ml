@@ -18,7 +18,8 @@ exception Error of span * string
 let rec display = function
   | Int n -> Int64.to_string n
   | Float n -> string_of_float n
-  | Bool b -> string_of_bool b
+  | Bool true -> "TRUE"
+  | Bool false -> "FALSE"
   | Text s -> Printf.sprintf "%S" s
   | Constructor (n, _) -> n
   | Variant (n, []) -> n
@@ -58,6 +59,27 @@ let rec expression env source =
       | Wildcard, _ -> Some []
       | Bind n, _ -> Some [ n, v ]
       | Pliteral l, v when v = eval { source with form = Literal l } -> Some []
+      | Prange { low; high; inclusive }, v ->
+        let bound l = eval { source with form = Literal l } in
+        let number = function
+          | Int i -> Int64.to_float i
+          | Float f -> f
+          | _ -> nan
+        in
+        let x = number v in
+        let above = Option.fold ~none:true ~some:(fun l -> x >= number (bound l)) low in
+        let below =
+          Option.fold
+            ~none:true
+            ~some:(fun h ->
+              let h = number (bound h) in
+              if inclusive then x <= h else x < h)
+            high
+        in
+        if above && below then Some [] else None
+      | Palt ps, v -> List.find_map (fun p -> bind p v) ps
+      | Pas (n, p), v -> Option.map (fun vars -> (n, v) :: vars) (bind p v)
+      | Tag ("None", []), Option None -> Some []
       | Tag ("Some", [ p ]), Option (Some x) -> bind p x
       | Ptuple ps, Tuple vs -> many ps vs
       | Tag (n, ps), Variant (m, vs) when n = m -> many ps vs
@@ -71,7 +93,14 @@ let rec expression env source =
     in
     (match
        List.find_map
-         (fun (p, body) -> Option.map (fun vars -> vars, body) (bind p value))
+         (fun arm ->
+            Option.bind (bind arm.pattern value) (fun vars ->
+              match arm.guard with
+              | None -> Some (vars, arm.body)
+              | Some g ->
+                (match expression (vars @ env) g with
+                 | Bool true -> Some (vars, arm.body)
+                 | _ -> None)))
          branches
      with
      | Some (vars, body) -> expression (vars @ env) body

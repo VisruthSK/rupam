@@ -76,6 +76,8 @@ let rec elaborate env columns source =
   | If (c, t, f) -> choose (go c) (go t) (go f)
   | Binary (op, a, b) -> binary op (go a) (go b)
   | Unary (op, a) -> unary op (go a)
+  | Local (name, { form = Lambda (params, f); _ }, body) ->
+    elaborate ((name, Function (params, f, env)) :: env) columns body
   | Local (name, x, body) -> elaborate ((name, Value (go x)) :: env) columns body
   | Pipe (x, { form = Call (f, args); _ }) ->
     go { source with form = Call (f, (None, x) :: args) }
@@ -108,6 +110,10 @@ let rec elaborate env columns source =
      | None, Some (Row row), _ -> apply row values
      | None, Some (Reduction r), [ x ] -> reduce r x
      | _ -> raise (Error ("Wrong arguments to " ^ name)))
+  | Call ({ form = Lambda (params, body); _ }, args)
+    when List.length params = List.length args ->
+    let locals = List.map2 (fun p (_, a) -> p, Value (go a)) params args in
+    elaborate (locals @ env) columns body
   | Call _ -> unsupported "Calling a computed function"
   | Lambda _ -> unsupported "An anonymous function"
   | List _ -> unsupported "A list"
@@ -116,27 +122,64 @@ let rec elaborate env columns source =
   | Field _ -> unsupported "Field access"
   | Range _ -> unsupported "A range"
   | Formula _ -> unsupported "A formula"
+  | Member (x, { form = List items; _ }) -> member (go x) (List.map go items)
+  | Member _ -> unsupported "%in% with a computed set"
 
-and choice env columns subject branches =
-  let present = { subject with typ = { subject.typ with nullable = false } } in
-  let arm (pattern, body) =
-    let test, bound =
-      match pattern with
-      | Wildcard -> None, []
-      | Bind n -> None, [ n, Value subject ]
-      | Tag ("Some", [ Bind n ]) -> Some (apply Present [ subject ]), [ n, Value present ]
-      | Tag ("Some", [ Wildcard ]) -> Some (apply Present [ subject ]), []
-      | Tag ("None", []) | Pliteral Absent -> Some (apply Absent [ subject ]), []
-      | Pliteral l ->
-        let equal =
-          binary Equal subject (elaborate env columns { body with form = Literal l })
-        in
-        Some (coalesce equal (constant (`Bool false))), []
-      | _ -> unsupported "This pattern"
-    in
-    test, elaborate (bound @ env) columns body
+and choice env columns subject arms =
+  let known e = coalesce e (constant (`Bool false)) in
+  let both a b =
+    match a, b with
+    | None, t | t, None -> t
+    | Some a, Some b -> Some (binary And a b)
   in
-  match List.rev_map arm branches with
+  let literal = function
+    | Int s -> constant (`Int (Int64.of_string s))
+    | Float s -> constant (`Float (float_of_string s))
+    | Text s -> constant (`String s)
+    | Bool b -> constant (`Bool b)
+    | Absent -> null
+  in
+  let rec test subject pattern =
+    let present = { subject with typ = { subject.typ with nullable = false } } in
+    match pattern with
+    | Wildcard -> None, []
+    | Bind n -> None, [ n, Value subject ]
+    | Pas (n, p) ->
+      let t, vars = test subject p in
+      t, (n, Value subject) :: vars
+    | Tag ("Some", [ p ]) ->
+      let t, vars = test present p in
+      both (Some (apply Present [ subject ])) t, vars
+    | Tag ("None", []) | Pliteral Absent -> Some (apply Absent [ subject ]), []
+    | Pliteral l -> Some (known (binary Equal subject (literal l))), []
+    | Prange { low; high; inclusive } ->
+      let bound op l = known (binary op subject (literal l)) in
+      ( both
+          (Option.map (bound Greater_equal) low)
+          (Option.map (bound (if inclusive then Less_equal else Less)) high)
+      , [] )
+    | Palt alternatives ->
+      let tests = List.map (test subject) alternatives in
+      let vars = snd (List.hd tests) in
+      (match List.map fst tests with
+       | tests when List.exists Option.is_none tests -> None, vars
+       | t :: rest ->
+         ( Some
+             (List.fold_left
+                (fun a b -> binary Or a b)
+                (Option.get t)
+                (List.map Option.get rest))
+         , vars )
+       | [] -> None, vars)
+    | Tag _ | Ptuple _ | Precord _ -> unsupported "This pattern"
+  in
+  let arm a =
+    let t, vars = test subject a.pattern in
+    let env = vars @ env in
+    let guard = Option.map (fun g -> known (elaborate env columns g)) a.guard in
+    both t guard, elaborate env columns a.body
+  in
+  match List.rev_map arm arms with
   | [] -> raise (Error "match needs at least one branch")
   | (_, last) :: earlier ->
     List.fold_left
@@ -155,7 +198,8 @@ let expression env columns source =
 ;;
 
 let define env = function
-  | Let (name, Some params, body) -> (name, Function (params, body, env)) :: env
+  | Let (name, Some params, body) | Let (name, None, { form = Lambda (params, body); _ })
+    -> (name, Function (params, body, env)) :: env
   | Let (name, None, body) -> (name, Value (expression env [] body)) :: env
   | _ -> raise (Error "Expected a let declaration")
 ;;

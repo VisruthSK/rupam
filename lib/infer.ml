@@ -350,9 +350,66 @@ let uncovered env level equal subject branches =
         Constructor tag, fields)
     | _ -> []
   in
-  let catchall = function
+  let rec catchall = function
     | Wildcard | Bind _ | Precord _ -> true
-    | Tag _ | Ptuple _ | Pliteral _ -> false
+    | Pas (_, p) -> catchall p
+    | Palt ps -> List.exists catchall ps
+    | Tag _ | Ptuple _ | Pliteral _ | Prange _ -> false
+  in
+  let rec expand rows =
+    List.concat_map
+      (function
+        | Pas (_, p) :: ps -> expand [ p :: ps ]
+        | Palt alts :: ps -> expand (List.map (fun p -> p :: ps) alts)
+        | row -> [ row ])
+      rows
+  in
+  let covers t rows =
+    let integral =
+      match repr t with
+      | Int -> true
+      | _ -> false
+    in
+    let number = function
+      | Syntax.Int s | Float s -> float_of_string s
+      | _ -> nan
+    in
+    let interval = function
+      | Prange { low; high; inclusive } ->
+        let low = Option.fold ~none:neg_infinity ~some:number low in
+        let high, closed =
+          match high with
+          | None -> infinity, false
+          | Some h when integral && inclusive -> number h +. 1., false
+          | Some h -> number h, inclusive
+        in
+        Some (low, high, closed)
+      | Pliteral ((Syntax.Int _ | Float _) as l) ->
+        let x = number l in
+        Some (if integral then x, x +. 1., false else x, x, true)
+      | _ -> None
+    in
+    let intervals =
+      List.filter_map
+        (function
+          | p :: rest when List.for_all catchall rest -> interval p
+          | _ -> None)
+        rows
+      |> List.sort compare
+    in
+    let reach, _ =
+      List.fold_left
+        (fun (reach, closed) (low, high, high_closed) ->
+           if low <= reach
+           then
+             if high > reach
+             then high, high_closed
+             else reach, closed || (high = reach && high_closed)
+           else reach, closed)
+        (neg_infinity, false)
+        intervals
+    in
+    reach = infinity
   in
   let specialize head arity = function
     | p :: ps when catchall p -> Some (List.init arity (fun _ -> Wildcard) @ ps)
@@ -376,6 +433,7 @@ let uncovered env level equal subject branches =
     p :: rest
   in
   let rec missing types rows =
+    let rows = expand rows in
     match types with
     | [] -> if rows = [] then Some [] else None
     | t :: rest ->
@@ -396,6 +454,8 @@ let uncovered env level equal subject branches =
           rows
       in
       (match heads t with
+       | [] when (not all_catchall) && covers t rows ->
+         missing rest [ List.map (fun _ -> Wildcard) rest ]
        | [] -> wildcard ()
        | _ when all_catchall -> wildcard ()
        | cases ->
@@ -406,7 +466,8 @@ let uncovered env level equal subject branches =
               |> Option.map (rebuild head arity))
            cases)
   in
-  match missing [ subject ] (List.map (fun (p, _) -> [ p ]) branches) with
+  let unguarded = List.filter (fun arm -> arm.guard = None) branches in
+  match missing [ subject ] (List.map (fun arm -> [ arm.pattern ]) unguarded) with
   | Some [ p ] -> Some p
   | _ -> None
 ;;
@@ -468,7 +529,11 @@ let rec expression env level source =
   match source.form with
   | Annotated (x, a) ->
     let t = annotation env [] level a in
-    equal t (check x);
+    let v = check x in
+    (match repr t, repr v with
+     | Option _, (Option _ | Var _) -> equal t v
+     | Option inner, _ -> equal inner v
+     | _ -> equal t v);
     t
   | Match (subject, branches) ->
     let subject = check subject
@@ -487,6 +552,28 @@ let rec expression env level source =
         let ts = List.map (fun _ -> fresh level Any) ps in
         equal t (Tuple ts);
         List.concat (List.map2 bind ts ps)
+      | Prange { low; high; _ } ->
+        equal (fresh level Numeric) t;
+        List.iter
+          (function
+            | Syntax.Float _ -> equal Float t
+            | _ -> ())
+          (Option.to_list low @ Option.to_list high);
+        []
+      | Pas (n, p) -> (n, ([], t)) :: bind t p
+      | Palt [] -> []
+      | Palt (first :: rest) ->
+        let vars = bind t first in
+        List.iter
+          (fun p ->
+             let others = bind t p in
+             if
+               List.sort compare (List.map fst others)
+               <> List.sort compare (List.map fst vars)
+             then fail "Every alternative must bind the same names";
+             List.iter (fun (n, (_, ty)) -> equal (snd (List.assoc n vars)) ty) others)
+          rest;
+        vars
       | Tag (n, ps) ->
         let ts = List.map (fun _ -> fresh level Any) ps in
         (match n, ts with
@@ -501,17 +588,24 @@ let rec expression env level source =
         List.concat (List.map2 bind ts ps)
     in
     List.iter
-      (fun (p, body) ->
-         let vars = bind subject p in
+      (fun arm ->
+         let vars = bind subject arm.pattern in
          let ns = List.map fst vars in
          if List.length ns <> List.length (List.sort_uniq compare ns)
          then fail "Repeated pattern variable";
-         equal result (expression (extend env vars) level body))
+         let inner = extend env vars in
+         Option.iter (fun g -> equal Bool (expression inner level g)) arm.guard;
+         equal result (expression inner level arm.body))
       branches;
     (match uncovered env level equal subject branches with
      | Some p -> fail ("Non-exhaustive match. Missing case " ^ Format.pattern p)
      | None -> ());
     result
+  | Member (x, set) ->
+    let element, lifted = strip (check x) in
+    equal (List element) (check set);
+    decide source (Lifted ([ lifted; false ], element));
+    lift lifted Bool
   | Name (Column, n) ->
     (match List.assoc_opt n env.columns with
      | Some t -> t

@@ -189,6 +189,10 @@ let evaluate ~rows ~input expression =
     | Polars_sqrt a | Apply (Sqrt, [ a ]) -> apply_row Sqrt [ at i a ]
     | Apply (row, args) -> apply_row row (List.map (at i) args)
     | Reduce (r, e) -> aggregate r (Array.init rows (fun j -> at j e))
+    | Member (a, items) ->
+      (match at i a with
+       | Missing -> Missing
+       | v -> B (List.exists (fun item -> at i item = v) items))
   in
   match expression.typ.shape with
   | Scalar -> One (at 0 expression)

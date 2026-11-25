@@ -6,14 +6,18 @@ let parameters ps body =
     let var = {body with form=Name (Bare,n)} in
     {body with form=Local (n,{body with form=Annotated (var,annotation)},body)}) ps body
 let result_annotation t body = match t with None -> body | Some a -> {body with form=Annotated (body,a)}
+let negative = function Int s -> Int ("-" ^ s) | Float s -> Float ("-" ^ s) | l -> l
+let alternatives a b = match a with Palt ps -> Palt (ps @ [b]) | a -> Palt [a; b]
+let product = function [p] -> p | ps -> Ptuple ps
+let subject start finish = function [x] -> x | xs -> at start finish (Tuple xs)
 %}
-%token DOTDOT TYPEARROW IMPORT TYPE MATCH BAR QUESTION
-%token LET USE CONTRACT AS FN IF THEN ELSE
+%token DOTDOT DOTDOTEQ DOTDOTLT TYPEARROW IMPORT TYPE MATCH BAR QUESTION AT
+%token LET USE CONTRACT AS FN IF ELSE
 %token <string> NAME INT FLOAT STRING
 %token TRUE FALSE NONE
 %token IN LB RB LC RC
 %token LP RP COMMA EQ DOT PIPE DOLLAR CARET ARROW END SEMI EOF
-%token PLUS MINUS TIMES DIV GT LT GE LE NE EQUAL AND OR NOT COLON MOD TILDE
+%token PLUS MINUS TIMES DIV GT LT GE LE NE EQUAL AND OR NOT COLON MOD TILDE MEMBER
 %right TYPEARROW
 %nonassoc QUESTION
 %right IN ELSE ARROW
@@ -21,7 +25,8 @@ let result_annotation t body = match t with None -> body | Some a -> {body with 
 %nonassoc TILDE
 %left OR
 %left AND
-%nonassoc GT LT GE LE NE EQUAL
+%nonassoc NOT
+%nonassoc GT LT GE LE NE EQUAL MEMBER
 %nonassoc COLON
 %left PLUS MINUS
 %left TIMES DIV MOD
@@ -55,12 +60,25 @@ annotations: annotation { [$1] } | annotations COMMA annotation { $3 :: $1 };
 variants: BAR variant { [$2] } | variants BAR variant { $3 :: $1 };
 variant: NAME { $1,[] } | NAME LP typed_fields RP { $1,List.rev $3 };
 typed_fields: NAME COLON annotation { [$1,$3] } | typed_fields COMMA NAME COLON annotation { ($3,$5) :: $1 };
-branches: pattern ARROW expr { [$1,$3] } | branches COMMA pattern ARROW expr { ($3,$5) :: $1 };
-pattern: NAME { if $1="_" then Wildcard else if Char.uppercase_ascii $1.[0]=$1.[0] then Tag ($1,[]) else Bind $1 }
+arms: arm { [$1] } | arms COMMA arm { $3 :: $1 };
+arm: patterns ARROW expr { { pattern = product (List.rev $1); guard = None; body = $3 } }
+ | patterns IF expr ARROW expr { { pattern = product (List.rev $1); guard = Some $3; body = $5 } };
+pattern: alternative { $1 } | pattern BAR alternative { alternatives $1 $3 };
+alternative: NAME { if $1="_" then Wildcard else if Char.uppercase_ascii $1.[0]=$1.[0] then Tag ($1,[]) else Bind $1 }
+ | NAME AT alternative { Pas ($1,$3) }
  | NAME LP patterns RP { Tag ($1,List.rev $3) }
  | LC names RC { Precord (List.rev $2) }
+ | LC names COMMA DOTDOT RC { Precord (List.rev $2) }
  | literal { Pliteral $1 }
+ | MINUS bound { Pliteral (negative $2) }
+ | signed DOTDOTEQ signed { Prange { low = Some $1; high = Some $3; inclusive = true } }
+ | signed DOTDOTLT signed { Prange { low = Some $1; high = Some $3; inclusive = false } }
+ | DOTDOTEQ signed { Prange { low = None; high = Some $2; inclusive = true } }
+ | DOTDOTLT signed { Prange { low = None; high = Some $2; inclusive = false } }
+ | signed DOTDOT { Prange { low = Some $1; high = None; inclusive = false } }
  | LP pattern COMMA patterns RP { Ptuple ($2 :: List.rev $4) };
+bound: INT { Int $1 } | FLOAT { Float $1 };
+signed: bound { $1 } | MINUS bound { negative $2 };
 patterns: pattern { [$1] } | patterns COMMA pattern { $3 :: $1 };
 literal: INT { Int $1 } | FLOAT { Float $1 } | STRING { Text $1 }
  | TRUE { Bool true } | FALSE { Bool false } | NONE { Absent };
@@ -73,22 +91,33 @@ args: /* empty */ { [] } | arguments { List.rev $1 } | arguments COMMA { List.re
 arguments: arg { [$1] } | arguments COMMA arg { $3 :: $1 };
 arg: expr { None,$1 } | NAME EQ expr { Some $1,$3 };
 values: expr { [$1] } | values COMMA expr { $3 :: $1 };
-fields: NAME EQ expr { [$1,$3] } | fields COMMA NAME EQ expr { ($3,$5) :: $1 };
-expr: MATCH expr LC branches RC { at $startpos $endpos (Match ($2,List.rev $4)) }
+fields: field { [$1] } | fields COMMA field { $3 :: $1 };
+field: NAME EQ expr { $1,$3 } | NAME { $1,at $startpos $endpos (Name (Bare,$1)) };
+rest: expr { $1 } | expr separator { $1 } | block { $1 };
+block: LET NAME EQ expr separator rest { at $startpos $endpos (Local ($2,$4,$6)) }
+ | LET NAME LP params RP EQ expr separator rest
+   { at $startpos $endpos (Local ($2,at $startpos($7) $endpos($7) (Lambda (List.map fst $4,parameters $4 $7)),$9)) };
+expr: MATCH values LC arms RC { at $startpos $endpos (Match (subject $startpos($2) $endpos($2) (List.rev $2),List.rev $4)) }
+ | MATCH values LC arms COMMA RC { at $startpos $endpos (Match (subject $startpos($2) $endpos($2) (List.rev $2),List.rev $4)) }
  | LB RB { at $startpos $endpos (List []) }
  | LB values RB { at $startpos $endpos (List (List.rev $2)) }
+ | LB values COMMA RB { at $startpos $endpos (List (List.rev $2)) }
  | LC RC { at $startpos $endpos (Record []) }
  | LC fields RC { at $startpos $endpos (Record (List.rev $2)) }
+ | LC fields COMMA RC { at $startpos $endpos (Record (List.rev $2)) }
+ | LC block RC { $2 }
  | LP expr COMMA values RP { at $startpos $endpos (Tuple ($2 :: List.rev $4)) }
  | LET NAME EQ expr IN expr { at $startpos $endpos (Local ($2,$4,$6)) }
  | NAME { at $startpos $endpos (Name (Bare,$1)) } | DOLLAR NAME { at $startpos $endpos (Name (Column,$2)) }
  | CARET NAME { at $startpos $endpos (Name (Lexical,$2)) } | literal { at $startpos $endpos (Literal $1) }
  | LP expr RP { $2 } | expr DOT NAME { at $startpos $endpos (Field ($1,$3)) }
  | expr LP args RP { at $startpos $endpos (Call ($1,$3)) }
- | IF expr THEN expr ELSE expr { at $startpos $endpos (If ($2,$4,$6)) }
+ | IF LP expr RP expr ELSE expr { at $startpos $endpos (If ($3,$5,$7)) }
  | FN LP params RP ARROW expr { at $startpos $endpos (Lambda (List.map fst $3,parameters $3 $6)) }
- | MINUS expr %prec UNARY { at $startpos $endpos (Unary (Negate,$2)) }
- | NOT expr %prec UNARY { at $startpos $endpos (Unary (Not,$2)) }
+ | MINUS expr %prec UNARY
+   { (match $2.form with Binary (Power,_,_) when $startpos($2) = fst $2.span -> failwith "Write -(x ^ y) or (-x) ^ y" | _ -> ());
+     at $startpos $endpos (Unary (Negate,$2)) }
+ | NOT expr { at $startpos $endpos (Unary (Not,$2)) }
  | expr PLUS expr { at $startpos $endpos (Binary (Add,$1,$3)) }
  | expr MINUS expr { at $startpos $endpos (Binary (Sub,$1,$3)) }
  | expr TIMES expr { at $startpos $endpos (Binary (Mul,$1,$3)) }
@@ -101,6 +130,7 @@ expr: MATCH expr LC branches RC { at $startpos $endpos (Match ($2,List.rev $4)) 
  | expr LE expr { at $startpos $endpos (Binary (Less_equal,$1,$3)) }
  | expr EQUAL expr { at $startpos $endpos (Binary (Equal,$1,$3)) }
  | expr NE expr { at $startpos $endpos (Binary (Not_equal,$1,$3)) }
+ | expr MEMBER expr { at $startpos $endpos (Member ($1,$3)) }
  | expr PIPE expr { at $startpos $endpos (Pipe ($1,$3)) }
  | expr TILDE expr { at $startpos $endpos (Formula (Some $1,$3)) }
  | TILDE expr %prec TILDE { at $startpos $endpos (Formula (None,$2)) }

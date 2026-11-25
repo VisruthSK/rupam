@@ -24,6 +24,14 @@ let rec pattern = function
   | Pliteral l -> literal_text l
   | Tag (n, ps) -> n ^ "(" ^ comma pattern ps ^ ")"
   | Ptuple ps -> "(" ^ comma pattern ps ^ ")"
+  | Prange { low; high; inclusive } ->
+    Option.fold ~none:"" ~some:literal_text low
+    ^
+      (match high with
+      | None -> ".."
+      | Some h -> (if inclusive then "..=" else "..<") ^ literal_text h)
+  | Palt ps -> String.concat " | " (List.map pattern ps)
+  | Pas (n, p) -> n ^ " @ " ^ pattern p
 ;;
 
 let rec expr x =
@@ -35,7 +43,18 @@ let rec expr x =
      | Lexical -> "^")
     ^ Identifier.quote name
   | Match (x, bs) ->
-    "match " ^ expr x ^ " {" ^ comma (fun (p, x) -> pattern p ^ " => " ^ expr x) bs ^ "}"
+    "match "
+    ^ expr x
+    ^ " {"
+    ^ comma
+        (fun a ->
+           pattern a.pattern
+           ^ Option.fold ~none:"" ~some:(fun g -> " if " ^ expr g) a.guard
+           ^ " => "
+           ^ expr a.body)
+        bs
+    ^ "}"
+  | Member (a, b) -> "(" ^ expr a ^ " %in% " ^ expr b ^ ")"
   | Annotated (x, _) -> expr x
   | Tuple xs -> "(" ^ comma expr xs ^ ")"
   | List xs -> "[" ^ comma expr xs ^ "]"

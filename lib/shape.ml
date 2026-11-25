@@ -48,6 +48,7 @@ type node =
   | Broadcast of int * expr
   | Binary of operator * expr * expr
   | Reduce of Prelude.reduction * expr
+  | Member of expr * expr list
 
 and expr =
   { node : node
@@ -215,4 +216,11 @@ let filter context policy predicate =
          "This condition is missing where its inputs are missing. Say what happens to \
           those rows: missing = skip drops them, missing = propagate keeps them, missing \
           = error stops the run")
+;;
+
+let member x items =
+  let items = List.map (adopt x.typ.primitive) items in
+  if List.exists (fun i -> i.typ.shape <> Scalar) items
+  then raise (Error "%in% needs a list of values");
+  { node = Member (x, items); typ = { x.typ with primitive = Bool } }
 ;;

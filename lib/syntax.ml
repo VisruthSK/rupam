@@ -39,6 +39,15 @@ type pattern =
   | Tag of string * pattern list
   | Ptuple of pattern list
   | Pliteral of literal
+  | Prange of range
+  | Palt of pattern list
+  | Pas of string * pattern
+
+and range =
+  { low : literal option
+  ; high : literal option
+  ; inclusive : bool
+  }
 
 type annotation =
   | Arow of (string * annotation) list * string option
@@ -54,8 +63,15 @@ type expr =
   ; span : span
   }
 
+and arm =
+  { pattern : pattern
+  ; guard : expr option
+  ; body : expr
+  }
+
 and form =
-  | Match of expr * (pattern * expr) list
+  | Match of expr * arm list
+  | Member of expr * expr
   | Annotated of expr * annotation
   | Name of reference * string
   | Tuple of expr list
@@ -84,7 +100,8 @@ type declaration =
 let literal_text = function
   | Int s | Float s -> s
   | Text s -> Printf.sprintf "%S" s
-  | Bool b -> string_of_bool b
+  | Bool true -> "TRUE"
+  | Bool false -> "FALSE"
   | Absent -> "None"
 ;;
 
@@ -113,4 +130,29 @@ let binary_symbol = function
 let comparison = function
   | Less | Greater | Less_equal | Greater_equal | Equal | Not_equal -> true
   | Add | Sub | Mul | Div | Mod | Power | And | Or -> false
+;;
+
+let map f x =
+  let arm a = { a with guard = Option.map f a.guard; body = f a.body } in
+  let form =
+    match x.form with
+    | Match (s, arms) -> Match (f s, List.map arm arms)
+    | Member (a, b) -> Member (f a, f b)
+    | Annotated (a, t) -> Annotated (f a, t)
+    | Tuple xs -> Tuple (List.map f xs)
+    | List xs -> List (List.map f xs)
+    | Record fs -> Record (List.map (fun (n, v) -> n, f v) fs)
+    | Local (n, a, b) -> Local (n, f a, f b)
+    | Field (a, n) -> Field (f a, n)
+    | Call (g, args) -> Call (f g, List.map (fun (n, v) -> n, f v) args)
+    | Pipe (a, b) -> Pipe (f a, f b)
+    | Formula (a, b) -> Formula (Option.map f a, f b)
+    | Range (a, b) -> Range (f a, f b)
+    | Binary (op, a, b) -> Binary (op, f a, f b)
+    | Unary (op, a) -> Unary (op, f a)
+    | If (c, a, b) -> If (f c, f a, f b)
+    | Lambda (ps, b) -> Lambda (ps, f b)
+    | (Name _ | Literal _) as form -> form
+  in
+  { x with form }
 ;;

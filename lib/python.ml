@@ -118,6 +118,30 @@ let compile ?(annotate = Source_map.plain) program =
             :: tests
           , bindings )
         | Ptuple ps -> children path 0 ps
+        | Prange { low; high; inclusive } ->
+          ( Option.to_list (Option.map (fun l -> literal_text l ^ " <= " ^ path) low)
+            @ Option.to_list
+                (Option.map
+                   (fun h ->
+                      path ^ (if inclusive then " <= " else " < ") ^ literal_text h)
+                   high)
+          , [] )
+        | Pas (n, p) ->
+          let tests, bindings = pattern path p in
+          tests, (n, path) :: bindings
+        | Palt alternatives ->
+          let each = List.map (pattern path) alternatives in
+          let bindings = snd (List.hd each) in
+          if List.exists (fun (tests, _) -> tests = []) each
+          then [], bindings
+          else
+            ( [ "("
+                ^ String.concat
+                    " or "
+                    (List.map (fun (tests, _) -> String.concat " and " tests) each)
+                ^ ")"
+              ]
+            , bindings )
       and children path offset ps =
         let tests, bindings =
           List.mapi (fun i p -> pattern (Printf.sprintf "%s[%d]" path (i + offset)) p) ps
@@ -125,9 +149,11 @@ let compile ?(annotate = Source_map.plain) program =
         in
         List.concat tests, List.concat bindings
       in
-      let branch (p, body) rest =
-        let tests, bindings = pattern id p in
-        let value = emit (bindings @ env) body in
+      let branch arm rest =
+        let tests, bindings = pattern id arm.pattern in
+        let inner = bindings @ env in
+        let tests = tests @ Option.to_list (Option.map (emit inner) arm.guard) in
+        let value = emit inner arm.body in
         match tests with
         | [] -> value
         | _ -> "(" ^ value ^ " if " ^ String.concat " and " tests ^ " else " ^ rest ^ ")"
@@ -150,6 +176,10 @@ let compile ?(annotate = Source_map.plain) program =
     | If (c, a, b) -> "(" ^ expr a ^ " if " ^ expr c ^ " else " ^ expr b ^ ")"
     | Pipe (a, { form = Call (g, xs); _ }) -> operate (a :: List.map snd xs) (callee g)
     | Pipe (a, f) -> operate [ a ] (callee f)
+    | Member (a, set) ->
+      operate [ a; set ] (function
+        | [ a; set ] -> "(" ^ a ^ " in " ^ set ^ ")"
+        | _ -> assert false)
     | Binary (op, a, b) ->
       operate [ a; b ] (function
         | [ a; b ] ->

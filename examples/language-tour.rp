@@ -1,0 +1,43 @@
+let cost: Float64? = None
+cost * 2.0
+coalesce(cost, 0.0)
+let c: Float64? = 2.0
+c
+let threshold = 2.0
+let square(x) = x * x
+let clamp(x, lo, hi) = if (x < lo) lo else if (x > hi) hi else x
+clamp(15, 0, 10)
+let twice = fn(f, x) => f(f(x))
+twice(square, 3)
+let rounded = round(_)
+rounded(2.5)
+let area = {
+  let r = 2.0
+  3.14159 * square(r)
+}
+area
+let shift(δ: Float64): Float64 = δ + 1.0
+shift(1.0)
+let label(r: {name: String, ..rest}) = r.name
+label({name = "x", other = 1})
+let station(note) = note.station
+station({station = "Ridge", altitude = 1210})
+station({station = "Marsh", flooded = TRUE})
+type Reading<a> =
+  | Measured(value: a)
+  | Offline
+  | Fault(reason: String)
+let group(age) = match age {
+  ..<18 => "child",
+  18..<65 => "adult",
+  65.. => "senior",
+}
+group(70)
+let assess(reading) = match reading {
+  Measured(value) if value < 0.0 => "below baseline",
+  Measured(_) => "usable",
+  Offline | Fault(_) => "unavailable",
+}
+assess(Measured(-1.0))
+assess(Fault("x"))
+"North" %in% ["North", "South"]

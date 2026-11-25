@@ -79,6 +79,16 @@ let apply (row : Prelude.row) args =
   | _ -> raise (Error ("Wrong arguments to " ^ Prelude.name (Row row)))
 ;;
 
+let emit_value (x : Shape.expr) =
+  match x.node with
+  | Constant (`Int i) -> P.Int (Int64.to_string i)
+  | Constant (`Float f) -> P.Float (P.float f)
+  | Constant (`String s) -> P.Str s
+  | Constant (`Bool b) -> P.Bool b
+  | Null -> P.Null
+  | _ -> raise (Error "%in% needs a list of values")
+;;
+
 let lower ~fields (table : Table.t) =
   let symbols = Array.make table.next "" in
   List.iteri (fun i n -> symbols.(i) <- n) fields;
@@ -103,6 +113,8 @@ let lower ~fields (table : Table.t) =
     | Coalesce (a, b) -> P.Call (pl "coalesce", positional [ emit a; emit b ])
     | Polars_sqrt a -> P.meth (emit a) "sqrt" []
     | Apply (row, args) -> apply row (List.map emit args)
+    | Member (a, items) ->
+      P.meth (emit a) "is_in" [ P.Positional (P.List (List.map emit_value items)) ]
     | Unary (Not, a) -> P.Unary (P.Invert, emit a)
     | Unary (Negate, a) -> P.Unary (P.Negate, emit a)
     | Required a ->

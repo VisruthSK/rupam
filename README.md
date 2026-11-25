@@ -14,16 +14,16 @@ let regional =
   load(shop.orders)
   |> filter(revenue > 0.0)
   |> mutate(margin = revenue - coalesce(cost, 0.0), z = standardize(margin))
-  |> summarize(transactions = count(), total = sum(margin), by = region)
+  |> summarize(transactions = n(), total = sum(margin), by = region)
   |> arrange(desc(total), region)
 
 write_parquet(regional, "regional.parquet")
 ```
 
-The checker knows `cost` may be missing, so `margin` needs the `coalesce`.
-It knows `sd` can be undefined, so `z` comes out as `Float64?`. And it rejects
-`filter(cost > 0.0)` outright, because a comparison with a missing value has
-no answer.
+The checker knows `cost` may be missing, so `margin` needs the `coalesce`,
+and `sd` can be undefined, so `z` comes out as `Float64?`. A filter on
+`cost > 0.0` has to say what happens to rows where `cost` is missing:
+`filter(cost > 0.0, missing = skip)`.
 
 ## Install
 
@@ -74,7 +74,7 @@ Previews and runs then use exactly the packages the project pins.
 ## Use
 
 ```sh
-rupam                                    # empty REPL
+rupam repl                               # REPL
 rupam repl examples/shop.rp              # REPL with a program loaded
 rupam run examples/shop.rp               # compile, validate and execute
 rupam compile examples/shop.rp           # print the standalone script

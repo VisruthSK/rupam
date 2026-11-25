@@ -1,125 +1,144 @@
 # The language
 
-rupam is an ML with a friendlier surface. Types are inferred, values are
-immutable, and every function call is written the same way: `f(a, b, name = c)`.
-This page covers the core language. Tables, which are what you actually come
-here for, are in [tables.md](tables.md).
+rupam infers every type, never mutates a value, and writes every call the same
+way: `f(a, b, name = c)`. This page covers the core language. Tables are in
+[tables.md](tables.md).
 
 ## Values
 
 ```text
-42                  # Int64, overflow is an error, not a wraparound
-3.5   1e-3          # Float64
+42   1_000_000      # Int64
+3.5  1e-3           # Float64
 "Ridge"             # String
-true  false         # Bool
-None  Some(3)       # Option<Int64>
+TRUE  FALSE         # Bool
+None                # a missing value of any type
 (1, "a")            # tuple
 [1, 2, 3]           # List<Int64>
 {station = "Marsh", altitude = 1210}   # record
 ```
 
-`/` always produces a `Float64`. `Int64` never turns into `Float64` behind your
-back. A plain `None` is `Option<'a>` until something pins down `'a`.
+`/` always gives a `Float64`. An integer literal becomes a `Float64` when it
+meets one, so `x > 10` works for a decimal `x`, but only when the value is
+exactly representable. Otherwise `Int64` and `Float64` never mix.
+
+A value of type `T?` may be missing. Present values of type `T` are accepted
+wherever a `T?` is expected, so there is no `Some` to write. Arithmetic,
+comparisons and function calls on a `T?` give a `T?` that is missing where the
+input is:
+
+```text
+let cost: Float64? = None
+cost * 2.0                 # None : Float64?
+coalesce(cost, 0.0)        # 0.0 : Float64
+```
 
 ## Bindings and functions
 
 ```text
 let threshold = 2.0
 let square(x) = x * x
-let clamp(x, lo, hi) = if x < lo then lo else if x > hi then hi else x
+let clamp(x, lo, hi) = if (x < lo) lo else if (x > hi) hi else x
 let twice = fn(f, x) => f(f(x))
+let rounded = round(_)          # a function of the hole
 
-let area = let r = 2.0 in 3.14 * square(r)
+let area = {
+  let r = 2.0
+  3.14159 * square(r)
+}
 ```
 
-Top-level statements end at a newline once the expression is complete, or at
-`;`. A line that ends in `|>`, `=`, an operator or a comma continues onto the
-next line, and so does a line followed by one that starts with `|>`, `then` or
-`else`.
+A top-level item ends at the end of a line once it is complete, or at `;`. A
+line that ends in an operator, `=`, `=>`, `,` or an open bracket continues, and
+so does a line followed by one starting with `|>`, `else` or a closing bracket.
 
-`x |> f(a)` means `f(x, a)` and `x |> f` means `f(x)`.
+`x |> f(a)` is `f(x, a)`, and `x |> f(a, _)` puts `x` in the hole.
 
-Names can contain Unicode letters. Backticks quote anything else:
+`{site, n}` is short for `{site = site, n = n}`. Backticks quote any name:
 `` `price per unit` ``.
 
 ## Annotations
 
-You rarely need them, but they are checked when present.
+They are optional and checked when present.
 
 ```text
 let shift(δ: Float64): Float64 = δ + 1.0
-let first(p: (Int64, String)): Int64 = match p { (n, _) => n }
 let label(r: {name: String, ..rest}) = r.name
 ```
 
-The type syntax is `Int64`, `Float64`, `String`, `Bool`, `T?` (short for
-`Option<T>`), `List<T>`, `(A, B)`, `A -> B` and records `{a: A, ..row}`.
+Types are written `Int64`, `Float64`, `String`, `Bool`, `T?`, `List<T>`,
+`(A, B)`, `A -> B` and records `{a: A, ..row}`.
 
-## Records and row polymorphism
+## Records
 
-A function that reads `r.station` accepts any record that has a `station`
-field, whatever else it carries:
+A function that reads `r.station` accepts any record with a `station` field:
 
 ```text
 let station(note) = note.station
 station({station = "Ridge", altitude = 1210})
-station({station = "Marsh", flooded = true})
+station({station = "Marsh", flooded = TRUE})
 ```
 
-`:type station` in the REPL prints `({station: 'a0, ..'a1}) -> 'a0`.
-
-## Types and variants
+## Variants
 
 ```text
-type Pair<a> = {x: a, y: a}
-
 type Reading<a> =
   | Measured(value: a)
   | Offline
   | Fault(reason: String)
 ```
 
-The first form is an alias. The second, with a leading `|`, declares a variant.
-Constructors start with an uppercase letter, take named fields and are called
-like functions: `Measured(Some(0.5))`, `Fault("calibration expired")`.
+Constructors start with an uppercase letter and are called like functions:
+`Measured(0.5)`, `Fault("calibration expired")`.
 
 ## Pattern matching
 
 ```text
-let assess(reading) =
-  match reading {
-    Measured(Some(value)) => if value < 0.0 then "below baseline" else "usable",
-    Measured(None) => "missing value",
-    Offline => "offline",
-    Fault(reason) => reason
-  }
+let group(age) = match age {
+  ..<18 => "child",
+  18..<65 => "adult",
+  65.. => "senior",
+}
+
+let assess(reading) = match reading {
+  Measured(value) if value < 0.0 => "below baseline",
+  Measured(_) => "usable",
+  Offline | Fault(_) => "unavailable",
+}
 ```
 
-Patterns are `_`, a name, a literal, a constructor with sub-patterns, `Some(p)`,
-`None`, a tuple `(p, q)` and a record `{a, b}`, which binds those fields by name.
-A name may appear only once in a pattern.
+A pattern can be `_`, a name, a literal, a range (`a..=b`, `a..<b`, `..<b`,
+`a..`), a constructor, `Some(p)` or `None`, a tuple, a record `{a, b}`, a set
+of alternatives `p | q`, or `name @ p`, which binds the whole value. An arm
+can end in a guard, `if condition`. `match a, b { p, q => ... }` matches two
+values at once.
 
-Every `match` must be exhaustive, and the checker gives you a missing case
-rather than a yes/no:
+Every `match` must be exhaustive, and the error names a case you missed:
 
 ```text
 error: 3:3: Non-exhaustive match. Missing case Measured(None)
-error: 1:15: Non-exhaustive match. Missing case (true, true)
 ```
 
-It reasons about `Bool`, `Option`, tuples and your own variants, nested to any
-depth. Integers and strings have too many values to enumerate, so a match on
-them needs a final `_` or name, and the missing case is reported as `_`.
-[The specification](spec/types.md#exhaustiveness)
-gives the algorithm.
+Ranges that cover every number count as exhaustive, as in `group` above.
+Guarded arms don't count.
 
 ## Operators
 
-From tightest to loosest: calls and field access, unary `-` and `not`,
-`* /`, `+ -`, comparisons, `and`, `or`, `|>`. Comparisons do not chain;
-write `a < b and b < c`. Arithmetic and comparison currently need numeric
-operands on both sides, so `"a" == "b"` is a type error for now. `%` parses
-but has no typing rule yet.
+From tightest to loosest: calls and field access, `^`, unary `-`, `* / %`,
+`+ -`, comparisons and `%in%`, `not`, `and`, `or`, `|>`. Comparisons don't
+chain, and `-x^y` is an error: write `-(x^y)` or `(-x)^y`.
+
+```text
+region %in% ["North", "South"]
+```
+
+## Standard library
+
+Numbers: `abs`, `sign`, `sqrt`, `exp`, `log`, `log2`, `log10`, `floor`,
+`ceiling`, `trunc`, `round`, `pmin`, `pmax`. Missing values: `coalesce`,
+`some`, `none`. Text: `str_length`, `str_to_lower`, `str_to_upper`,
+`str_trim`, `str_starts`, `str_ends`, `str_detect`. Inside table verbs you
+also get the reductions `sum`, `mean`, `median`, `var`, `sd`, `min`, `max`
+and `n_distinct`.
 
 ## Running programs
 
@@ -127,7 +146,7 @@ but has no typing rule yet.
 rupam run --target python-polars examples/field-notes.rp
 ```
 
-`rupam run` compiles the program for the target dialect and runs the
-generated script, which prints the last value. `rupam compile` writes that
-script instead. The REPL type-checks and evaluates definitions as you type
-them. Programs with a contract are covered in [tables.md](tables.md).
+`rupam run` compiles the program and runs the generated script, which prints
+the value of every top-level expression. `rupam compile` writes the script
+instead. [examples/language-tour.rp](../examples/language-tour.rp) holds every
+example on this page.

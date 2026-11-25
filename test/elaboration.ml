@@ -44,7 +44,7 @@ let () =
     Option.map Rupam.Eval.display value
   in
   assert (run "let square(x) = x*x; square(3)" = Some "9");
-  assert (run "if false then 9223372036854775807 + 1 else 3" = Some "3");
+  assert (run "if (FALSE) 9223372036854775807 + 1 else 3" = Some "3");
   assert (run "let a=2; let f(x)=x*a; let a=3; 4 |> f" = Some "8");
   match run "9223372036854775807 + 1" with
   | exception Rupam.Eval.Error (_, "Int64 overflow") -> ()
@@ -129,20 +129,20 @@ let () =
   let ds =
     Frontend.parse
       (Lexing.from_string
-         "let id(x)=x; let r={a=Some(3), b=[true,false]}; (r.a, id(r.b))")
+         "let id(x)=x; let r={a=Some(3), b=[TRUE,FALSE]}; (r.a, id(r.b))")
   in
   ignore (Infer.program Infer.empty ds);
   let _, value = Eval.run [] ds in
-  assert (Option.map Eval.display value = Some "(Some(3), [true, false])")
+  assert (Option.map Eval.display value = Some "(Some(3), [TRUE, FALSE])")
 ;;
 
 let () =
   let open Rupam in
   let ds =
-    Frontend.parse (Lexing.from_string "let get(r)=r.x; (get({x=1}), get({y=2,x=true}))")
+    Frontend.parse (Lexing.from_string "let get(r)=r.x; (get({x=1}), get({y=2,x=TRUE}))")
   in
   ignore (Infer.program Infer.empty ds);
-  assert (Option.map Eval.display (snd (Eval.run [] ds)) = Some "(1, true)")
+  assert (Option.map Eval.display (snd (Eval.run [] ds)) = Some "(1, TRUE)")
 ;;
 
 let () =
@@ -206,7 +206,7 @@ let () =
 
 let () =
   let open Rupam in
-  let src = "let a = 3\n\nlet b = if a > 1\nthen 2\nelse 3\nb" in
+  let src = "let a = 3\n\nlet b = if (a > 1) 2\nelse\n3\nb" in
   (match Frontend.parse (Lexing.from_string src) with
    | [ _; Syntax.Let (_, _, { span = a, b; _ }); Syntax.Evaluate { span = c, _; _ } ] ->
      assert (a.pos_lnum = 3 && b.pos_lnum = 5 && c.pos_lnum = 6)
@@ -233,15 +233,15 @@ let () =
       )
     = Some "Non-exhaustive match. Missing case Measured(None)");
   assert (
-    missing "let f(p) = match p { (true, false) => 1, (false, _) => 2 }"
-    = Some "Non-exhaustive match. Missing case (true, true)");
+    missing "let f(p) = match p { (TRUE, FALSE) => 1, (FALSE, _) => 2 }"
+    = Some "Non-exhaustive match. Missing case (TRUE, TRUE)");
   assert (
     missing
       (reading ^ "let f(r) = match r { Measured(_) => 1, Offline => 2, Fault(_) => 3 }")
     = None);
   assert (missing "let f(x) = match x { (a, Some(b)) => b, (_, None) => 0 }" = None);
   assert (
-    missing "let f(n) = match n { 0 => true }"
+    missing "let f(n) = match n { 0 => TRUE }"
     = Some "Non-exhaustive match. Missing case _");
   let reserved =
     Some "Formulas (y ~ x) are reserved for the model and graphics libraries"

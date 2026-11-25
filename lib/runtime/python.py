@@ -13,7 +13,7 @@ def rp_float(x):
 
 def rp_dynamic(v):
     if isinstance(v, bool):
-        return "true" if v else "false"
+        return "TRUE" if v else "FALSE"
     if isinstance(v, int):
         return str(v)
     if isinstance(v, float):
@@ -42,7 +42,7 @@ def rp_format(v, shape):
     if shape == "float":
         return rp_float(v)
     if shape == "bool":
-        return "true" if v else "false"
+        return "TRUE" if v else "FALSE"
     if shape == "string":
         return json.dumps(v, ensure_ascii=False)
     if shape == "function":

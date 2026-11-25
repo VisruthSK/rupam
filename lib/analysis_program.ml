@@ -71,7 +71,9 @@ let rec uses table x =
   | Local (n, a, b) -> uses table a || uses (fun m -> m <> n && table m) b
   | Formula (a, b) -> any (Option.to_list a @ [ b ])
   | If (a, b, c) -> any [ a; b; c ]
-  | Match (a, branches) -> any (a :: List.map snd branches)
+  | Match (a, arms) ->
+    any (a :: List.concat_map (fun arm -> arm.body :: Option.to_list arm.guard) arms)
+  | Member (a, b) -> any [ a; b ]
   | Tuple xs | List xs -> any xs
   | Record fs -> any (List.map snd fs)
   | Field (a, _) | Unary (_, a) | Annotated (a, _) -> uses table a
@@ -365,6 +367,7 @@ let rec restrictions d =
     | Null -> false
     | Binary (_, l, r) | Coalesce (l, r) -> private_expr l || private_expr r
     | Apply (_, xs) -> List.exists private_expr xs
+    | Member (x, xs) -> List.exists private_expr (x :: xs)
     | Broadcast (_, x) | Reduce (_, x) | Polars_sqrt x | Unary (_, x) | Required x ->
       private_expr x
   in

@@ -17,7 +17,7 @@ rp_dynamic <- function(v) {
     return(if (length(v) == 0) tag else paste0(tag, "(", paste(vapply(v, rp_dynamic, ""), collapse = ", "), ")"))
   if (is.null(v)) return("None")
   if (bit64::is.integer64(v)) return(as.character(v))
-  if (is.logical(v)) return(if (v) "true" else "false")
+  if (is.logical(v)) return(if (v) "TRUE" else "FALSE")
   if (is.double(v)) return(rp_float(v))
   if (is.character(v)) return(encodeString(v, quote = '"'))
   if (is.function(v)) return("<function>")
@@ -32,7 +32,7 @@ rp_format <- function(v, shape) {
     return(switch(shape,
       int = as.character(v),
       float = rp_float(v),
-      bool = if (isTRUE(v)) "true" else "false",
+      bool = if (isTRUE(v)) "TRUE" else "FALSE",
       string = encodeString(v, quote = '"'),
       `function` = "<function>",
       rp_dynamic(v)))

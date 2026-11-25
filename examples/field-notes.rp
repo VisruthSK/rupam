@@ -3,7 +3,7 @@ type Reading<a> = | Measured(value: a) | Offline | Fault(reason: String)
 
 let assess(reading) =
   match reading {
-    Measured(Some(value)) => if value < 0.0 then "below baseline" else "usable",
+    Measured(Some(value)) => if (value < 0.0) "below baseline" else "usable",
     Measured(None) => "missing value",
     Offline => "offline",
     Fault(reason) => reason
@@ -12,7 +12,7 @@ let assess(reading) =
 # The same function accepts records with different additional fields.
 let station(note) = note.station
 let ridge = {station = "Ridge", altitude = 1210}
-let marsh = {station = "Marsh", flooded = true}
+let marsh = {station = "Marsh", flooded = TRUE}
 
 [(station(ridge), assess(Measured(Some(-0.5)))),
  (station(marsh), assess(Measured(None))),
