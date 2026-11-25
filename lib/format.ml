@@ -55,6 +55,23 @@ let rec expr x =
         bs
     ^ "}"
   | Member (a, b) -> "(" ^ expr a ^ " %in% " ^ expr b ^ ")"
+  | Interpolate pieces ->
+    "\""
+    ^ String.concat
+        ""
+        (List.map
+           (function
+             | Text_piece s ->
+               String.concat "{{" (String.split_on_char '{' s)
+               |> String.split_on_char '}'
+               |> String.concat "}}"
+             | Slot { value; format; echo } ->
+               "{"
+               ^ Option.fold ~none:(expr value) ~some:Fun.id echo
+               ^ Option.fold ~none:"" ~some:(fun f -> ":" ^ f) format
+               ^ "}")
+           pieces)
+    ^ "\""
   | Annotated (x, _) -> expr x
   | Tuple xs -> "(" ^ comma expr xs ^ ")"
   | List xs -> "[" ^ comma expr xs ^ "]"

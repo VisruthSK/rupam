@@ -33,6 +33,14 @@ def rp_assert_key(frame, columns):
     return frame
 
 
+def rp_show_float(series):
+    return pl.Series([None if v is None else repr(v) for v in series], dtype=pl.String)
+
+
+def rp_formatter(spec):
+    return lambda series: pl.Series([None if v is None else format(v, spec) for v in series], dtype=pl.String)
+
+
 def rp_present(series):
     if series.null_count() > 0:
         raise ValueError("filter condition is missing and missing = error")

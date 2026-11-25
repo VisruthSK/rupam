@@ -90,6 +90,13 @@ let rec uses table x =
   | Match (a, arms) ->
     any (a :: List.concat_map (fun arm -> arm.body :: Option.to_list arm.guard) arms)
   | Member (a, b) -> any [ a; b ]
+  | Interpolate pieces ->
+    any
+      (List.filter_map
+         (function
+           | Slot s -> Some s.value
+           | Text_piece _ -> None)
+         pieces)
   | Tuple xs | List xs -> any xs
   | Record fs -> any (List.map snd fs)
   | Field (a, _) | Unary (_, a) | Annotated (a, _) -> uses table a
@@ -469,6 +476,12 @@ let rec restrictions d =
     | Apply (_, xs) -> List.exists private_expr xs
     | Member (x, xs) -> List.exists private_expr (x :: xs)
     | Convert x -> private_expr x
+    | Text parts ->
+      List.exists
+        (function
+          | Shape.Shown (x, _) -> private_expr x
+          | Fixed _ -> false)
+        parts
     | Count -> false
     | Broadcast (_, x) | Reduce (_, _, x) | Polars_sqrt x | Unary (_, x) | Required x ->
       private_expr x

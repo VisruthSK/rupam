@@ -125,6 +125,29 @@ let lower ~fields (table : Table.t) =
     | Apply (row, args) -> apply row (List.map emit args)
     | Convert a -> P.meth (emit a) "cast" [ P.Positional (pl "Float64") ]
     | Count -> P.meth (P.Call (pl "len", [])) "cast" [ P.Positional (pl "Int64") ]
+    | Text parts ->
+      let part = function
+        | Shape.Fixed s -> lit (P.Str s)
+        | Shown (x, format) ->
+          let e = emit x in
+          let adapter f =
+            P.meth e "map_batches" [ P.Positional f; P.Keyword ("return_dtype", pl "String") ]
+          in
+          (match format, x.typ.primitive with
+           | Some spec, _ -> adapter (P.call "rp_formatter" [ P.Str spec ])
+           | None, String -> e
+           | None, Int64 -> P.meth e "cast" [ P.Positional (pl "String") ]
+           | None, Float64 -> adapter (P.Name "rp_show_float")
+           | None, Bool ->
+             P.meth
+               e
+               "replace_strict"
+               [ P.Positional (P.Dict [ P.Bool true, P.Str "TRUE"; P.Bool false, P.Str "FALSE" ])
+               ; P.Keyword ("return_dtype", pl "String")
+               ])
+      in
+      P.Call
+        (pl "concat_str", [ P.Positional (P.List (List.map part parts)); P.Keyword ("separator", P.Str "") ])
     | Member (a, items) ->
       P.meth (emit a) "is_in" [ P.Positional (P.List (List.map emit_value items)) ]
     | Unary (Not, a) -> P.Unary (P.Invert, emit a)

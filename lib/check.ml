@@ -167,6 +167,15 @@ let rec elaborate_with ?missing env columns source =
   | Range _ -> unsupported "A range"
   | Formula _ -> unsupported "A formula"
   | Member (x, { form = List items; _ }) -> member (go x) (List.map go items)
+  | Interpolate pieces ->
+    text
+      (List.concat_map
+         (function
+           | Text_piece s -> [ Fixed s ]
+           | Slot { value; format; echo } ->
+             Option.to_list (Option.map (fun e -> Fixed e) echo)
+             @ [ Shown (go value, format) ])
+         pieces)
   | Member _ -> unsupported "%in% with a computed set"
 
 and choice ?missing env columns subject arms =

@@ -15,21 +15,13 @@ def rp_real(x):
     return x
 
 
-def rp_float(x):
-    for digits in (15, 16, 17):
-        text = "%.*g" % (digits, x)
-        if float(text) == x:
-            break
-    return text if any(c in text for c in ".eni") else text + ".0"
-
-
 def rp_dynamic(v):
     if isinstance(v, bool):
         return "TRUE" if v else "FALSE"
     if isinstance(v, int):
         return str(v)
     if isinstance(v, float):
-        return rp_float(v)
+        return repr(v)
     if isinstance(v, str):
         return json.dumps(v, ensure_ascii=False)
     if v is None:
@@ -52,7 +44,7 @@ def rp_format(v, shape):
     if shape == "int":
         return str(v)
     if shape == "float":
-        return rp_float(v)
+        return repr(v)
     if shape == "bool":
         return "TRUE" if v else "FALSE"
     if shape == "string":

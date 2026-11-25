@@ -83,6 +83,44 @@ let lower ~fields (plan : Table.t) base =
     | Apply (row, args) -> apply row (List.map emit args)
     | Convert a -> R.call "as.double" [ emit a ]
     | Count -> R.qualified "bit64" "as.integer64" [ R.Positional (R.qualified "dplyr" "n" []) ]
+    | Text parts ->
+      let shown =
+        List.filter_map
+          (function
+            | Shape.Shown (x, _) when x.typ.nullable -> Some (emit x)
+            | _ -> None)
+          parts
+      in
+      let part = function
+        | Shape.Fixed s -> R.String s
+        | Shown (x, format) ->
+          let e = emit x in
+          (match format, x.typ.primitive with
+           | Some spec, _ -> R.call "rp_format_number" [ e; R.String spec ]
+           | None, String -> e
+           | None, Int64 -> R.call "as.character" [ e ]
+           | None, Float64 -> R.call "rp_float" [ e ]
+           | None, Bool ->
+             R.qualified
+               "dplyr"
+               "if_else"
+               [ R.Positional e; R.Positional (R.String "TRUE"); R.Positional (R.String "FALSE") ])
+      in
+      let joined = R.call "paste0" (List.map part parts) in
+      (match shown with
+       | [] -> joined
+       | first :: rest ->
+         R.qualified
+           "dplyr"
+           "if_else"
+           [ R.Positional
+               (List.fold_left
+                  (fun a b -> R.Binary (R.Either, a, R.call "is.na" [ b ]))
+                  (R.call "is.na" [ first ])
+                  rest)
+           ; R.Positional (R.Name "NA_character_")
+           ; R.Positional joined
+           ])
     | Member (a, items) ->
       let a = emit a in
       R.qualified

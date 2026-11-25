@@ -178,6 +178,42 @@ let compile ?(annotate = Source_map.plain) program =
     | If (c, a, b) -> "(" ^ expr a ^ " if " ^ expr c ^ " else " ^ expr b ^ ")"
     | Pipe (a, { form = Call (g, xs); _ }) -> operate (a :: List.map snd xs) (callee g)
     | Pipe (a, f) -> operate [ a ] (callee f)
+    | Interpolate pieces ->
+      let shown = ref (Infer.shown x) in
+      let guards = ref [] in
+      let part = function
+        | Text_piece s -> Polars.quoted s
+        | Slot slot ->
+          let t, lifted =
+            match !shown with
+            | s :: rest ->
+              shown := rest;
+              s
+            | [] -> Infer.Var (ref (Infer.Free (0, Any))), false
+          in
+          let v =
+            if lifted
+            then (
+              let id = fresh () in
+              guards := ("(" ^ id ^ " := " ^ expr slot.value ^ ") is None") :: !guards;
+              id)
+            else expr slot.value
+          in
+          let display =
+            match slot.format, t with
+            | Some spec, _ -> "format(" ^ v ^ ", " ^ Polars.quoted spec ^ ")"
+            | None, String -> v
+            | None, Int -> "str(" ^ v ^ ")"
+            | None, Float -> "repr(" ^ v ^ ")"
+            | None, Bool -> "(\"TRUE\" if " ^ v ^ " else \"FALSE\")"
+            | None, _ -> "rp_dynamic(" ^ v ^ ")"
+          in
+          Option.fold ~none:display ~some:(fun e -> Polars.quoted e ^ " + " ^ display) slot.echo
+      in
+      let joined = "(" ^ String.concat " + " (List.map part pieces) ^ ")" in
+      (match List.rev !guards with
+       | [] -> joined
+       | guards -> "(None if " ^ String.concat " or " guards ^ " else " ^ joined ^ ")")
     | Member (a, set) ->
       operate [ a; set ] (function
         | [ a; set ] -> "(" ^ a ^ " in " ^ set ^ ")"

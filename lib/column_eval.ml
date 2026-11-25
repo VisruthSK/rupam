@@ -197,6 +197,22 @@ let evaluate ~rows ~input expression =
          raise (Error "a reduction met a missing value and missing = error")
        | Skip | Propagate | Fail -> aggregate r values)
     | Count -> I (Int64.of_int rows)
+    | Text parts ->
+      let pieces =
+        List.map
+          (function
+            | Fixed s -> Some s
+            | Shown (_, Some _) -> raise (Error "Format specs are not in the reference evaluator")
+            | Shown (x, None) ->
+              (match at i x with
+               | Missing -> None
+               | S s -> Some s
+               | I n -> Some (Int64.to_string n)
+               | F f -> Some (Display.float f)
+               | B b -> Some (Display.bool b)))
+          parts
+      in
+      if List.mem None pieces then Missing else S (String.concat "" (List.filter_map Fun.id pieces))
     | Convert a ->
       (match at i a with
        | I v -> F (Int64.to_float v)

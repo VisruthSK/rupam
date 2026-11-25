@@ -51,6 +51,11 @@ type node =
   | Member of expr * expr list
   | Convert of expr
   | Count
+  | Text of text list
+
+and text =
+  | Fixed of string
+  | Shown of expr * string option
 
 and expr =
   { node : node
@@ -267,6 +272,12 @@ let rec exists f e =
   | Member (x, xs) -> List.exists (exists f) (x :: xs)
   | Polars_sqrt x | Unary (_, x) | Required x | Broadcast (_, x) | Reduce (_, _, x)
   | Convert x -> exists f x
+  | Text parts ->
+    List.exists
+      (function
+        | Shown (x, _) -> exists f x
+        | Fixed _ -> false)
+      parts
 ;;
 
 let nonfinite =
@@ -287,4 +298,23 @@ let overflows =
     match e.node with
     | Binary ((Add | Sub | Mul), _, _) | Unary (Negate, _) | Reduce (Sum, _, _) -> true
     | _ -> false)
+;;
+
+let text parts =
+  let shown = List.filter_map (function Shown (x, _) -> Some x | Fixed _ -> None) parts in
+  let shape = List.fold_left (fun s (x : expr) -> align s x.typ.shape) Scalar shown in
+  let parts =
+    List.map
+      (function
+        | Shown (x, f) -> Shown (broadcast shape x, f)
+        | fixed -> fixed)
+      parts
+  in
+  { node = Text parts
+  ; typ =
+      { primitive = String
+      ; nullable = List.exists (fun (x : expr) -> x.typ.nullable) shown
+      ; shape
+      }
+  }
 ;;

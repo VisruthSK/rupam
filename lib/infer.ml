@@ -44,6 +44,7 @@ let rec repr = function
 type decision =
   | Integer of typ
   | Lifted of bool list * typ
+  | Shown of (typ * bool) list
 
 module Decisions = Hashtbl.Make (struct
     type t = Syntax.expr
@@ -77,6 +78,12 @@ let operand x =
   match Decisions.find_opt decisions x with
   | Some (Lifted (_, t)) -> Some (repr t)
   | _ -> None
+;;
+
+let shown x =
+  match Decisions.find_opt decisions x with
+  | Some (Shown slots) -> List.map (fun (t, lifted) -> repr t, lifted) slots
+  | _ -> []
 ;;
 
 let unsettled x =
@@ -636,6 +643,27 @@ let rec expression env level source =
      | Some p -> fail ("Non-exhaustive match. Missing case " ^ Format.pattern p)
      | None -> ());
     result
+  | Interpolate pieces ->
+    let shown =
+      List.filter_map
+        (function
+          | Text_piece _ -> None
+          | Slot slot ->
+            let t, lifted = strip (check slot.value) in
+            (match repr t, slot.format with
+             | (Int | Float), _ | Var _, None -> ()
+             | Var _, Some _ -> equal (fresh level Numeric) t
+             | (Bool | String), None -> ()
+             | String, Some f when not (String.exists (fun c -> String.contains "dfeg%" c) f)
+               -> ()
+             | _, Some _ -> fail "A format spec like :.2f applies to numbers"
+             | t, None ->
+               fail ("Interpolation shows numbers, text and Bool, not " ^ display t));
+            Some (t, lifted))
+        pieces
+    in
+    decide source (Shown shown);
+    lift (List.exists snd shown) String
   | Member (x, set) ->
     let element, lifted = strip (check x) in
     equal (List element) (check set);

@@ -69,7 +69,18 @@ and arm =
   ; body : expr
   }
 
+and piece =
+  | Text_piece of string
+  | Slot of slot
+
+and slot =
+  { value : expr
+  ; format : string option
+  ; echo : string option
+  }
+
 and form =
+  | Interpolate of piece list
   | Match of expr * arm list
   | Member of expr * expr
   | Annotated of expr * annotation
@@ -138,6 +149,13 @@ let map f x =
   let form =
     match x.form with
     | Match (s, arms) -> Match (f s, List.map arm arms)
+    | Interpolate pieces ->
+      Interpolate
+        (List.map
+           (function
+             | Slot s -> Slot { s with value = f s.value }
+             | piece -> piece)
+           pieces)
     | Member (a, b) -> Member (f a, f b)
     | Annotated (a, t) -> Annotated (f a, t)
     | Tuple xs -> Tuple (List.map f xs)

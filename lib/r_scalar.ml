@@ -140,6 +140,49 @@ let compile ?(annotate = Source_map.plain) ds =
         | _ -> assert false)
     | Pipe (v, { form = Call (g, vs); _ }) -> operate (v :: List.map snd vs) (callee g)
     | Pipe (v, f) -> operate [ v ] (callee f)
+    | Interpolate pieces ->
+      let shown = ref (Infer.shown x) in
+      let bound = ref [] in
+      let part = function
+        | Text_piece s -> [ q s ]
+        | Slot slot ->
+          let t, lifted =
+            match !shown with
+            | s :: rest ->
+              shown := rest;
+              s
+            | [] -> Infer.Var (ref (Infer.Free (0, Any))), false
+          in
+          let v =
+            if lifted
+            then (
+              let id = fresh () in
+              bound := (id, exp slot.value) :: !bound;
+              id)
+            else exp slot.value
+          in
+          let display =
+            match slot.format, t with
+            | Some spec, _ -> "rp_format_number(" ^ v ^ ", " ^ q spec ^ ")"
+            | None, String -> v
+            | None, Int -> "as.character(" ^ v ^ ")"
+            | None, Float -> "rp_float(" ^ v ^ ")"
+            | None, Bool -> "(if (" ^ v ^ ") \"TRUE\" else \"FALSE\")"
+            | None, _ -> "rp_dynamic(" ^ v ^ ")"
+          in
+          Option.to_list (Option.map q slot.echo) @ [ display ]
+      in
+      let joined = "paste0(" ^ String.concat ", " (List.concat_map part pieces) ^ ")" in
+      (match List.rev !bound with
+       | [] -> joined
+       | bound ->
+         "local({ "
+         ^ String.concat "" (List.map (fun (v, e) -> v ^ " <- " ^ e ^ "; ") bound)
+         ^ "if ("
+         ^ String.concat " || " (List.map (fun (v, _) -> "is.null(" ^ v ^ ")") bound)
+         ^ ") NULL else "
+         ^ joined
+         ^ " })")
     | Member (v, set) ->
       operate [ v; set ] (function
         | [ v; set ] ->

@@ -1,13 +1,5 @@
 rp_variant <- function(tag, ...) structure(list(...), tag = tag)
 
-rp_float <- function(x) {
-  for (digits in 15:17) {
-    text <- sprintf("%.*g", digits, x)
-    if (as.numeric(text) == x) break
-  }
-  if (grepl("[.eni]", text)) text else paste0(text, ".0")
-}
-
 rp_dynamic <- function(v) {
   tag <- attr(v, "tag")
   if (!is.null(tag))

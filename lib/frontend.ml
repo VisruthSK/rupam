@@ -6,9 +6,83 @@ let hole x =
   | _ -> false
 ;;
 
-let rec desugar x =
+let pieces parse (x : Syntax.expr) text =
+  let length = String.length text in
+  let buffer = Buffer.create length in
+  let flush acc =
+    if Buffer.length buffer = 0
+    then acc
+    else (
+      let piece = Syntax.Text_piece (Buffer.contents buffer) in
+      Buffer.clear buffer;
+      piece :: acc)
+  in
+  let slot start finish =
+    let source = String.sub text start (finish - start) in
+    let trimmed = String.trim source in
+    let echo, source =
+      if String.ends_with ~suffix:"=" trimmed
+         && not (String.ends_with ~suffix:"==" trimmed)
+      then (
+        let body = String.sub trimmed 0 (String.length trimmed - 1) in
+        Some (body ^ "="), body)
+      else None, source
+    in
+    let format, source =
+      match String.rindex_opt source ':' with
+      | Some i
+        when String.for_all
+               (fun c -> String.contains "<>^=+- 0123456789,.dfeg%" c)
+               (String.sub source (i + 1) (String.length source - i - 1)) ->
+        Some (String.sub source (i + 1) (String.length source - i - 1)), String.sub source 0 i
+      | _ -> None, source
+    in
+    let position = fst x.span in
+    let value = parse { position with pos_cnum = position.pos_cnum + start + 1 } source in
+    Syntax.Slot { value; format; echo }
+  in
+  let rec scan i acc =
+    if i >= length
+    then List.rev (flush acc)
+    else (
+      match text.[i] with
+      | '{' when i + 1 < length && text.[i + 1] = '{' ->
+        Buffer.add_char buffer '{';
+        scan (i + 2) acc
+      | '}' when i + 1 < length && text.[i + 1] = '}' ->
+        Buffer.add_char buffer '}';
+        scan (i + 2) acc
+      | '{' ->
+        let rec close j depth =
+          if j >= length
+          then failwith "Unclosed { in string"
+          else (
+            match text.[j] with
+            | '{' -> close (j + 1) (depth + 1)
+            | '}' when depth = 0 -> j
+            | '}' -> close (j + 1) (depth - 1)
+            | _ -> close (j + 1) depth)
+        in
+        let finish = close (i + 1) 0 in
+        let acc = flush acc in
+        scan (finish + 1) (slot (i + 1) finish :: acc)
+      | '}' -> failwith "Unmatched } in string; write }} for a literal brace"
+      | c ->
+        Buffer.add_char buffer c;
+        scan (i + 1) acc)
+  in
+  scan 0 []
+;;
+
+let rec desugar parse x =
+  let desugar = desugar parse in
   let x = Syntax.map desugar x in
   match x.form with
+  | Literal (Text text) when String.contains text '{' || String.contains text '}' ->
+    (match pieces parse x text with
+     | [ Text_piece plain ] -> { x with form = Literal (Text plain) }
+     | [] -> { x with form = Literal (Text "") }
+     | pieces -> { x with form = Interpolate pieces })
   | Pipe (piped, ({ form = Call (f, args); _ } as call))
     when List.exists (fun (_, a) -> hole a) args ->
     let filled = ref false in
@@ -41,17 +115,24 @@ let rec desugar x =
   | _ -> x
 ;;
 
-let declaration = function
-  | Syntax.Let (n, None, x) ->
-    (match desugar x with
-     | { form = Lambda (ps, body); _ } -> Syntax.Let (n, Some ps, body)
-     | x -> Syntax.Let (n, None, x))
-  | Syntax.Let (n, ps, x) -> Syntax.Let (n, ps, desugar x)
-  | Evaluate x -> Evaluate (desugar x)
-  | d -> d
-;;
-
-let parse lexbuf =
+let rec parse lexbuf =
+  let expression position source =
+    let buffer = Lexing.from_string source in
+    Lexing.set_position buffer position;
+    match parse buffer with
+    | [ Syntax.Evaluate value ] -> value
+    | _ -> failwith "A string slot holds one expression"
+  in
+  let desugar = desugar expression in
+  let declaration = function
+    | Syntax.Let (n, None, x) ->
+      (match desugar x with
+       | { form = Lambda (ps, body); _ } -> Syntax.Let (n, Some ps, body)
+       | x -> Syntax.Let (n, None, x))
+    | Syntax.Let (n, ps, x) -> Syntax.Let (n, ps, desugar x)
+    | Evaluate x -> Evaluate (desugar x)
+    | d -> d
+  in
   let complete = function
     | NAME _ | INT _ | FLOAT _ | STRING _ | TRUE | FALSE | NONE | RB | RC | RP | QUESTION
       -> true
