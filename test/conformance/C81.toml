@@ -1,4 +1,4 @@
 id = "C81"
 status = "pending"
-case = '''`expand` over known enum with an unobserved level and year `2025:2026`'''
+case = '''`expand` over known enum with an unobserved level and year `2025..=2026`'''
 expected = '''complete Cartesian product, including unobserved level'''

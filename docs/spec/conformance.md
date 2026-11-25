@@ -107,7 +107,7 @@ check that proved obligations emit no redundant runtime assertions.
 | C77 | `across(starts_with("score_"), standardize)` | statically expanded columns; zero matches is a no-op; collisions rejected |
 | C78 | row bind `{id:Int64, x:Int64}` with `{id:Int64, y:Float64}` | schema id:Int64, x:Int64?, y:Float64?; missing cells added |
 | C79 | `Table([{a = 1}, {a = 2.5}])` | table `{a:Float64}`; unordered, no inferred uniqueness solely from construction |
-| C80 | complete January and March cases to months 1:3 | February row created with None; fill changes only new cells by default |
+| C80 | complete January and March cases to months `1..=3` | February row created with None; fill changes only new cells by default |
 | C81 | `expand` over known enum with an unobserved level and year `2025..=2026` | complete Cartesian product, including unobserved level |
 | C82 | required contracted float with NaN; conditional assertion `not active or population > 0` | requiredness fails after normalisation; no unconditional positive refinement |
 | C83 | contracted entity keys patients.id and hospitals.id; visits.patient_id foreign key to patients | patient and hospital nominal domains incompatible; visits key shares patient domain |
