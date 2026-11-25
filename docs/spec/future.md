@@ -49,6 +49,10 @@ release policy is defined, these outputs remain restricted.
 
 `rupam env` creates the uv or renv files of a project.
 
+## Test blocks
+
+Named `test` blocks with inline tables, run on every dialect by `rupam test`.
+
 ## Recursion
 
 Recursive functions, compiled as host functions without vectorisation.

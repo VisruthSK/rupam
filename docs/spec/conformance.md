@@ -121,7 +121,7 @@ check that proved obligations emit no redundant runtime assertions.
 | C91 | `set_seed(0)` then random draws in strict mode | no warning; repeated same-target locked run reproduces draws; cross-target stream equality not required |
 | C92 | `map([1,2,3], fn(x) => x * 2)`; `reduce([1,2,3],0,fn(a,x) => a+x)` | `[2,4,6]`; 6; ordinary host higher-order lowering permitted |
 | C93 | `1_00_000`, `1.234_56`, `1e1_0`; `not x > 0`; `[..rest]` | valid literals, Boolean negation of comparison, valid rest-only pattern |
-| C94 | source with unsupported formula/module import, removed user-test declaration | unsupported-feature or parse error, not silent acceptance |
+| C94 | source with unsupported formula or module import | unsupported-feature or parse error, not silent acceptance |
 | C95 | nominal Usd used in `log` without explicit unwrapping | type error; explicit base conversion works with positive refinement |
 | C96 | a proved key, bounds, promotion or overflow obligation in deterministic locked analysis | no redundant assertion in emitted analysis; lock verification remains |
 | C97 | floating reduction `[1e16, 1.0, -1e16]` followed by sign-based branch | document native rounding dependence; do not require cross-dialect discrete equality |
