@@ -54,6 +54,8 @@ let builtin (row : Prelude.row) args =
       x
       "round"
       [ P.Positional (P.Int "0"); P.Keyword ("mode", P.Str "half_to_even") ]
+  | Round_digits, [ x; d ] ->
+    P.meth x "round" [ P.Positional d; P.Keyword ("mode", P.Str "half_to_even") ]
   | Pmin, [ a; b ] -> P.Call (pl "min_horizontal", positional [ a; b ])
   | Pmax, [ a; b ] -> P.Call (pl "max_horizontal", positional [ a; b ])
   | Present, [ x ] -> on x "is_not_null"

@@ -125,10 +125,43 @@ let round_even f =
   Float.copy_sign r f
 ;;
 
-let builtin e (row : Prelude.row) args =
+let missing_last a b =
+  match a, b with
+  | Missing, Missing -> 0
+  | Missing, _ -> 1
+  | _, Missing -> -1
+  | a, b -> compare_values a b
+;;
+
+let sequence e first last step =
+  let ints = List.for_all (function Int _ -> true | _ -> false) [ first; last; step ] in
+  let first = number first and last = number last and step = number step in
+  if step = 0.
+  then fail e Wrong_arguments "seq needs a nonzero step"
+  else (
+    let rec go i acc =
+      let v = first +. (float_of_int i *. step) in
+      if (step > 0. && v <= last) || (step < 0. && v >= last)
+      then go (i + 1) ((if ints then Int (Int64.of_float v) else Float v) :: acc)
+      else List.rev acc
+    in
+    List (go 0 []))
+;;
+
+let builtin e call (row : Prelude.row) args =
   match row, args with
   | Present, [ v ] -> Bool (v <> Missing)
   | Absent, [ v ] -> Bool (v = Missing)
+  | Size, [ List xs ] -> Int (Int64.of_int (List.length xs))
+  | Reverse, [ List xs ] -> List (List.rev xs)
+  | Sorted, [ List xs ] -> List (List.stable_sort missing_last xs)
+  | Deduplicate, [ List xs ] ->
+    List
+      (List.rev
+         (List.fold_left (fun seen x -> if List.mem x seen then seen else x :: seen) [] xs))
+  | Map_each, [ List xs; f ] -> List (List.map (fun x -> call f [ x ]) xs)
+  | Retain, [ List xs; f ] -> List (List.filter (fun x -> call f [ x ] = Bool true) xs)
+  | Fold, [ List xs; init; f ] -> List.fold_left (fun acc x -> call f [ acc; x ]) init xs
   | _, args when List.mem Missing args -> Missing
   | Abs, [ Int i ] -> checked e (fun () -> Int (if i < 0L then Integer.sub 0L i else i))
   | Abs, [ v ] -> Float (Float.abs (number v))
@@ -143,6 +176,9 @@ let builtin e (row : Prelude.row) args =
   | Ceiling, [ v ] -> Float (ceil (number v))
   | Trunc, [ v ] -> Float (Float.trunc (number v))
   | Round, [ v ] -> Float (round_even (number v))
+  | Round_digits, [ v; d ] ->
+    let scale = 10. ** number d in
+    Float (round_even (number v *. scale) /. scale)
   | Pmin, [ a; b ] -> if compare_values a b <= 0 then a else b
   | Pmax, [ a; b ] -> if compare_values a b >= 0 then a else b
   | Length, [ v ] -> Int (Int64.of_int (Display.width (text v)))
@@ -152,6 +188,7 @@ let builtin e (row : Prelude.row) args =
   | Starts, [ v; p ] -> Bool (String.starts_with ~prefix:(text p) (text v))
   | Ends, [ v; p ] -> Bool (String.ends_with ~suffix:(text p) (text v))
   | Detect, [ v; p ] -> Bool (Re.execp (Re.compile (Re.Perl.re (text p))) (text v))
+  | Sequence, [ first; last; step ] -> sequence e first last step
   | _ -> invalid_arg "Wrong arguments to a builtin"
 ;;
 
@@ -283,7 +320,7 @@ let rec eval env ?rows (e : C.expr) =
          policy
          (Array.map (fun row -> eval env ~rows:{ at with row } x) group)
      | None -> invalid_arg "A reduction outside a table")
-  | Builtin (row, xs) -> builtin e row (List.map here xs)
+  | Builtin (row, xs) -> builtin e (apply e) row (List.map here xs)
   | Unary (op, x) ->
     (match op, here x with
      | _, Missing -> Missing
@@ -375,7 +412,7 @@ let rec eval env ?rows (e : C.expr) =
      | Missing, _ -> Missing
      | v, List items -> Bool (List.exists (fun i -> compare_values i v = 0) items)
      | _ -> invalid_arg "Expected a list")
-  | Foreign (_, "sqrt", [ x ]) -> builtin e Sqrt [ here x ]
+  | Foreign (_, "sqrt", [ x ]) -> builtin e (apply e) Sqrt [ here x ]
   | Foreign (m, f, _) ->
     fail e Dialect_capability (m ^ "." ^ f ^ " has no reference semantics")
   | Text pieces ->
@@ -403,7 +440,7 @@ and apply e f args =
     eval (List.map2 (fun (id : C.id) v -> id.stamp, v) ids args @ captured) body
   | Primitive name ->
     (match Prelude.find name with
-     | Some (Row row) -> builtin e row args
+     | Some (Row row) -> builtin e (apply e) row args
      | Some Coalesce ->
        (match args with
         | [ Missing; b ] -> b

@@ -57,7 +57,7 @@ def rp_format(v, shape):
     if kind == "list":
         return "[" + ", ".join(rp_format(x, shape[1]) for x in v) + "]"
     if kind == "option":
-        return "None" if v is None else "Some(" + rp_format(v, shape[1]) + ")"
+        return "None" if v is None else rp_format(v, shape[1])
     if kind == "tuple":
         return "(" + ", ".join(rp_format(x, s) for x, s in zip(v, shape[1:])) + ")"
     if kind == "record":
@@ -88,3 +88,35 @@ def rp_slice(x, a, b):
     if a < 1 or b > n:
         raise IndexError(f"slice {a}..={b} is outside 1..{n}")
     return x[a - 1 : b]
+
+
+def rp_sort(xs):
+    return sorted(xs, key=lambda v: (v is None, 0 if v is None else v))
+
+
+def rp_unique(xs):
+    out = []
+    for v in xs:
+        if v not in out:
+            out.append(v)
+    return out
+
+
+def rp_reduce(f, xs, init):
+    acc = init
+    for v in xs:
+        acc = f(acc, v)
+    return acc
+
+
+def rp_seq(first, last, step):
+    if step == 0:
+        raise ValueError("seq needs a nonzero step")
+    out = []
+    i = 0
+    v = first
+    while (step > 0 and v <= last) or (step < 0 and v >= last):
+        out.append(v)
+        i += 1
+        v = first + i * step
+    return out

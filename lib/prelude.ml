@@ -10,6 +10,7 @@ type row =
   | Ceiling
   | Trunc
   | Round
+  | Round_digits
   | Pmin
   | Pmax
   | Present
@@ -21,6 +22,14 @@ type row =
   | Starts
   | Ends
   | Detect
+  | Size
+  | Reverse
+  | Sorted
+  | Deduplicate
+  | Map_each
+  | Retain
+  | Fold
+  | Sequence
 [@@deriving sexp_of]
 
 type reduction =
@@ -54,6 +63,7 @@ let rows =
   ; "ceiling", Ceiling
   ; "trunc", Trunc
   ; "round", Round
+  ; "round", Round_digits
   ; "pmin", Pmin
   ; "pmax", Pmax
   ; "some", Present
@@ -65,6 +75,14 @@ let rows =
   ; "str_starts", Starts
   ; "str_ends", Ends
   ; "str_detect", Detect
+  ; "length", Size
+  ; "rev", Reverse
+  ; "sort", Sorted
+  ; "unique", Deduplicate
+  ; "map", Map_each
+  ; "keep", Retain
+  ; "reduce", Fold
+  ; "seq", Sequence
   ]
 ;;
 

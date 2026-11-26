@@ -72,6 +72,7 @@ let builtin (row : Prelude.row) args =
   | Ceiling, [ a ] -> as_float (math "ceil" a)
   | Trunc, [ a ] -> as_float (math "trunc" a)
   | Round, [ a ] -> as_float (P.call "round" [ a ])
+  | Round_digits, [ a; d ] -> as_float (P.call "round" [ a; d ])
   | Pmin, [ a; b ] -> P.call "min" [ a; b ]
   | Pmax, [ a; b ] -> P.call "max" [ a; b ]
   | Present, [ a ] -> P.Binary (Is_not, a, P.Null)
@@ -87,6 +88,14 @@ let builtin (row : Prelude.row) args =
       ( Is_not
       , P.Call (P.Attribute (P.Name "re", "search"), [ P.Positional b; P.Positional a ])
       , P.Null )
+  | Size, [ a ] -> P.call "len" [ a ]
+  | Reverse, [ a ] -> P.call "list" [ P.call "reversed" [ a ] ]
+  | Sorted, [ a ] -> P.call "rp_sort" [ a ]
+  | Deduplicate, [ a ] -> P.call "rp_unique" [ a ]
+  | Map_each, [ a; f ] -> P.call "list" [ P.call "map" [ f; a ] ]
+  | Retain, [ a; f ] -> P.call "list" [ P.call "filter" [ f; a ] ]
+  | Fold, [ a; init; f ] -> P.call "rp_reduce" [ f; a; init ]
+  | Sequence, [ a; b; s ] -> P.call "rp_seq" [ a; b; s ]
   | _ -> invalid_arg "Wrong arguments to a builtin"
 ;;
 

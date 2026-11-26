@@ -28,7 +28,7 @@ rp_format <- function(v, shape) {
   }
   switch(shape[[1]],
     list = paste0("[", paste(vapply(v, rp_format, "", shape[[2]]), collapse = ", "), "]"),
-    option = if (is.null(v)) "None" else paste0("Some(", rp_format(v, shape[[2]]), ")"),
+    option = if (is.null(v)) "None" else rp_format(v, shape[[2]]),
     tuple = paste0("(", paste(mapply(rp_format, v, shape[-1]), collapse = ", "), ")"),
     record = paste0("{", paste(vapply(shape[[2]], function(f)
       paste0(f[[1]], " = ", rp_format(v[[f[[1]]]], f[[2]])), ""), collapse = ", "), "}"),
@@ -55,3 +55,18 @@ rp_slice <- function(x, a, b) {
 }
 
 rp_coalesce <- function(x, fallback) if (is.null(x)) fallback else x
+
+rp_sort <- function(xs) {
+  if (length(xs) == 0) return(xs)
+  absent <- vapply(xs, function(v) length(v) == 0 || is.na(v), logical(1))
+  present <- xs[!absent]
+  c(present[order(do.call(c, present))], xs[absent])
+}
+
+rp_unique <- function(xs) xs[!duplicated(xs)]
+
+rp_seq <- function(first, last, step) {
+  if (step == 0) stop("seq needs a nonzero step")
+  if ((last - first) * step < 0) return(list())
+  as.list(seq(first, last, by = step))
+}

@@ -128,6 +128,7 @@ let row_signature level (row : Prelude.row) =
   | Sign -> [ number () ], T.Int
   | Sqrt | Exp | Log | Log2 | Log10 | Floor | Ceiling | Trunc | Round ->
     [ T.Float ], T.Float
+  | Round_digits -> [ T.Float; T.Int ], T.Float
   | Pmin | Pmax ->
     let a = number () in
     [ a; a ], a
@@ -135,6 +136,24 @@ let row_signature level (row : Prelude.row) =
   | Length -> [ T.String ], T.Int
   | Lower | Upper | Trim -> [ T.String ], T.String
   | Starts | Ends | Detect -> [ T.String; T.String ], T.Bool
+  | Size -> [ T.List (T.fresh level) ], T.Int
+  | Reverse | Sorted | Deduplicate ->
+    let a = T.List (T.fresh level) in
+    [ a ], a
+  | Map_each ->
+    let a = T.fresh level
+    and b = T.fresh level in
+    [ T.List a; T.Arrow ([ a ], b) ], T.List b
+  | Retain ->
+    let a = T.fresh level in
+    [ T.List a; T.Arrow ([ a ], T.Bool) ], T.List a
+  | Fold ->
+    let a = T.fresh level
+    and b = T.fresh level in
+    [ T.List a; b; T.Arrow ([ b; a ], b) ], b
+  | Sequence ->
+    let n = number () in
+    [ n; n; n ], T.List n
 ;;
 
 let builtin_type level = function

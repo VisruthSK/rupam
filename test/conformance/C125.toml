@@ -1,5 +1,5 @@
 id = "C125"
-status = "pending"
+status = "active"
 case = '''`map([1.234, 5.678], round(_, 2))`'''
 expected = '''`[1.23, 5.68]`'''
 

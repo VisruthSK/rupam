@@ -53,6 +53,7 @@ let builtin (row : Prelude.row) args =
   | Ceiling, [ a ] -> R.call "ceiling" [ a ]
   | Trunc, [ a ] -> R.call "trunc" [ a ]
   | Round, [ a ] -> R.call "round" [ a ]
+  | Round_digits, [ a; d ] -> R.call "round" [ a; R.call "as.integer" [ d ] ]
   | Pmin, [ a; b ] -> R.call "min" [ a; b ]
   | Pmax, [ a; b ] -> R.call "max" [ a; b ]
   | Present, [ a ] -> R.Not (is_null a)
@@ -69,6 +70,14 @@ let builtin (row : Prelude.row) args =
     R.Call
       ( R.Name "grepl"
       , [ R.Positional b; R.Positional a; R.Named ("perl", R.Logical true) ] )
+  | Size, [ a ] -> integer64 (R.call "length" [ a ])
+  | Reverse, [ a ] -> R.call "rev" [ a ]
+  | Sorted, [ a ] -> R.call "rp_sort" [ a ]
+  | Deduplicate, [ a ] -> R.call "rp_unique" [ a ]
+  | Map_each, [ a; f ] -> R.call "lapply" [ a; f ]
+  | Retain, [ a; f ] -> R.call "Filter" [ f; a ]
+  | Fold, [ a; init; f ] -> R.call "Reduce" [ f; a; init ]
+  | Sequence, [ a; b; s ] -> R.call "rp_seq" [ a; b; s ]
   | _ -> invalid_arg "Wrong arguments to a builtin"
 ;;
 

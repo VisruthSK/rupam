@@ -48,6 +48,7 @@ let builtin (row : Prelude.row) args =
   | Ceiling, [ x ] -> R.call "ceiling" [ x ]
   | Trunc, [ x ] -> R.call "trunc" [ x ]
   | Round, [ x ] -> R.call "round" [ x ]
+  | Round_digits, [ x; d ] -> R.call "round" [ x; R.call "as.integer" [ d ] ]
   | Pmin, [ a; b ] -> R.call "pmin" [ a; b ]
   | Pmax, [ a; b ] -> R.call "pmax" [ a; b ]
   | Present, [ x ] -> R.Not (R.call "is.na" [ x ])

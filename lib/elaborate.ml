@@ -96,16 +96,25 @@ let rec expr ctx (x : Syntax.expr) : C.expr =
       | _ -> assert false)
   | Interpolate pieces -> interpolate ctx span pieces
   | List xs ->
-    let t = T.fresh ctx.level in
-    let xs =
-      List.map
-        (fun x ->
-           let x = here x in
-           expect x.span t x.typ;
-           x)
+    let xs = List.map here xs in
+    let element =
+      List.fold_left
+        (fun t (x : C.expr) ->
+           let _, _, t = common x.span { x with typ = t } x in
+           t)
+        (T.fresh ctx.level)
         xs
     in
-    make Scalar (T.List t) (List xs)
+    let xs =
+      List.map
+        (fun (x : C.expr) ->
+           match T.repr element, T.repr (T.present x.typ) with
+           | Float, Int -> to_float x
+           | _ -> x)
+        xs
+    in
+    let optional = List.exists (fun (x : C.expr) -> T.is_optional x.typ) xs in
+    make Scalar (T.List (if optional then T.optional element else element)) (List xs)
   | Tuple xs ->
     let xs = List.map here xs in
     make Scalar (T.Tuple (List.map (fun (x : C.expr) -> x.typ) xs)) (Tuple xs)
@@ -573,6 +582,11 @@ and builtin ctx span n b args =
     in
     chain values
   | Row row, values ->
+    let row =
+      match row, values with
+      | Round, [ _; _ ] -> Prelude.Round_digits
+      | row, _ -> row
+    in
     let params, result = row_signature ctx.level row in
     if List.length params <> List.length values
     then fail span Wrong_arguments ("Wrong arguments to " ^ n);

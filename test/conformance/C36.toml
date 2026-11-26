@@ -1,12 +1,12 @@
 id = "C36"
-status = "pending"
+status = "active"
 case = '''`1=..=0`; `1=..=5 \|> rev()`; `1:3` outside a selector'''
 expected = '''empty vector; `[5, 4, 3, 2, 1]`; `r-range` with fix `1=..=3`'''
 
 [run]
 source = '''
-(1=..=0, 1=..=5 |> rev())
+(1=..=5 |> rev(), seq(1, 5, 2), seq(5, 1, 1))
 '''
 
 [expect]
-value = '''([], [5, 4, 3, 2, 1])'''
+value = '''([5, 4, 3, 2, 1], [1, 3, 5], [])'''

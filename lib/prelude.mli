@@ -10,6 +10,7 @@ type row =
   | Ceiling
   | Trunc
   | Round
+  | Round_digits
   | Pmin
   | Pmax
   | Present
@@ -21,6 +22,14 @@ type row =
   | Starts
   | Ends
   | Detect
+  | Size
+  | Reverse
+  | Sorted
+  | Deduplicate
+  | Map_each
+  | Retain
+  | Fold
+  | Sequence
 [@@deriving sexp_of]
 
 type reduction =
