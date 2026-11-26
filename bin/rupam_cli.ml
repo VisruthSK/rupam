@@ -48,7 +48,8 @@ let elaborate (project : Project.t) path ds =
 ;;
 
 let generate (project : Project.t) items =
-  Dialect.script (Project.require_target project) items
+  let module B = (val Backend.of_target (Project.require_target project)) in
+  B.script items
 ;;
 
 let run target strict path =

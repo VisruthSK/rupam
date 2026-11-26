@@ -1,3 +1,4 @@
+import functools
 import json
 import math
 import re
@@ -69,8 +70,15 @@ def rp_show(value, shape):
     return rp_format(value, json.loads(shape))
 
 
-def rp_seq(a, b):
-    return list(range(a, b + 1))
+def rp_seq(first, last, step=1):
+    if step == 0:
+        raise ValueError("seq needs a nonzero step")
+    out = []
+    v = first
+    while (step > 0 and v <= last) or (step < 0 and v >= last):
+        out.append(v)
+        v = first + len(out) * step
+    return out
 
 
 def rp_element(x, i):
@@ -89,34 +97,3 @@ def rp_slice(x, a, b):
         raise IndexError(f"slice {a}..={b} is outside 1..{n}")
     return x[a - 1 : b]
 
-
-def rp_sort(xs):
-    return sorted(xs, key=lambda v: (v is None, 0 if v is None else v))
-
-
-def rp_unique(xs):
-    out = []
-    for v in xs:
-        if v not in out:
-            out.append(v)
-    return out
-
-
-def rp_reduce(f, xs, init):
-    acc = init
-    for v in xs:
-        acc = f(acc, v)
-    return acc
-
-
-def rp_seq(first, last, step):
-    if step == 0:
-        raise ValueError("seq needs a nonzero step")
-    out = []
-    i = 0
-    v = first
-    while (step > 0 and v <= last) or (step < 0 and v >= last):
-        out.append(v)
-        i += 1
-        v = first + i * step
-    return out

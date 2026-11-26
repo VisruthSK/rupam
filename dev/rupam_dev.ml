@@ -70,7 +70,8 @@ let typed_lines items =
 let typed path = List.iter print_endline (typed_lines (elaborate path))
 
 let generated dialect items =
-  let text, locations = Dialect.script dialect items in
+  let module B = (val Backend.of_target dialect) in
+  let text, locations = B.script items in
   let locations =
     List.map
       (fun (l : Document.location) ->

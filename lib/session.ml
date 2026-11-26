@@ -106,7 +106,8 @@ let host ?(started = fun _ -> ()) t =
     started h.worker;
     if h.target <> target
     then (
-      ignore (Worker.evaluate h.worker (Dialect.preamble target));
+      let module B = (val Backend.of_target target) in
+      ignore (Worker.evaluate h.worker B.preamble);
       h.target <- target);
     h
   | _ ->
@@ -114,23 +115,26 @@ let host ?(started = fun _ -> ()) t =
     let worker =
       Worker.start (Runtime.resolve t.project target.language) target.language
     in
+    let module B = (val Backend.of_target target) in
     let h =
       { worker
-      ; names = Dialect.names target.language
+      ; names = B.names ()
       ; established = Hashtbl.create 64
       ; target
       }
     in
     t.host <- Some h;
     started worker;
-    ignore (Worker.evaluate worker (Dialect.preamble target));
+    ignore (Worker.evaluate worker B.preamble);
     h
 ;;
 
 let run h items =
   match items with
   | [] -> ""
-  | _ -> Worker.evaluate h.worker (Dialect.statements h.target h.names items)
+  | _ ->
+    let module B = (val Backend.of_target h.target) in
+    Worker.evaluate h.worker (B.statements h.names items)
 ;;
 
 let defined = function
@@ -164,7 +168,8 @@ let commit t revision =
 let materialize h table =
   let file = Filename.temp_file "rupam" ".arrow" in
   match
-    ignore (Worker.evaluate h.worker (Dialect.result h.target h.names table ~path:file));
+    let module B = (val Backend.of_target h.target) in
+    ignore (Worker.evaluate h.worker (B.result h.names table ~path:file));
     { table; file; arrow = Arrow_result.open_ipc file }
   with
   | result -> result
@@ -454,12 +459,13 @@ let release_draft = discard
 
 let code t target table =
   let target = Option.value target ~default:(Project.require_target t.project) in
+  let module B = (val Backend.of_target target) in
   let names =
     match t.host with
     | Some h when h.target.language = target.language -> h.names
-    | _ -> Dialect.names target.language
+    | _ -> B.names ()
   in
-  Dialect.table target names table
+  B.table names table
 ;;
 
 let set_target t target ~origin =

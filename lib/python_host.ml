@@ -38,6 +38,7 @@ let reserved =
   ; "yield"
   ; "pl"
   ; "math"
+  ; "functools"
   ; "re"
   ; "print"
   ; "len"
@@ -90,11 +91,18 @@ let builtin (row : Prelude.row) args =
       , P.Null )
   | Size, [ a ] -> P.call "len" [ a ]
   | Reverse, [ a ] -> P.call "list" [ P.call "reversed" [ a ] ]
-  | Sorted, [ a ] -> P.call "rp_sort" [ a ]
-  | Deduplicate, [ a ] -> P.call "rp_unique" [ a ]
+  | Sorted, [ a ] ->
+    P.Call
+      ( P.Name "sorted"
+      , [ P.Positional a
+        ; P.Keyword
+            ("key", P.Lambda ([ "v" ], P.Tuple [ P.Binary (Is, P.Name "v", P.Null); P.Name "v" ]))
+        ] )
+  | Deduplicate, [ a ] -> P.call "list" [ P.Call (P.Attribute (P.Name "dict", "fromkeys"), [ P.Positional a ]) ]
   | Map_each, [ a; f ] -> P.call "list" [ P.call "map" [ f; a ] ]
   | Retain, [ a; f ] -> P.call "list" [ P.call "filter" [ f; a ] ]
-  | Fold, [ a; init; f ] -> P.call "rp_reduce" [ f; a; init ]
+  | Fold, [ a; init; f ] ->
+    P.Call (P.Attribute (P.Name "functools", "reduce"), [ P.Positional f; P.Positional a; P.Positional init ])
   | Sequence, [ a; b; s ] -> P.call "rp_seq" [ a; b; s ]
   | _ -> invalid_arg "Wrong arguments to a builtin"
 ;;

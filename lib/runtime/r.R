@@ -37,7 +37,11 @@ rp_format <- function(v, shape) {
 
 rp_show <- function(v, shape) rp_format(v, jsonlite::fromJSON(shape, simplifyVector = FALSE))
 
-rp_seq <- function(a, b) if (a > b) list() else lapply(seq_len(as.integer(b - a + 1)), function(k) a + k - 1L)
+rp_seq <- function(first, last, step = 1L) {
+  if (step == 0) stop("seq needs a nonzero step")
+  if ((last - first) * step < 0) return(list())
+  lapply(seq_len(as.integer((last - first) %/% step) + 1L), function(k) first + (k - 1L) * step)
+}
 
 rp_element <- function(x, i) {
   n <- length(x)
@@ -57,16 +61,7 @@ rp_slice <- function(x, a, b) {
 rp_coalesce <- function(x, fallback) if (is.null(x)) fallback else x
 
 rp_sort <- function(xs) {
-  if (length(xs) == 0) return(xs)
   absent <- vapply(xs, function(v) length(v) == 0 || is.na(v), logical(1))
   present <- xs[!absent]
   c(present[order(do.call(c, present))], xs[absent])
-}
-
-rp_unique <- function(xs) xs[!duplicated(xs)]
-
-rp_seq <- function(first, last, step) {
-  if (step == 0) stop("seq needs a nonzero step")
-  if ((last - first) * step < 0) return(list())
-  as.list(seq(first, last, by = step))
 }
