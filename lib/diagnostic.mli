@@ -24,7 +24,7 @@ type code =
   | Invalid_policy
   | Missing_policy_required
   | Missing_under_error
-  | Int64_range
+  | Int_range
   | Inexact_float
   | Arithmetic_overflow
   | Row_domain_mismatch

@@ -1,4 +1,4 @@
 id = "C04"
 status = "pending"
 case = '''`mutate(s = coalesce(cost, 0.0))`'''
-expected = '''`s : Float64`'''
+expected = '''`s : Float`'''

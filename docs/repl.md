@@ -15,9 +15,9 @@ Type a definition or an expression. rupam prints the value with its type:
 
 ```text
 rupam ❯ let f(x) = x ^ 2
-f : (Int64) -> Int64
+f : (Int) -> Int
 rupam ❯ f(10)
-100 : Int64
+100 : Int
 ```
 
 Type a name to look at it. A table prints its first rows, a contract lists its
@@ -29,7 +29,7 @@ rupam ❯ orders |> filter(cost > 1.0, missing = skip) |> print()
 rupam ❯ shop
 ```
 
-Table previews show the checked type below each column name. Float64 cells
+Table previews show the checked type below each column name. Float cells
 use two decimal places by default. To change them for a project:
 
 ```toml

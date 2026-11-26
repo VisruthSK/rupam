@@ -1,4 +1,4 @@
 id = "C56"
 status = "pending"
-case = '''`let empty: [Int64] = []; sum(empty)`; `sum([None,None], missing = skip)` with Int64? elements; `sum([0,0])`'''
+case = '''`let empty: [Int] = []; sum(empty)`; `sum([None,None], missing = skip)` with Int? elements; `sum([0,0])`'''
 expected = '''None, None, 0; nonempty known-present sum is present'''

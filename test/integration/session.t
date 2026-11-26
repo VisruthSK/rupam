@@ -12,7 +12,7 @@ Switching target never replays writes, and :save writes the accepted analysis.
   2  North   
   3  South   
   4  South   
-  n : Int64
+  n : Int
   shop : contract
   small : table
   Saved b.rp

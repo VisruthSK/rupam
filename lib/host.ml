@@ -1,4 +1,4 @@
-module C = Core
+module C = TransformIR
 module T = Types
 
 type names =
@@ -37,8 +37,8 @@ let name names (id : C.id) =
 
 let rec descriptor t : Yojson.Basic.t =
   match T.repr t with
-  | Int64 -> `String "int"
-  | Float64 -> `String "float"
+  | Int -> `String "int"
+  | Float -> `String "float"
   | Bool -> `String "bool"
   | String -> `String "string"
   | List t -> `List [ `String "list"; descriptor t ]
@@ -56,8 +56,8 @@ let rec descriptor t : Yojson.Basic.t =
   | Arrow _ -> `String "function"
 ;;
 
-let float e = T.repr (T.present e.C.typ) = Float64
-let integer e = T.repr (T.present e.C.typ) = Int64
+let float e = T.repr (T.present e.C.typ) = Float
+let integer e = T.repr (T.present e.C.typ) = Int
 
 let risky =
   C.exists (fun e ->

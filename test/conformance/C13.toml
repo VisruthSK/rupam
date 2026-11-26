@@ -1,4 +1,4 @@
 id = "C13"
 status = "pending"
 case = '''`summarize(s = sum(x), missing = skip)` on an all-missing group'''
-expected = '''`None : Float64?`'''
+expected = '''`None : Float?`'''

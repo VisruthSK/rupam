@@ -1,4 +1,4 @@
-module C = Core
+module C = TransformIR
 module T = Types
 module R = R_syntax
 
@@ -160,8 +160,8 @@ and node names (e : C.expr) : R.expr =
            | Shown (x, None) ->
              (match T.repr (T.present x.typ) with
               | String -> go x
-              | Int64 -> R.call "as.character" [ go x ]
-              | Float64 -> R.call "rp_float" [ go x ]
+              | Int -> R.call "as.character" [ go x ]
+              | Float -> R.call "rp_float" [ go x ]
               | Bool -> R.If (go x, R.String "TRUE", R.String "FALSE")
               | _ -> R.call "rp_dynamic" [ go x ]))
          pieces)

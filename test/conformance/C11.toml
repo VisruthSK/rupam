@@ -1,4 +1,4 @@
 id = "C11"
 status = "pending"
 case = '''`standardize(revenue)`'''
-expected = '''whole-column; `Float64?`'''
+expected = '''whole-column; `Float?`'''

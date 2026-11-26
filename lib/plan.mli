@@ -1,1 +1,1 @@
-val explain : Core.table -> string list
+val explain : TransformIR.table -> string list

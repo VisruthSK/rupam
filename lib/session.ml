@@ -1,6 +1,6 @@
 type accepted =
   { declaration : Syntax.declaration
-  ; items : Core.item list
+  ; items : TransformIR.item list
   }
 
 type revision =
@@ -100,7 +100,7 @@ let run h items =
 ;;
 
 let defined = function
-  | Core.Define (id, _) -> Some id.Core.stamp
+  | TransformIR.Define (id, _) -> Some id.TransformIR.stamp
   | _ -> None
 ;;
 
@@ -110,7 +110,7 @@ let establish t =
     List.filter
       (fun item ->
          match item with
-         | Core.Define (id, _) -> not (Hashtbl.mem h.established id.stamp)
+         | TransformIR.Define (id, _) -> not (Hashtbl.mem h.established id.stamp)
          | _ -> false)
       (items t)
   in
@@ -127,7 +127,7 @@ let commit t revision =
   t.current <- revision
 ;;
 
-let preview t (table : Core.table) ~offset ~limit =
+let preview t (table : TransformIR.table) ~offset ~limit =
   let h = establish t in
   let path = Filename.temp_file "rupam" ".parquet" in
   Fun.protect
@@ -161,7 +161,7 @@ let declare t (env, accepted, events) d =
   let effects =
     List.filter
       (function
-        | Core.Define _ | Write _ -> true
+        | TransformIR.Define _ | Write _ -> true
         | Show _ | Variant _ -> false)
       items
   in
@@ -169,7 +169,7 @@ let declare t (env, accepted, events) d =
     target t = None
     && List.for_all
          (function
-           | Core.Define _ -> true
+           | TransformIR.Define _ -> true
            | _ -> false)
          effects
   in
@@ -187,7 +187,7 @@ let declare t (env, accepted, events) d =
   let events = List.rev_append (describe env d) events in
   let events =
     List.fold_left
-      (fun events (item : Core.item) ->
+      (fun events (item : TransformIR.item) ->
          match item with
          | Show { node = Table table; _ } ->
            Table (preview t table ~offset:0 ~limit:20) :: events
@@ -204,7 +204,7 @@ let declare t (env, accepted, events) d =
       when not
              (List.exists
                 (function
-                  | Core.Write _ -> true
+                  | TransformIR.Write _ -> true
                   | _ -> false)
                 items) -> accepted
     | _ -> { declaration = d; items } :: accepted

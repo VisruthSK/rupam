@@ -1,7 +1,7 @@
 id = "C41"
 status = "active"
 case = '''`let inc(x) = x + 1; (inc(2), inc(2.5))`'''
-expected = '''`(3, 3.5) : (Int64, Float64)`'''
+expected = '''`(3, 3.5) : (Int, Float)`'''
 
 [run]
 source = '''
@@ -10,5 +10,5 @@ let inc(x) = x + 1
 '''
 
 [expect]
-type = "(Int64, Float64)"
+type = "(Int, Float)"
 value = "(3, 3.5)"

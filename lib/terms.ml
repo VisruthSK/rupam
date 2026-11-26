@@ -1,6 +1,6 @@
 open Syntax
 module T = Types
-module C = Core
+module C = TransformIR
 open Scope
 
 let expect span expected actual =
@@ -62,7 +62,7 @@ let constant span = function
   | Syntax.Int s ->
     (match Int64.of_string_opt s with
      | Some _ -> C.Number s
-     | None -> fail span Int64_range "Integer literal is outside the Int64 range")
+     | None -> fail span Int_range "Integer literal is outside the Int range")
   | Float s -> Float (float_of_string s)
   | Text s -> Text s
   | Bool b -> Bool b
@@ -70,19 +70,19 @@ let constant span = function
 ;;
 
 let to_float (x : C.expr) =
-  let typ = if T.is_optional x.typ then T.Option T.Float64 else T.Float64 in
+  let typ = if T.is_optional x.typ then T.Option T.Float else T.Float in
   match T.repr (T.present x.typ), x.node with
-  | Float64, _ -> x
+  | Float, _ -> x
   | Var _, Constant (Number _) ->
-    expect x.span T.Float64 (T.present x.typ);
+    expect x.span T.Float (T.present x.typ);
     x
-  | Int64, Constant (Int i) ->
+  | Int, Constant (Int i) ->
     { x with node = Constant (Float (exact_float x.span (Int64.to_string i))); typ }
-  | (Int64 | Var _), _ ->
+  | (Int | Var _), _ ->
     expect x.span (T.fresh ~kind:Number max_int) (T.present x.typ);
     { x with node = Convert x; typ }
   | _ ->
-    expect x.span T.Float64 (T.present x.typ);
+    expect x.span T.Float (T.present x.typ);
     x
 ;;
 
@@ -90,8 +90,8 @@ let common span (a : C.expr) (b : C.expr) =
   let ea = T.present a.typ
   and eb = T.present b.typ in
   match T.repr ea, T.repr eb with
-  | Int64, Float64 -> to_float a, b, T.Float64
-  | Float64, Int64 -> a, to_float b, T.Float64
+  | Int, Float -> to_float a, b, T.Float
+  | Float, Int -> a, to_float b, T.Float
   | _ ->
     expect span ea eb;
     a, b, ea
@@ -125,14 +125,14 @@ let row_signature level (row : Prelude.row) =
   | Abs ->
     let a = number () in
     [ a ], a
-  | Sign -> [ number () ], T.Int64
+  | Sign -> [ number () ], T.Int
   | Sqrt | Exp | Log | Log2 | Log10 | Floor | Ceiling | Trunc | Round ->
-    [ T.Float64 ], T.Float64
+    [ T.Float ], T.Float
   | Pmin | Pmax ->
     let a = number () in
     [ a; a ], a
   | Present | Absent -> [ T.Option (T.fresh level) ], T.Bool
-  | Length -> [ T.String ], T.Int64
+  | Length -> [ T.String ], T.Int
   | Lower | Upper | Trim -> [ T.String ], T.String
   | Starts | Ends | Detect -> [ T.String; T.String ], T.Bool
 ;;
@@ -145,9 +145,9 @@ let builtin_type level = function
     let a = T.fresh ~kind:Number level in
     T.Arrow ([ T.Option a ], T.Option a)
   | Reduction (Mean | Median | Var | Sd) ->
-    T.Arrow ([ T.Option (T.fresh ~kind:Number level) ], T.Option T.Float64)
-  | Reduction Distinct -> T.Arrow ([ T.Option (T.fresh level) ], T.Int64)
-  | Reduction Count -> T.Arrow ([], T.Int64)
+    T.Arrow ([ T.Option (T.fresh ~kind:Number level) ], T.Option T.Float)
+  | Reduction Distinct -> T.Arrow ([ T.Option (T.fresh level) ], T.Int)
+  | Reduction Count -> T.Arrow ([], T.Int)
   | Coalesce ->
     let a = T.fresh level in
     T.Arrow ([ T.Option a; a ], a)
@@ -169,8 +169,8 @@ let rec annotation env params level = function
   | Named (n, args) ->
     let args = List.map (annotation env params level) args in
     (match n, args with
-     | "Int64", [] -> T.Int64
-     | "Float64", [] -> T.Float64
+     | "Int", [] -> T.Int
+     | "Float", [] -> T.Float
      | "String", [] -> T.String
      | "Bool", [] -> T.Bool
      | "List", [ t ] -> T.List t

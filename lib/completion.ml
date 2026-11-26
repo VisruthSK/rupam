@@ -98,7 +98,7 @@ let piped session line pipe =
   | exception _ -> None
 ;;
 
-let columns (t : Core.table) =
+let columns (t : TransformIR.table) =
   List.map (fun (n, typ) -> { text = n; detail = Types.display typ }) t.schema
 ;;
 

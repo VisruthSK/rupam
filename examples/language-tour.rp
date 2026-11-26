@@ -40,4 +40,4 @@ let assess(reading) = match reading {
 }
 assess(Measured(-1.0))
 assess(Fault("x"))
-"North" %in% ["North", "South"]
+"North" in ["North", "South"]

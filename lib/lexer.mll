@@ -2,7 +2,7 @@
 open Parser
 let keyword = function
   | "import" -> IMPORT | "match" -> MATCH | "type" -> TYPE | "in" -> IN | "let" -> LET | "fn" -> FN | "if" -> IF | "else" -> ELSE
-  | "use" -> USE | "as" -> AS | "contract" -> CONTRACT
+  | "use" -> USE | "set" -> SET | "as" -> AS | "contract" -> CONTRACT
   | "and" -> AND | "or" -> OR | "not" -> NOT
   | "TRUE" -> TRUE | "FALSE" -> FALSE | "None" -> NONE | s -> NAME s
 let digits s = String.concat "" (String.split_on_char '_' s)
@@ -22,11 +22,11 @@ rule token = parse
  | '"' (([^'"' '\\' '\n'] | '\\' [^'\n'])* as s) '"' { STRING (Scanf.unescaped s) }
  | '|' { BAR } | '?' { QUESTION } | '@' { AT }
  | '[' { LB } | ']' { RB } | '{' { LC } | '}' { RC }
- | '(' { LP } | ')' { RP } | ',' { COMMA } | '.' { DOT } | ';' { SEMI }
+ | '(' { LP } | ')' { RP } | ',' { COMMA } | '.' { DOT } | ';' { Diagnostic.fail Syntax_error "Rupam has no `;`. End each item with a new line" }
  | "..=" { DOTDOTEQ } | "..<" { DOTDOTLT } | ".." { DOTDOT } | "->" { TYPEARROW }
  | "==" { EQUAL } | "!=" { NE } | ">=" { GE } | "<=" { LE } | '=' { EQ }
  | '>' { GT } | '<' { LT } | "=>" { ARROW } | "|>" { PIPE }
- | "%in%" { MEMBER }
+ | "??" { FALLBACK } | "match?" { MATCH_PRESENT }
  | '+' { PLUS } | '-' { MINUS } | '*' { TIMES } | '/' { DIV } | '%' { MOD }
  | ':' { COLON } | '$' { DOLLAR } | '^' { CARET } | '~' { TILDE }
  | eof { EOF } | _ as c { Diagnostic.fail Syntax_error (Printf.sprintf "Unexpected character %C" c) }

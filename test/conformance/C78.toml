@@ -1,4 +1,4 @@
 id = "C78"
 status = "pending"
-case = '''row bind `{id:Int64, x:Int64}` with `{id:Int64, y:Float64}`'''
-expected = '''schema id:Int64, x:Int64?, y:Float64?; missing cells added'''
+case = '''row bind `{id:Int, x:Int}` with `{id:Int, y:Float}`'''
+expected = '''schema id:Int, x:Int?, y:Float?; missing cells added'''

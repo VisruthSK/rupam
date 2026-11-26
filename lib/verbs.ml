@@ -1,6 +1,6 @@
 open Syntax
 module T = Types
-module C = Core
+module C = TransformIR
 
 type context =
   { expression : ?missing:C.policy -> T.row -> Syntax.expr -> C.expr
@@ -500,7 +500,7 @@ let pivot span (t : C.table) wider arguments =
       List.fold_left
         (fun acc typ ->
            match T.repr acc, T.repr (T.present typ) with
-           | Int64, Float64 | Float64, Int64 -> T.Float64
+           | Int, Float | Float, Int -> T.Float
            | _ ->
              (try T.unify acc (T.present typ) with
               | T.Mismatch -> fail span Pivot_shape "Pivoted columns must share a type");

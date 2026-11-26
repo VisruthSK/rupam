@@ -15,7 +15,7 @@ records, tables, variants and functions are Hindley–Milner types with
 unification variables. Records and tables share one row representation; a row
 is a set of named fields with an optional row variable, so column order is not
 part of a type. Numeric literals carry a `number` constraint and default to
-Int64 when unconstrained.
+Int when unconstrained.
 
 ## Core
 

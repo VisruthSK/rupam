@@ -184,7 +184,7 @@ let event : Session.event -> Yojson.Safe.t = function
   | Table p -> `Assoc [ "kind", `String "table"; "page", page p ]
 ;;
 
-let item : Core.item -> Yojson.Safe.t option = function
+let item : TransformIR.item -> Yojson.Safe.t option = function
   | Define (id, e) -> Some (`Assoc [ "name", `String id.name; "type", typ e.typ ])
   | Show e | Write (e, _) -> Some (`Assoc [ "type", typ e.typ ])
   | Variant _ -> None

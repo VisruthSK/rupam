@@ -87,9 +87,9 @@ let tables items =
   let found = ref [] in
   List.iter
     (function
-      | Core.Define (_, e) | Show e | Write (e, _) ->
+      | TransformIR.Define (_, e) | Show e | Write (e, _) ->
         ignore
-          (Core.exists
+          (TransformIR.exists
              (fun e ->
                 (match e.node with
                  | Table t -> found := t :: !found
@@ -106,8 +106,8 @@ let analysis ~(project : Project.t) ~source items =
   let tables = tables items in
   let unique f = List.concat_map f tables |> List.sort_uniq compare in
   let schemas =
-    unique Core.files
-    |> List.map (fun (file : Core.file) ->
+    unique TransformIR.files
+    |> List.map (fun (file : TransformIR.file) ->
       { path = relative root file.path
       ; columns =
           List.map (fun (name, t) -> { name; type_ = Types.display t }) file.columns
@@ -122,11 +122,11 @@ let analysis ~(project : Project.t) ~source items =
         List.map
           (fun path : input ->
              { path = relative root path; sha256 = Data_file.digest path })
-          (unique Core.sources)
+          (unique TransformIR.sources)
     ; schemas
     }
   in
-  root, entry, unique Core.contracts
+  root, entry, unique TransformIR.contracts
 ;;
 
 let write root entry =

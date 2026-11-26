@@ -7,19 +7,19 @@ way: `f(a, b, name = c)`. This page covers the core language. Tables are in
 ## Values
 
 ```text
-42   1_000_000      # Int64
-3.5  1e-3           # Float64
+42   1_000_000      # Int
+3.5  1e-3           # Float
 "Ridge"             # String
 TRUE  FALSE         # Bool
 None                # a missing value of any type
 (1, "a")            # tuple
-[1, 2, 3]           # List<Int64>
+[1, 2, 3]           # List<Int>
 {station = "Marsh", altitude = 1210}   # record
 ```
 
-`/` always gives a `Float64`. An integer literal becomes a `Float64` when it
+`/` always gives a `Float`. An integer literal becomes a `Float` when it
 meets one, so `x > 10` works for a decimal `x`, but only when the value is
-exactly representable. Otherwise `Int64` and `Float64` never mix.
+exactly representable. Otherwise `Int` and `Float` never mix.
 
 A value of type `T?` may be missing. Present values of type `T` are accepted
 wherever a `T?` is expected, so there is no `Some` to write. Arithmetic,
@@ -27,9 +27,9 @@ comparisons and function calls on a `T?` give a `T?` that is missing where the
 input is:
 
 ```text
-let cost: Float64? = None
-cost * 2.0                 # None : Float64?
-coalesce(cost, 0.0)        # 0.0 : Float64
+let cost: Float? = None
+cost * 2.0                 # None : Float?
+coalesce(cost, 0.0)        # 0.0 : Float
 ```
 
 ## Bindings and functions
@@ -61,11 +61,11 @@ so does a line followed by one starting with `|>`, `else` or a closing bracket.
 They are optional and checked when present.
 
 ```text
-let shift(δ: Float64): Float64 = δ + 1.0
+let shift(δ: Float): Float = δ + 1.0
 let label(r: {name: String, ..rest}) = r.name
 ```
 
-Types are written `Int64`, `Float64`, `String`, `Bool`, `T?`, `List<T>`,
+Types are written `Int`, `Float`, `String`, `Bool`, `T?`, `List<T>`,
 `(A, B)`, `A -> B` and records `{a: A, ..row}`.
 
 ## Records
@@ -124,11 +124,11 @@ Guarded arms don't count.
 ## Operators
 
 From tightest to loosest: calls and field access, `^`, unary `-`, `* / %`,
-`+ -`, comparisons and `%in%`, `not`, `and`, `or`, `|>`. Comparisons don't
+`+ -`, comparisons and `in`, `not`, `and`, `or`, `|>`. Comparisons don't
 chain, and `-x^y` is an error: write `-(x^y)` or `(-x)^y`.
 
 ```text
-region %in% ["North", "South"]
+region in ["North", "South"]
 ```
 
 ## Standard library

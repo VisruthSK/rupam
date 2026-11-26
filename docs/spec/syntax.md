@@ -4,16 +4,17 @@
 
 - Source files are UTF-8 with the extension `.rp`.
 - `#` starts a comment that runs to the end of the line.
-- Whitespace separates tokens and is otherwise insignificant.
+- Spaces and indentation separate tokens and are otherwise insignificant.
 - Identifiers are Unicode XID with `_`. Types, constructors and type
   constants start uppercase; values and functions start lowercase. Backticks
   quote any other name: `` `gross revenue` ``. A backtick inside is doubled.
-- Keywords: `let in fn if else match type new deriving use contract import
-  as and or not TRUE FALSE None end todo`.
+- Keywords: `let in fn if else match match? type new deriving use set contract
+  import as and or not TRUE FALSE None end todo`.
 - `todo` is a typed hole ([Agents](agent-interface.md#holes)).
-- A top-level item ends at a newline once complete, or at `;`. A line ending
-  in an operator, `=`, `=>`, `,` or an open bracket continues. A line followed
-  by one starting with `|>`, `else` or a closing bracket continues.
+- A newline ends an item once the item is complete; there is no `;`. A line
+  continues inside open brackets, after a trailing operator, `=`, `=>` or `,`,
+  and when the next line starts with `|>`, `|`, `else` or a closing bracket.
+  `a` followed by a line `+ b` is two items; write `a +` then `b`.
 
 ## Literals
 
@@ -55,7 +56,7 @@
 ```ebnf
 program       = { item , end } [ item ] ;
 item          = declaration | expr ;
-end           = newline | ";" ;
+end           = newline ;
 
 declaration   = "use" "contract" string "as" ident
               | "set" setting "=" ident
@@ -82,12 +83,11 @@ expr          = "fn" "(" [ param { "," param } ] ")" "=>" expr
               | "if" "(" expr ")" expr "else" expr
               | "match" expr { "," expr } "{" arm { "," arm } [ "," ] "}"
               | "match?" expr "{" arm { "," arm } [ "," ] "}"
-              | "let" binding "in" expr
-              | "let" pattern "=" expr "else" expr "in" expr
               | block
               | pipeline ;
 arm           = pattern { "," pattern } [ "if" expr ] "=>" expr ;
-block         = "{" "let" binding end { "let" binding end } expr "}" ;
+block         = "{" local end { local end } expr "}" ;
+local         = "let" binding | "let" pattern "=" expr "else" expr ;
 
 pipeline      = formula { "|>" formula } ;
 formula       = [ disjunct ] "~" disjunct | disjunct ;
@@ -197,7 +197,7 @@ Tightest first:
 11. `or`
 12. `~` (reserved)
 13. `|>`
-14. `fn`, `if`, `match`, `let ... in` (extend right)
+14. `fn`, `if`, `match`, `match?` (extend right)
 
 `0 < x <= 10` chains: it means `0 < x and x <= 10` with `x` evaluated once.
 A chain uses only `<`/`<=` or only `>`/`>=`; `a < b > c`, `a == b == c` and
@@ -256,7 +256,7 @@ match reading {
   alternatives, `@` bindings, guards.
 - A binding or parameter without a fallback must have an irrefutable pattern
   for its inferred type.
-- `let pattern = e else fallback in body` is `fallback` when the pattern does
+- In a block, `let pattern = e else fallback` makes the block `fallback` when the pattern does
   not match.
 - `match? x { ... }` matches the present payload of one optional subject
   and is `None` when `x` is `None`; a branch that is itself optional does not

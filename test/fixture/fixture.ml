@@ -61,7 +61,7 @@ let evaluate source =
     in
     let env, shown = Reference.run [] items in
     match List.rev items with
-    | Core.Define (id, e) :: _ ->
+    | TransformIR.Define (id, e) :: _ ->
       ( Some (Types.display e.typ)
       , Option.map Reference.display (List.assoc_opt id.stamp env) )
     | (Show e | Write (e, _)) :: _ ->

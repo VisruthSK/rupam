@@ -1,4 +1,4 @@
 id = "C17"
 status = "pending"
-case = '''`distinct(x, missing = propagate)` with several `None`'''
-expected = '''one `None` row'''
+case = '''`distinct(x, missing = keep)` with several `None`'''
+expected = '''one `None` row; `n_distinct` counts it once'''

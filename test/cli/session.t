@@ -15,7 +15,7 @@ The session protocol checks, submits against an expected revision and rejects st
   > JSON
   $ cp ../../examples/penguins.csv .
   $ rupam session < requests
-  {"jsonrpc":"2.0","id":1,"result":{"revision":0,"value":[{"name":"y","type":"Float64"}]}}
+  {"jsonrpc":"2.0","id":1,"result":{"revision":0,"value":[{"name":"y","type":"Float"}]}}
   {"jsonrpc":"2.0","id":2,"result":{"revision":1,"value":[{"kind":"bound","name":"f","type":"(number) -> number"}]}}
   {"jsonrpc":"2.0","id":3,"error":{"code":-32000,"message":"Expected revision 0, the session is at 1","data":{"category":"superseded","revision":1}}}
   {"jsonrpc":"2.0","id":4,"error":{"code":-32000,"message":"Expected number, found String","data":{"category":"diagnostic","code":"type-mismatch","message":"Expected number, found String","span":{"start":{"line":1,"column":3},"end":{"line":1,"column":6}}}}}
@@ -25,4 +25,4 @@ The session protocol checks, submits against an expected revision and rejects st
   {"jsonrpc":"2.0","id":8,"result":{"revision":0,"value":[]}}
   {"jsonrpc":"2.0","id":9,"result":{"revision":0,"value":"python-polars"}}
   {"jsonrpc":"2.0","id":10,"error":{"code":-32000,"message":"This condition is missing where its inputs are missing. Say what happens to those rows: missing = skip drops them, missing = keep keeps them, missing = error stops the run","data":{"category":"diagnostic","code":"optional-condition","message":"This condition is missing where its inputs are missing. Say what happens to those rows: missing = skip drops them, missing = keep keeps them, missing = error stops the run","span":{"start":{"line":1,"column":36},"end":{"line":1,"column":58}}}}}
-  {"jsonrpc":"2.0","id":11,"result":{"revision":0,"value":{"start":35,"suggestions":[{"text":"bill_len","detail":"Float64?"},{"text":"bill_dep","detail":"Float64?"}]}}}
+  {"jsonrpc":"2.0","id":11,"result":{"revision":0,"value":{"start":35,"suggestions":[{"text":"bill_len","detail":"Float?"},{"text":"bill_dep","detail":"Float?"}]}}}

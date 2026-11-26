@@ -140,7 +140,7 @@ type t =
 
 let digits r = (Session.project r.session).preview_digits.value
 
-let print_schema r (t : Core.table) =
+let print_schema r (t : TransformIR.table) =
   let width = List.fold_left (fun w (n, _) -> max w (String.length n)) 0 t.schema in
   List.iter
     (fun (n, typ) -> Printf.printf "%-*s  %s\n" width n (Types.display typ))
@@ -337,7 +337,7 @@ let dispatch r = function
          | Schema -> print_schema r t
          | Contract -> print_endline (Scope.origin env t)
          | Validate ->
-           List.iter Contract.validate (List.sort_uniq compare (Core.contracts t));
+           List.iter Contract.validate (List.sort_uniq compare (TransformIR.contracts t));
            print_endline "The data matches its contract"
          | Explain ->
            List.iteri (fun i s -> Printf.printf "%2d  %s\n" (i + 1) s) (Plan.explain t)

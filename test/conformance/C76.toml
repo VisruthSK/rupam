@@ -1,4 +1,4 @@
 id = "C76"
 status = "pending"
 case = '''`pivot_longer` integer and float measurements'''
-expected = '''common Float64 with exact checked promotion'''
+expected = '''common Float with exact checked promotion'''

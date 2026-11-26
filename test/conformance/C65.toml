@@ -1,4 +1,4 @@
 id = "C65"
 status = "pending"
 case = '''required CustomerId joined to optional CustomerId with `missing = skip`; differing sign refinements'''
-expected = '''compatible keys; missing never matches; Int64/Float64 key pair rejected'''
+expected = '''compatible keys; missing never matches; Int/Float key pair rejected'''

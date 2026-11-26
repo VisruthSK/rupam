@@ -1,4 +1,4 @@
 id = "C64"
 status = "pending"
 case = '''guarded whole conversion of `[None,2.0]`; inactive elements of a well-typed guarded branch'''
-expected = '''`[0,2]` for `if (some(x)) Int64(round(x)) else 0`; no failure from inactive elements'''
+expected = '''`[0,2]` for `if (some(x)) Int(round(x)) else 0`; no failure from inactive elements'''

@@ -1,4 +1,4 @@
-module C = Core
+module C = TransformIR
 module T = Types
 
 type value =
@@ -250,7 +250,7 @@ let rec eval env ?rows (e : C.expr) =
   match e.node with
   | Constant c ->
     (match c, T.repr (T.present e.typ) with
-     | Number s, Float64 -> Float (float_of_string s)
+     | Number s, Float -> Float (float_of_string s)
      | c, _ -> constant c)
   | Absent -> Missing
   | Variable { stamp = 0; name } -> Primitive name
@@ -402,8 +402,8 @@ and read (file : C.file) =
     | None -> Missing
     | Some s ->
       (match T.repr (T.present typ) with
-       | Int64 -> Int (Int64.of_string s)
-       | Float64 ->
+       | Int -> Int (Int64.of_string s)
+       | Float ->
          let f = float_of_string s in
          if Float.is_nan f then Missing else Float f
        | Bool -> Bool (String.lowercase_ascii s = "true")

@@ -16,12 +16,12 @@ val target : t -> Target.t option
 val set_target : t -> Target.t -> origin:string -> unit
 val path : t -> string option
 val revision : t -> int
-val items : t -> Core.item list
+val items : t -> TransformIR.item list
 val submit : t -> Syntax.declaration list -> event list
-val check : t -> Syntax.declaration -> Core.item list
-val table : t -> string -> Core.table
-val preview : t -> Core.table -> offset:int -> limit:int -> Page.t
-val code : t -> Target.t option -> Core.table -> string
+val check : t -> Syntax.declaration -> TransformIR.item list
+val table : t -> string -> TransformIR.table
+val preview : t -> TransformIR.table -> offset:int -> limit:int -> Page.t
+val code : t -> Target.t option -> TransformIR.table -> string
 val undo : t -> bool
 val redo : t -> bool
 val source : t -> string

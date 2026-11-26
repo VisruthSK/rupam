@@ -1,4 +1,4 @@
-module C = Core
+module C = TransformIR
 module T = Types
 module P = Python_syntax
 
@@ -125,7 +125,7 @@ let rec value names (e : C.expr) = P.Located (e.span, node names e)
 and node names (e : C.expr) : P.expr =
   let go = value names in
   let name id = P.Name (Host.name names id) in
-  let integer = T.repr (T.present e.typ) = Int64 in
+  let integer = T.repr (T.present e.typ) = Int in
   match e.node with
   | Constant c -> constant c
   | Absent -> P.Null
@@ -176,8 +176,8 @@ and node names (e : C.expr) : P.expr =
       | Shown (x, None) ->
         (match T.repr (T.present x.typ) with
          | String -> go x
-         | Int64 -> P.call "str" [ go x ]
-         | Float64 -> P.call "repr" [ go x ]
+         | Int -> P.call "str" [ go x ]
+         | Float -> P.call "repr" [ go x ]
          | Bool -> P.If (go x, P.Str "TRUE", P.Str "FALSE")
          | _ -> P.call "rp_dynamic" [ go x ])
     in

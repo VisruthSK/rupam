@@ -79,8 +79,8 @@ let columns path =
        ^ reader path)
   in
   let typ = function
-    | "BIGINT" | "INTEGER" -> Supported Types.Int64
-    | "DOUBLE" -> Supported Types.Float64
+    | "BIGINT" | "INTEGER" -> Supported Types.Int
+    | "DOUBLE" -> Supported Types.Float
     | "BOOLEAN" -> Supported Types.Bool
     | "VARCHAR" -> Supported Types.String
     | other -> Unsupported other

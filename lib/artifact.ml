@@ -68,7 +68,7 @@ let write ~(entry : Lock.entry) ~program_sha256 ~locations ~output ~code items =
     ; source = entry.source
     ; program_sha256
     ; inputs = entry.inputs
-    ; dependencies = dependencies target ~tabular:(Core.tabular items)
+    ; dependencies = dependencies target ~tabular:(TransformIR.tabular items)
     ; nonportable = Host.nonportable items
     }
   in

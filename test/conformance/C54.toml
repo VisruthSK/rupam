@@ -1,4 +1,4 @@
 id = "C54"
 status = "pending"
-case = '''filter optional x `[None, -1, 2]` by `x > 0`, `skip` vs `propagate`'''
-expected = '''skip retains `[2]` and present positive type; propagate retains `[None,2]` and optional positive type'''
+case = '''filter optional x `[None, -1, 2]` by `x > 0`, `skip` vs `keep`'''
+expected = '''skip retains `[2]` and present positive type; keep retains `[None,2]` and optional positive type'''

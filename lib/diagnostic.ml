@@ -24,7 +24,7 @@ type code =
   | Invalid_policy
   | Missing_policy_required
   | Missing_under_error
-  | Int64_range
+  | Int_range
   | Inexact_float
   | Arithmetic_overflow
   | Row_domain_mismatch
@@ -105,7 +105,7 @@ let name = function
   | Invalid_policy -> "invalid-policy"
   | Missing_policy_required -> "missing-policy-required"
   | Missing_under_error -> "missing-under-error"
-  | Int64_range -> "int64-range"
+  | Int_range -> "int-range"
   | Inexact_float -> "inexact-float"
   | Arithmetic_overflow -> "arithmetic-overflow"
   | Row_domain_mismatch -> "row-domain-mismatch"
@@ -185,7 +185,7 @@ let explanation = function
      result missing, `error` stops the run."
   | Missing_under_error ->
     "A missing value reached an operation whose policy is `missing = error`."
-  | Int64_range -> "The integer is outside the portable Int64 range."
+  | Int_range -> "The integer is outside the portable Int range."
   | Inexact_float ->
     "The integer cannot be represented exactly as Float64, so it is not promoted \
      implicitly."

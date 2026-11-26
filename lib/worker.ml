@@ -95,7 +95,7 @@ let host_error message =
   let contains needle = Astring.String.is_infix ~affix:needle message in
   let lines = String.split_on_char '\n' message |> List.map String.trim in
   if contains "to `i64` failed"
-  then "arithmetic overflow: Int64 out of range"
+  then "arithmetic overflow: Int out of range"
   else (
     match List.rev (List.filter (String.starts_with ~prefix:"! ") lines) with
     | last :: _ -> String.sub last 2 (String.length last - 2)

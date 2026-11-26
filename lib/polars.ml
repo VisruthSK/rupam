@@ -1,4 +1,4 @@
-module C = Core
+module C = TransformIR
 module T = Types
 module P = Python_syntax
 
@@ -24,8 +24,8 @@ let choose condition yes no =
 
 let dtype t =
   match T.repr (T.present t) with
-  | Int64 -> "Int64"
-  | Float64 -> "Float64"
+  | Int -> "Int64"
+  | Float -> "Float64"
   | Bool -> "Boolean"
   | _ -> "String"
 ;;
@@ -94,7 +94,7 @@ let columnar =
 
 let rec expression ~scalar (e : C.expr) : P.expr =
   let go = expression ~scalar in
-  let integer = T.repr (T.present e.typ) = Int64 in
+  let integer = T.repr (T.present e.typ) = Int in
   if not (columnar e)
   then
     P.Call (pl "lit", [ P.Positional (scalar e); P.Keyword ("dtype", pl (dtype e.typ)) ])
@@ -124,8 +124,8 @@ let rec expression ~scalar (e : C.expr) : P.expr =
           (match format, T.repr (T.present x.typ) with
            | Some spec, _ -> batches v (P.call "rp_formatter" [ P.Str spec ]) "String"
            | None, String -> v
-           | None, Int64 -> cast v "String"
-           | None, Float64 -> batches v (P.Name "rp_show_float") "String"
+           | None, Int -> cast v "String"
+           | None, Float -> batches v (P.Name "rp_show_float") "String"
            | None, Bool ->
              P.meth
                v
@@ -166,7 +166,7 @@ and reduce ~scalar (e : C.expr) r policy x =
     match (r : Prelude.reduction) with
     | Sum ->
       let total =
-        if T.repr (T.present x.typ) = Int64
+        if T.repr (T.present x.typ) = Int
         then narrow (P.meth (wide a) "sum" [])
         else P.meth a "sum" []
       in
@@ -273,8 +273,8 @@ let file (f : C.file) =
               ( P.Str n
               , P.Str
                   (match T.repr (T.present t) with
-                   | Int64 -> "Int64"
-                   | Float64 -> "Float64"
+                   | Int -> "Int64"
+                   | Float -> "Float64"
                    | Bool -> "Bool"
                    | _ -> "String") ))
            f.columns)

@@ -6,15 +6,15 @@ type template =
 
 and binding =
   | Value of
-      { id : Core.id
+      { id : TransformIR.id
       ; scheme : Types.scheme
       }
   | Table_value of
-      { id : Core.id
-      ; table : Core.table
+      { id : TransformIR.id
+      ; table : TransformIR.table
       }
   | Function of
-      { id : Core.id option
+      { id : TransformIR.id option
       ; scheme : Types.scheme option
       ; template : template
       }
@@ -22,7 +22,7 @@ and binding =
       { scheme : Types.scheme
       ; arity : int
       }
-  | Inline of Core.expr
+  | Inline of TransformIR.expr
   | Contract of Contract.t
   | Module of string
 
@@ -30,18 +30,18 @@ and env =
   { names : (string * binding) list
   ; types : (string * Types.scheme) list
   ; variants : (string * (string * Types.scheme) list) list
-  ; missing : Core.policy option
-  ; group_missing : Core.policy option
+  ; missing : TransformIR.policy option
+  ; group_missing : TransformIR.policy option
   ; directory : string
   ; strict : bool
   ; supply : int ref
   }
 
 val empty : directory:string -> strict:bool -> env
-val fresh_id : env -> string -> Core.id
+val fresh_id : env -> string -> TransformIR.id
 val fail : Diagnostic.span -> Diagnostic.code -> string -> 'a
 val bind : env -> string -> binding -> env
 val lookup : env -> string -> binding option
 val bindings : env -> (string * binding * string) list
 val describe : binding -> string option
-val origin : env -> Core.table -> string
+val origin : env -> TransformIR.table -> string

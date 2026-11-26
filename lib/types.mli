@@ -3,8 +3,8 @@ type kind =
   | Number
 
 type t =
-  | Int64
-  | Float64
+  | Int
+  | Float
   | Bool
   | String
   | Option of t

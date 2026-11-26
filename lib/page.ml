@@ -67,7 +67,7 @@ let lines ?(limit = 100) ~digits page =
       else (
         let c =
           match element c with
-          | Float64 ->
+          | Float ->
             let format s = Printf.sprintf "%.*f" digits (float_of_string s) in
             { c with cells = Array.map (Option.map format) c.cells }
           | _ -> c

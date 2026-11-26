@@ -5,7 +5,7 @@ import re
 
 def rp_int(x):
     if not -(2**63) < x < 2**63:
-        raise OverflowError("arithmetic overflow: Int64 out of range")
+        raise OverflowError("arithmetic overflow: Int out of range")
     return x
 
 

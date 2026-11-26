@@ -159,7 +159,7 @@ Wherever a missing value would change the answer, you choose what happens:
 ```text
 orders |> filter(cost > 0.0, missing = skip)
 orders |> summarize(average = mean(cost), by = region, missing = skip)
-orders |> summarize(average = mean(cost, missing = propagate), by = region)
+orders |> summarize(average = mean(cost, missing = keep), by = region)
 ```
 
 `skip` leaves missing values out, `propagate` makes the result missing, and
@@ -167,7 +167,7 @@ orders |> summarize(average = mean(cost, missing = propagate), by = region)
 verb's wins over a file-wide default:
 
 ```text
-use missing = skip
+set missing = skip
 ```
 
 Grouping keys that can be missing take `group_missing =` the same way:
@@ -185,7 +185,7 @@ rows and is never missing.
 The `r-dplyr` dialect emits dplyr; `python-polars` emits a Polars lazy query. Both reproduce the semantics above, not their library's defaults: R's
 `sum` of nothing is 0 and Polars evaluates both arms of `when/then`, so the
 generated code guards those cases. When a construct has no faithful native
-form (checked `Int64` arithmetic in Polars, for example) the Python target
+form (checked `Int` arithmetic in Polars, for example) the Python target
 falls back to a row callback, and `:explain` says so. If neither path is
 faithful, compilation fails and names the construct.
 

@@ -106,6 +106,8 @@ and form =
   | Range of expr * expr
   | Binary of binary * expr * expr
   | Chain of expr * (binary * expr) list
+  | Fallback of expr * expr
+  | Match_present of expr * arm list
   | Unary of unary * expr
   | If of expr * expr * expr
   | Lambda of string list * expr

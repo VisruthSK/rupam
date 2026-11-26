@@ -84,7 +84,8 @@ let transform_ir strict path =
     let project = settings (Filename.dirname path) None strict in
     with_program path (fun ds ->
       List.iter
-        (fun item -> print_endline (Sexplib0.Sexp.to_string_hum (Core.sexp_of_item item)))
+        (fun item ->
+           print_endline (Sexplib0.Sexp.to_string_hum (TransformIR.sexp_of_item item)))
         (elaborate project path ds)))
 ;;
 

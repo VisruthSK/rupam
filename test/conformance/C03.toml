@@ -1,4 +1,4 @@
 id = "C03"
 status = "pending"
-case = '''`mutate(s = square(cost))`, `cost : Float64?`'''
-expected = '''`s : Float64?`'''
+case = '''`mutate(s = square(cost))`, `cost : Float?`'''
+expected = '''`s : Float?`'''

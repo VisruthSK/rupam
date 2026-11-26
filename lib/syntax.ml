@@ -113,6 +113,8 @@ and form =
   | Range of expr * expr
   | Binary of binary * expr * expr
   | Chain of expr * (binary * expr) list
+  | Fallback of expr * expr
+  | Match_present of expr * arm list
   | Unary of unary * expr
   | If of expr * expr * expr
   | Lambda of string list * expr
@@ -181,6 +183,13 @@ let map f x =
     | Formula (a, b) -> Formula (Option.map f a, f b)
     | Range (a, b) -> Range (f a, f b)
     | Binary (op, a, b) -> Binary (op, f a, f b)
+    | Fallback (a, b) -> Fallback (f a, f b)
+    | Match_present (x, arms) ->
+      Match_present
+        ( f x
+        , List.map
+            (fun a -> { a with guard = Option.map f a.guard; body = f a.body })
+            arms )
     | Chain (a, links) -> Chain (f a, List.map (fun (op, x) -> op, f x) links)
     | Unary (op, a) -> Unary (op, f a)
     | If (c, a, b) -> If (f c, f a, f b)

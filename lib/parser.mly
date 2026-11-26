@@ -27,21 +27,23 @@ let compare start finish op (a : expr) (b : expr) =
 let subject start finish = function [x] -> x | xs -> at start finish (Tuple xs)
 %}
 %token DOTDOT DOTDOTEQ DOTDOTLT TYPEARROW IMPORT TYPE MATCH BAR QUESTION AT
+%token SET FALLBACK MATCH_PRESENT
 %token LET USE CONTRACT AS FN IF ELSE
 %token <string> NAME INT FLOAT STRING
 %token TRUE FALSE NONE
 %token IN LB RB LC RC
-%token LP RP COMMA EQ DOT PIPE DOLLAR CARET ARROW END SEMI EOF
-%token PLUS MINUS TIMES DIV GT LT GE LE NE EQUAL AND OR NOT COLON MOD TILDE MEMBER
+%token LP RP COMMA EQ DOT PIPE DOLLAR CARET ARROW END EOF
+%token PLUS MINUS TIMES DIV GT LT GE LE NE EQUAL AND OR NOT COLON MOD TILDE
 %right TYPEARROW
 %nonassoc QUESTION
-%right IN ELSE ARROW
+%right ELSE ARROW
 %left PIPE
 %nonassoc TILDE
 %left OR
 %left AND
 %nonassoc NOT
-%left GT LT GE LE NE EQUAL MEMBER
+%left GT LT GE LE NE EQUAL IN
+%right FALLBACK
 %nonassoc COLON
 %left PLUS MINUS
 %left TIMES DIV MOD
@@ -53,12 +55,12 @@ let subject start finish = function [x] -> x | xs -> at start finish (Tuple xs)
 %%
 program: items EOF { List.rev $1 };
 items: /* empty */ { [] } | items separator { $1 } | items decl separator { $2 :: $1 };
-separator: END {} | SEMI {};
+separator: END {};
 decl: IMPORT NAME { Import ($2,$2) } | IMPORT NAME AS NAME { Import ($2,$4) }
  | TYPE NAME type_params EQ annotation { Alias ($2,$3,$5) }
  | TYPE NAME type_params EQ variants { Type ($2,$3,List.rev $5) }
  | USE CONTRACT STRING AS NAME { Contract ($3,$5) }
- | USE NAME EQ NAME { Setting ($2,$4) }
+ | SET NAME EQ NAME { Setting ($2,$4) }
  | LET NAME COLON annotation EQ expr { Let ($2,None,at $startpos $endpos (Annotated ($6,$4))) }
  | LET NAME EQ expr { Let ($2,None,$4) }
  | LET NAME LP params RP return_type EQ expr { Let ($2,Some (List.map fst $4),parameters $4 (result_annotation $6 $8)) }
@@ -113,7 +115,9 @@ rest: expr { $1 } | expr separator { $1 } | block { $1 };
 block: LET NAME EQ expr separator rest { at $startpos $endpos (Local ($2,$4,$6)) }
  | LET NAME LP params RP EQ expr separator rest
    { at $startpos $endpos (Local ($2,at $startpos($7) $endpos($7) (Lambda (List.map fst $4,parameters $4 $7)),$9)) };
-expr: MATCH values LC arms RC { at $startpos $endpos (Match (subject $startpos($2) $endpos($2) (List.rev $2),List.rev $4)) }
+expr: MATCH_PRESENT expr LC arms RC { at $startpos $endpos (Match_present ($2,List.rev $4)) }
+ | MATCH_PRESENT expr LC arms COMMA RC { at $startpos $endpos (Match_present ($2,List.rev $4)) }
+ | MATCH values LC arms RC { at $startpos $endpos (Match (subject $startpos($2) $endpos($2) (List.rev $2),List.rev $4)) }
  | MATCH values LC arms COMMA RC { at $startpos $endpos (Match (subject $startpos($2) $endpos($2) (List.rev $2),List.rev $4)) }
  | LB RB { at $startpos $endpos (List []) }
  | LB values RB { at $startpos $endpos (List (List.rev $2)) }
@@ -123,7 +127,6 @@ expr: MATCH values LC arms RC { at $startpos $endpos (Match (subject $startpos($
  | LC fields COMMA RC { at $startpos $endpos (Record (List.rev $2)) }
  | LC block RC { $2 }
  | LP expr COMMA values RP { at $startpos $endpos (Tuple ($2 :: List.rev $4)) }
- | LET NAME EQ expr IN expr { at $startpos $endpos (Local ($2,$4,$6)) }
  | NAME { at $startpos $endpos (Name (Bare,$1)) } | DOLLAR NAME { at $startpos $endpos (Name (Column,$2)) }
  | CARET NAME { at $startpos $endpos (Name (Lexical,$2)) } | literal { at $startpos $endpos (Literal $1) }
  | LP expr RP { $2 } | expr DOT NAME { at $startpos $endpos (Field ($1,$3)) }
@@ -146,7 +149,10 @@ expr: MATCH values LC arms RC { at $startpos $endpos (Match (subject $startpos($
  | expr LE expr { compare $startpos $endpos Less_equal $1 $3 }
  | expr EQUAL expr { compare $startpos $endpos Equal $1 $3 }
  | expr NE expr { compare $startpos $endpos Not_equal $1 $3 }
- | expr MEMBER expr
+ | expr FALLBACK expr { at $startpos $endpos (Fallback ($1,$3)) }
+ | expr NOT IN expr %prec IN
+   { at $startpos $endpos (Unary (Not, at $startpos $endpos (Member ($1,$4)))) }
+ | expr IN expr
    { (match $1.form with
       | Binary ((Less | Less_equal | Greater | Greater_equal | Equal | Not_equal), _, _) | Member _ | Chain _
         when bare $startpos $1 -> Diagnostic.fail ~span:($startpos, $endpos) Syntax_error "Membership does not chain"

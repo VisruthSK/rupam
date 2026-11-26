@@ -1,4 +1,4 @@
-module C = Core
+module C = TransformIR
 module T = Types
 module R = R_syntax
 
@@ -12,8 +12,8 @@ let all_of names = R.call "all_of" [ R.strings names ]
 
 let missing typ =
   match T.repr (T.present typ) with
-  | Int64 -> R.Namespaced ("bit64", "NA_integer64_")
-  | Float64 -> R.Name "NA_real_"
+  | Int -> R.Namespaced ("bit64", "NA_integer64_")
+  | Float -> R.Name "NA_real_"
   | String -> R.Name "NA_character_"
   | _ -> R.Na
 ;;
@@ -174,8 +174,8 @@ and text names pieces =
       (match format, T.repr (T.present x.typ) with
        | Some spec, _ -> R.call "rp_format_number" [ v; R.String spec ]
        | None, String -> v
-       | None, Int64 -> R.call "as.character" [ v ]
-       | None, Float64 -> R.call "rp_float" [ v ]
+       | None, Int -> R.call "as.character" [ v ]
+       | None, Float -> R.call "rp_float" [ v ]
        | None, Bool -> if_else v (R.String "TRUE") (R.String "FALSE")
        | None, _ -> R.call "as.character" [ v ])
   in
@@ -252,8 +252,8 @@ let file (f : C.file) =
                  ( n
                  , R.String
                      (match T.repr (T.present t) with
-                      | Int64 -> "Int64"
-                      | Float64 -> "Float64"
+                      | Int -> "Int64"
+                      | Float -> "Float64"
                       | Bool -> "Bool"
                       | _ -> "String") ))
             f.columns )

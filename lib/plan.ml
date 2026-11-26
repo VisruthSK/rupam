@@ -1,4 +1,4 @@
-module C = Core
+module C = TransformIR
 
 let explain (t : C.table) =
   let rec source (t : C.table) =

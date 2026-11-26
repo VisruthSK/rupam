@@ -21,7 +21,7 @@ write_parquet(regional, "regional.parquet")
 ```
 
 The checker knows `cost` may be missing, so `margin` needs the `coalesce`,
-and `sd` can be undefined, so `z` comes out as `Float64?`. A filter on
+and `sd` can be undefined, so `z` comes out as `Float?`. A filter on
 `cost > 0.0` has to say what happens to rows where `cost` is missing:
 `filter(cost > 0.0, missing = skip)`.
 

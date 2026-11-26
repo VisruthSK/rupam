@@ -4,5 +4,5 @@ val display : value -> string
 
 val run
   :  (int * value) list
-  -> Core.item list
-  -> (int * value) list * (Core.expr * value) list
+  -> TransformIR.item list
+  -> (int * value) list * (TransformIR.expr * value) list

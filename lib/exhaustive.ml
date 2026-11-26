@@ -1,6 +1,6 @@
 open Syntax
 module T = Types
-module C = Core
+module C = TransformIR
 open Scope
 
 let uncovered env level subject (arms : Syntax.arm list) =
@@ -36,7 +36,7 @@ let uncovered env level subject (arms : Syntax.arm list) =
       rows
   in
   let covers t rows =
-    let integral = T.repr t = Int64 in
+    let integral = T.repr t = Int in
     let number = function
       | Syntax.Int s | Float s -> float_of_string s
       | _ -> nan

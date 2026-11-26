@@ -1,4 +1,4 @@
 id = "C44"
 status = "pending"
-case = '''maximum portable Int64 plus one; literal `-9_223_372_036_854_775_808`'''
+case = '''maximum portable Int plus one; literal `-9_223_372_036_854_775_808`'''
 expected = '''overflow; out-of-range literal error'''

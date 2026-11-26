@@ -39,4 +39,4 @@ val category_name : category -> string
 val diagnostic : Diagnostic.t -> category * Yojson.Safe.t
 val page : Page.t -> Yojson.Safe.t
 val event : Session.event -> Yojson.Safe.t
-val item : Core.item -> Yojson.Safe.t option
+val item : TransformIR.item -> Yojson.Safe.t option

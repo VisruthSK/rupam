@@ -51,11 +51,13 @@ let level x =
   | Binary (op, _, _) -> binary_level op
   | Unary (Negate, _) -> 3
   | Range _ -> 6
+  | Fallback _ -> 7
   | Member _ | Chain _ -> 8
+  | Unary (Not, { form = Member _; _ }) -> 8
   | Unary (Not, _) -> 9
   | Formula _ -> 12
   | Pipe _ -> 13
-  | Match _ | Local _ | If _ | Lambda _ -> 14
+  | Match _ | Match_present _ | Local _ | If _ | Lambda _ -> 14
 ;;
 
 let rec stages x =
@@ -88,7 +90,20 @@ and expr x =
            ^ expr a.body)
         bs
     ^ "}"
-  | Member (a, b) -> at 7 a ^ " %in% " ^ at 7 b
+  | Member (a, b) -> at 7 a ^ " in " ^ at 7 b
+  | Fallback (a, b) -> at 6 a ^ " ?? " ^ at 7 b
+  | Match_present (x, bs) ->
+    "match? "
+    ^ at 13 x
+    ^ " {"
+    ^ comma
+        (fun a ->
+           pattern a.pattern
+           ^ Option.fold ~none:"" ~some:(fun g -> " if " ^ expr g) a.guard
+           ^ " => "
+           ^ expr a.body)
+        bs
+    ^ "}"
   | Interpolate pieces ->
     "\""
     ^ String.concat
@@ -142,6 +157,7 @@ and expr x =
     let left, right = if l = 8 then l - 1, l - 1 else l, l - 1 in
     at left a ^ " " ^ binary_symbol op ^ " " ^ at right b
   | Unary (Negate, a) -> "-" ^ at 1 a
+  | Unary (Not, { form = Member (a, b); _ }) -> at 7 a ^ " not in " ^ at 7 b
   | Unary (op, a) -> unary_symbol op ^ " " ^ at 9 a
   | If (c, y, n) -> "if (" ^ expr c ^ ") " ^ expr y ^ " else " ^ expr n
   | Lambda (ps, body) -> "fn(" ^ String.concat ", " ps ^ ") => " ^ expr body
@@ -174,7 +190,7 @@ let declaration = function
   | Let (n, None, { form = Annotated (x, t); _ }) ->
     "let " ^ n ^ ": " ^ annotation t ^ " = " ^ expr x
   | Contract (path, name) -> Printf.sprintf "use contract %S as %s" path name
-  | Setting (name, value) -> "use " ^ name ^ " = " ^ value
+  | Setting (name, value) -> "set " ^ name ^ " = " ^ value
   | Let (name, ps, body) ->
     let params =
       Option.fold ~none:"" ~some:(fun ps -> "(" ^ String.concat ", " ps ^ ")") ps

@@ -176,7 +176,6 @@ let rec parse lexbuf =
       | `Group :: _ -> true
     in
     match t with
-    | SEMI -> deliver SEMI
     | END when inside_brackets || not (complete !previous) -> next lexbuf
     | END ->
       let ((following, _, _) as token) = significant () in
@@ -211,8 +210,7 @@ let valid_prefix source =
     | EOF -> acc
     | LP | LB | LC -> boundaries (depth + 1) acc
     | RP | RB | RC -> boundaries (max 0 (depth - 1)) acc
-    | (PIPE | END | SEMI) when depth = 0 ->
-      boundaries depth (Lexing.lexeme_start buf :: acc)
+    | (PIPE | END) when depth = 0 -> boundaries depth (Lexing.lexeme_start buf :: acc)
     | _ -> boundaries depth acc
     | exception Diagnostic.Error _ -> acc
   in

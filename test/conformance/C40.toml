@@ -1,4 +1,4 @@
 id = "C40"
 status = "pending"
-case = '''`Int64(x)` with `x : Float64`; `Int64(round(x))`'''
+case = '''`Int(x)` with `x : Float`; `Int(round(x))`'''
 expected = '''type error; accepted with checked range'''

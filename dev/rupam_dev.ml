@@ -39,14 +39,16 @@ let elaborate path =
 
 let transform_ir path =
   List.iter
-    (fun item -> print_endline (Sexplib0.Sexp.to_string_hum (Core.sexp_of_item item)))
+    (fun item ->
+       print_endline (Sexplib0.Sexp.to_string_hum (TransformIR.sexp_of_item item)))
     (elaborate path)
 ;;
 
 let typed path =
   List.iter
     (function
-      | Core.Define (id, e) -> Printf.printf "%s : %s\n" id.name (Types.display e.typ)
+      | TransformIR.Define (id, e) ->
+        Printf.printf "%s : %s\n" id.name (Types.display e.typ)
       | Show e -> Printf.printf "show : %s\n" (Types.display e.typ)
       | Write (e, file) -> Printf.printf "write %s : %s\n" file (Types.display e.typ)
       | Variant (name, tags) ->

@@ -1,7 +1,7 @@
 id = "C01"
 status = "active"
 case = '''`let square(x) = x * x; square(3)`'''
-expected = '''`9 : Int64`'''
+expected = '''`9 : Int`'''
 
 [run]
 source = '''
@@ -10,5 +10,5 @@ square(3)
 '''
 
 [expect]
-type = "Int64"
+type = "Int"
 value = "9"

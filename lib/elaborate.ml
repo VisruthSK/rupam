@@ -1,6 +1,6 @@
 open Syntax
 module T = Types
-module C = Core
+module C = TransformIR
 open Scope
 open Terms
 open Exhaustive
@@ -31,10 +31,10 @@ let rec expr ctx (x : Syntax.expr) : C.expr =
     make
       Scalar
       (match c with
-       | Float _ -> T.Float64
+       | Float _ -> T.Float
        | Text _ -> T.String
        | Bool _ -> T.Bool
-       | Int _ | Number _ -> T.Int64)
+       | Int _ | Number _ -> T.Int)
       (Constant c)
   | Name (reference, n) -> name ctx span reference n
   | Annotated (inner, a) ->
@@ -149,6 +149,10 @@ let rec expr ctx (x : Syntax.expr) : C.expr =
     let body = expr { ctx with env } body in
     make Scalar (T.Arrow (types, body.typ)) (Lambda (ids, body))
   | Match (subject, arms) -> match_ ctx span (here subject) arms
+  | Match_present (subject, arms) ->
+    let subject = here subject in
+    match_ ctx span subject (present_arms span subject arms)
+  | Fallback (a, b) -> fallback span (here a) (here b)
   | Range _ -> fail span R_range "`a:b` selects columns. For integers write `a..=b`"
   | Formula _ ->
     fail
@@ -253,7 +257,7 @@ and binary ctx span op a b =
     | Div | Power ->
       number (T.present a.typ);
       number (T.present b.typ);
-      to_float a, to_float b, T.Float64
+      to_float a, to_float b, T.Float
     | _ ->
       let a, b, t = common span a b in
       ( a
@@ -296,7 +300,7 @@ and arguments ctx span callee args =
 and call ctx span (f : Syntax.expr) args =
   let make = make span in
   match f.form with
-  | Name (Bare, n) when List.mem_assoc n Core.join_kinds || Verbs.mem n ->
+  | Name (Bare, n) when List.mem_assoc n TransformIR.join_kinds || Verbs.mem n ->
     (match args with
      | (None, input) :: rest ->
        make Scalar (T.fresh ctx.level) (verb ctx span n input rest)
@@ -439,7 +443,7 @@ and apply ctx span (f : C.expr) values =
 and coerce _ctx param (v : C.expr) =
   let element = T.present v.typ in
   match T.repr param, T.repr element with
-  | (Float64 | Option Float64), Int64 -> to_float v
+  | (Float | Option Float), Int -> to_float v
   | Option inner, _ when not (T.is_optional v.typ) ->
     expect v.span inner element;
     v
@@ -450,17 +454,36 @@ and coerce _ctx param (v : C.expr) =
     expect v.span param element;
     v
 
+and fallback span v alternative =
+  let v, alternative, t = common span v alternative in
+  make
+    span
+    (shape_of span [ v; alternative ])
+    (if T.is_optional alternative.typ then T.optional t else t)
+    (Coalesce (v, alternative))
+
+and present_arms span (subject : C.expr) arms =
+  if not (T.is_optional subject.typ)
+  then arms
+  else (
+    let absent = { Syntax.form = Literal Absent; span } in
+    { Syntax.pattern = Pliteral Absent; guard = None; body = absent }
+    :: List.map
+         (fun (a : Syntax.arm) -> { a with pattern = Tag ("Some", [ a.pattern ]) })
+         arms)
+
 and builtin ctx span n b args =
   let make = make span in
   let missing, values = arguments ctx span n args in
   let values = List.map (expr ctx) values in
   match b, values with
-  | Prelude.Coalesce, [ v; fallback ] ->
-    let v, fallback, t = common span v fallback in
-    make
-      (shape_of span [ v; fallback ])
-      (if T.is_optional fallback.typ then T.optional t else t)
-      (Coalesce (v, fallback))
+  | Prelude.Coalesce, (_ :: _ :: _ as values) ->
+    let rec chain = function
+      | [ last ] -> last
+      | v :: rest -> fallback span v (chain rest)
+      | [] -> assert false
+    in
+    chain values
   | Row row, values ->
     let params, result = row_signature ctx.level row in
     if List.length params <> List.length values
@@ -481,7 +504,7 @@ and builtin ctx span n b args =
          make shape (T.resolve result) (Builtin (row, values))))
   | Reduction Count, [] ->
     if ctx.columns = None then fail span Column_required "n() counts the rows of a table";
-    make Scalar T.Int64 Count
+    make Scalar T.Int Count
   | Reduction r, [ v ] ->
     if v.shape <> Columnar
     then fail span Column_required (n ^ " needs a column, not a single value");
@@ -504,9 +527,9 @@ and builtin ctx span n b args =
       | Sum | Min | Max ->
         expect span (T.fresh ~kind:Number ctx.level) element;
         v, T.Option element
-      | Mean | Median | Var | Sd -> to_float v, T.Option T.Float64
-      | Distinct -> v, T.Int64
-      | Count -> v, T.Int64
+      | Mean | Median | Var | Sd -> to_float v, T.Option T.Float
+      | Distinct -> v, T.Int
+      | Count -> v, T.Int
     in
     make Scalar result (Reduce (r, policy, v))
   | _ -> fail span Wrong_arguments ("Wrong arguments to " ^ n)
@@ -528,7 +551,7 @@ and interpolate ctx span pieces =
           let v = expr ctx value in
           let element = T.present v.typ in
           (match T.repr element, format with
-           | (Int64 | Float64), _ | Var _, None | (Bool | String), None -> ()
+           | (Int | Float), _ | Var _, None | (Bool | String), None -> ()
            | Var _, Some _ -> expect span (T.fresh ~kind:Number ctx.level) element
            | String, Some f
              when not (String.exists (fun c -> String.contains "dfeg%" c) f) -> ()
@@ -579,7 +602,7 @@ and match_ ctx span (subject : C.expr) syntax_arms =
       let c = constant span l in
       (match c with
        | Number _ -> expect span (T.fresh ~kind:Number ctx.level) (T.present t)
-       | Float _ -> expect span T.Float64 (T.present t)
+       | Float _ -> expect span T.Float (T.present t)
        | Text _ -> expect span T.String (T.present t)
        | Bool _ -> expect span T.Bool (T.present t)
        | Int _ -> ());
@@ -588,7 +611,7 @@ and match_ ctx span (subject : C.expr) syntax_arms =
       expect span (T.fresh ~kind:Number ctx.level) (T.present t);
       List.iter
         (function
-          | Syntax.Float _ -> expect span T.Float64 (T.present t)
+          | Syntax.Float _ -> expect span T.Float (T.present t)
           | _ -> ())
         (Option.to_list low @ Option.to_list high);
       let bound = Option.map (constant span) in
@@ -916,8 +939,8 @@ let rec settle (e : C.expr) : C.expr =
     match e.node with
     | Constant (Number s) ->
       (match T.repr (T.present typ) with
-       | Int64 -> Constant (Int (Int64.of_string s))
-       | Float64 -> Constant (Float (exact_float e.span s))
+       | Int -> Constant (Int (Int64.of_string s))
+       | Float -> Constant (Float (exact_float e.span s))
        | _ -> Constant (Number s))
     | (Constant _ | Absent | Variable _ | Column _ | Count) as node -> node
     | Builtin (row, xs) -> Builtin (row, List.map settle xs)

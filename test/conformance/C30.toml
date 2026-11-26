@@ -1,4 +1,4 @@
 id = "C30"
 status = "pending"
-case = '''`x == 0.3`, `x : Float64`; `x ~= 0.3`'''
+case = '''`x == 0.3`, `x : Float`; `x ~= 0.3`'''
 expected = '''exact and approximate comparisons respectively; neither changes with binding extraction'''

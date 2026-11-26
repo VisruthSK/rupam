@@ -21,7 +21,7 @@ let run source =
          | _ -> ())
       (Scope.bindings env);
     List.iter
-      (fun ((e : Core.expr), v) ->
+      (fun ((e : TransformIR.expr), v) ->
          Printf.printf "%s : %s\n" (Reference.display v) (Types.display e.typ))
       shown
   with
@@ -36,12 +36,12 @@ let%expect_test "functions generalise and literals adapt" =
   [%expect
     {|
     square : (number) -> number
-    9 : Int64
-    2.25 : Float64
+    9 : Int
+    2.25 : Float
     inc : (number) -> number
-    (3, 3.5) : (Int64, Float64)
-    half : (number) -> Float64
-    4.5 : Float64
+    (3, 3.5) : (Int, Float)
+    half : (number) -> Float
+    4.5 : Float
     |}]
 ;;
 
@@ -49,9 +49,9 @@ let%expect_test "closures capture values, not names" =
   run "let a = 2\nlet f(x) = x * a\nlet a = 3\n4 |> f";
   [%expect
     {|
-    f : (Int64) -> Int64
-    a : Int64 = 3
-    8 : Int64
+    f : (Int) -> Int
+    a : Int = 3
+    8 : Int
     |}]
 ;;
 
@@ -61,19 +61,19 @@ let%expect_test "guarded branches and overflow" =
   run "1e308 * 1e308";
   [%expect
     {|
-    3 : Int64
+    3 : Int
     arithmetic-overflow
     arithmetic-overflow
     |}]
 ;;
 
 let%expect_test "annotations" =
-  run "let shift(d: Float64): Float64 = d + 1.0\nshift(3.0)";
-  run "let bad(x: Int64): String = x";
+  run "let shift(d: Float): Float = d + 1.0\nshift(3.0)";
+  run "let bad(x: Int): String = x";
   [%expect
     {|
-    shift : (Float64) -> Float64
-    4.0 : Float64
+    shift : (Float) -> Float
+    4.0 : Float
     type-mismatch
     |}]
 ;;
@@ -93,8 +93,8 @@ let%expect_test "reductions and table parameters are typed at definition" =
   run "let broken(x) = x + unknown_name";
   [%expect
     {|
-    center : (Float64) -> Float64?
-    active_mean : (Table<{active: Bool, weight: number, ..a}>) -> Table<{m: Float64?}>
+    center : (Float) -> Float?
+    active_mean : (Table<{active: Bool, weight: number, ..a}>) -> Table<{m: Float?}>
     unknown-name
     |}]
 ;;
@@ -106,8 +106,8 @@ let%expect_test "optional values lift" =
   [%expect
     {|
     inc : (number) -> number
-    (3, None) : (Int64?, Int64?)
-    4 : Int64
+    (3, None) : (Int?, Int?)
+    4 : Int
     "n = 2" : String
     |}]
 ;;
@@ -126,12 +126,12 @@ let%expect_test "matches are exhaustive" =
   [%expect
     {|
     get : (Maybe<number>) -> number
-    5 : Int64
+    5 : Int
     nonexhaustive-match
     nonexhaustive-match
     f : ((a, number?)) -> number
-    grade : (Float64) -> number
-    2 : Int64
+    grade : (Float) -> number
+    2 : Int
     |}]
 ;;
 
@@ -151,7 +151,7 @@ let%expect_test "comparisons chain in one direction" =
   run "1 == 1 == 1";
   [%expect
     {|
-    x : Int64 = 5
+    x : Int = 5
     TRUE : Bool
     syntax-error
     syntax-error

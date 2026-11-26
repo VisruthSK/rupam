@@ -13,7 +13,7 @@ Errors report a code and a span, and the session continues.
   > INPUT
   $ rupam repl --target r-dplyr < session.txt
   square : (number) -> number
-  49 : Int64
+  49 : Int
   1:1  unknown-name
     Unknown name: squar. Did you mean square?
   1:17  unknown-column
@@ -22,4 +22,4 @@ Errors report a code and a span, and the session continues.
     This condition is missing where its inputs are missing. Say what happens to those rows: missing = skip drops them, missing = keep keeps them, missing = error stops the run
   1:1  r-range
     `a:b` selects columns. For integers write `a..=b`
-  9 : Int64
+  9 : Int

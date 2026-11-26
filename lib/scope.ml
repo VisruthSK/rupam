@@ -1,5 +1,5 @@
 module T = Types
-module C = Core
+module C = TransformIR
 
 type template =
   { params : string list

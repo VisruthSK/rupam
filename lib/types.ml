@@ -3,8 +3,8 @@ type kind =
   | Number
 
 type t =
-  | Int64
-  | Float64
+  | Int
+  | Float
   | Bool
   | String
   | Option of t
@@ -69,7 +69,7 @@ let rec iter_vars f t =
   | Tuple ts | Variant (_, ts) -> List.iter (iter_vars f) ts
   | Record row | Table row -> iter_row f row
   | Arrow (args, result) -> List.iter (iter_vars f) (result :: args)
-  | Int64 | Float64 | Bool | String -> ()
+  | Int | Float | Bool | String -> ()
 
 and iter_row f { fields; rest } =
   List.iter (fun (_, t) -> iter_vars f t) fields;
@@ -106,7 +106,7 @@ let default_numbers t =
   iter_vars
     (fun v ->
        match !v with
-       | Unbound { kind = Number; _ } -> v := Link Int64
+       | Unbound { kind = Number; _ } -> v := Link Int
        | _ -> ())
     t
 ;;
@@ -130,8 +130,8 @@ let display t =
   in
   let rec show t =
     match repr t with
-    | Int64 -> "Int64"
-    | Float64 -> "Float64"
+    | Int -> "Int"
+    | Float -> "Float"
     | Bool -> "Bool"
     | String -> "String"
     | Option t -> show t ^ "?"
@@ -169,7 +169,7 @@ let occurs_and_adjust var level t =
 
 let numeric t =
   match repr t with
-  | Int64 | Float64 -> true
+  | Int | Float -> true
   | _ -> false
 ;;
 
@@ -185,7 +185,7 @@ let rec unify a b =
      | _ -> ());
     occurs_and_adjust v level t;
     v := Link t
-  | Int64, Int64 | Float64, Float64 | Bool, Bool | String, String -> ()
+  | Int, Int | Float, Float | Bool, Bool | String, String -> ()
   | Option a, Option b | List a, List b -> unify a b
   | Tuple xs, Tuple ys when List.length xs = List.length ys -> List.iter2 unify xs ys
   | Variant (m, xs), Variant (n, ys) when m = n && List.length xs = List.length ys ->
