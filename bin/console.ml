@@ -187,7 +187,7 @@ type grid_row =
   | Column_types
   | Observation of int
 
-let grid_table ~digits (v : Viewer.t) (page : Rupam.Page.t) =
+let grid_table ~digits ~selected (v : Viewer.t) (page : Rupam.Page.t) =
   let index_width = Viewer.index_width v in
   let cell_width = Viewer.cell_width v in
   let frozen = Viewer.frozen v in
@@ -236,7 +236,7 @@ let grid_table ~digits (v : Viewer.t) (page : Rupam.Page.t) =
            (fun (c : Rupam.Page.column) ->
               let value = Rupam.Page.format_cell ~digits c.typ c.cells.(i) in
               let style =
-                if v.row = r && focus = Some c.name
+                if selected && v.row = r && focus = Some c.name
                 then
                   Some
                     (Style.make
@@ -394,6 +394,8 @@ let suggestions model =
     else []
 ;;
 
+let strip_rows = 6
+
 let grid model (v : Viewer.t) =
   let page = Viewer.visible v in
   let digits = Repl.digits model.session in
@@ -402,12 +404,9 @@ let grid model (v : Viewer.t) =
   let body =
     box
       ~flex_direction:Column
-      ~size:
-        { width = pct (if model.help || Viewer.bars ~digits v <> [] then 68 else 100)
-        ; height = px (max 1 (height - Viewer.panel_height))
-        }
+      ~size:{ width = pct 100; height = px (max 1 (height - Viewer.panel_height)) }
       [ text ~style:(style subtle) (Rupam.Page.summary ~ordering page)
-      ; grid_table ~digits v page
+      ; grid_table ~digits ~selected:(not model.editing) v page
       ]
   in
   let notice =
@@ -431,21 +430,10 @@ let grid model (v : Viewer.t) =
       | None, None -> text "")
   in
   let keys =
-    [ "arrows, hjkl   move"
-    ; "PgUp/PgDn      page"
-    ; "g / G          first / last row"
-    ; "s / S          sort ascending / descending"
-    ; "=              filter to value"
-    ; "d              describe column"
-    ; "u              undo"
-    ; "i, Tab         edit at the prompt"
-    ; "Esc            back to the grid"
-    ; "Shift+Enter    new line"
-    ; "Ctrl+Shift+M   insert |>"
-    ; "Ctrl+G         edit in $EDITOR"
-    ; "Enter          run"
-    ; "q              close"
-    ]
+    "arrows/hjkl move \xc2\xb7 PgUp/PgDn page \xc2\xb7 g/G first/last \xc2\xb7 s/S sort \
+     \xc2\xb7 = filter to value \xc2\xb7 d describe column \xc2\xb7 u undo \xc2\xb7 i \
+     edit \xc2\xb7 Enter run \xc2\xb7 Shift+Enter new line \xc2\xb7 Ctrl+Shift+M |> \
+     \xc2\xb7 Ctrl+G $EDITOR \xc2\xb7 ? help \xc2\xb7 Esc close without saving"
   in
   let line text_ =
     match Astring.String.cut ~sep:"   Missing " text_ with
@@ -457,10 +445,25 @@ let grid model (v : Viewer.t) =
         ]
     | None -> text ~style:(style typed) text_
   in
-  let side =
+  let rec chunks n = function
+    | [] -> []
+    | xs -> Viewer.take n xs :: chunks n (List.filteri (fun i _ -> i >= n) xs)
+  in
+  let strip =
     if model.help
-    then List.map (text ~style:(style subtle)) keys
-    else List.map line (Viewer.bars ~digits v)
+    then [ text ~wrap:`Word ~style:(style subtle) keys ]
+    else
+      [ box
+          ~flex_direction:Row
+          ~size:{ width = pct 100; height = auto }
+          (List.map
+             (fun column ->
+                box
+                  ~flex_direction:Column
+                  ~margin:(margin_lrtb 0 4 0 0)
+                  (List.map line column))
+             (chunks strip_rows (Viewer.bars ~digits v)))
+      ]
   in
   let naming =
     match model.naming with
@@ -487,14 +490,8 @@ let grid model (v : Viewer.t) =
     box
       ~flex_direction:Column
       ~size:{ width = pct 100; height = auto }
-      [ box
-          ~flex_direction:Row
-          ~size:{ width = pct 100; height = auto }
-          (body
-           ::
-           (if side = []
-            then []
-            else [ box ~flex_direction:Column ~margin:(margin_lrtb 2 0 1 0) side ]))
+      [ body
+      ; box ~flex_direction:Column ~size:{ width = pct 100; height = px strip_rows } strip
       ]
   in
   match model.placement with
@@ -836,21 +833,23 @@ let step msg model =
   | Act action -> change_draft model (fun v -> Viewer.act v action), Cmd.none
   | Toggle_help -> { model with help = not model.help }, Cmd.none
   | External_edit ->
-    let text = Editor.text model.input in
-    ( model
-    , Cmd.exec (fun () ->
-        let file = Filename.temp_file "rupam" ".rp" in
-        Out_channel.with_open_text file (fun oc -> output_string oc text);
-        let editor =
-          match Sys.getenv_opt "VISUAL", Sys.getenv_opt "EDITOR" with
-          | Some e, _ when e <> "" -> e
-          | _, Some e when e <> "" -> e
-          | _ -> "vi"
-        in
-        ignore (Sys.command (editor ^ " " ^ Filename.quote file));
-        let edited = In_channel.with_open_text file In_channel.input_all in
-        Sys.remove file;
-        Edited (String.trim edited)) )
+    let draft = Editor.text model.input in
+    (match Sys.getenv_opt "EDITOR" with
+     | None | Some "" ->
+       ( model
+       , Cmd.static_commit
+           (text
+              ~style:(style failure)
+              "Set EDITOR to edit the draft in an external editor") )
+     | Some editor ->
+       ( model
+       , Cmd.exec (fun () ->
+           let file = Filename.temp_file "rupam" ".rp" in
+           Out_channel.with_open_text file (fun oc -> output_string oc draft);
+           ignore (Sys.command (editor ^ " " ^ Filename.quote file));
+           let edited = In_channel.with_open_text file In_channel.input_all in
+           Sys.remove file;
+           Edited (String.trim edited)) ))
   | Edited text ->
     let input =
       match Rupam.Frontend.read text with
@@ -966,10 +965,6 @@ let fit model =
   | None -> model
   | Some v ->
     let width, height = model.size in
-    let digits = Repl.digits model.session in
-    let width =
-      if model.help || Viewer.bars ~digits v <> [] then width * 68 / 100 else width
-    in
     if v.width = width && v.height = height
     then model
     else { model with viewer = Some (Viewer.resize v ~width ~height) }
@@ -977,6 +972,12 @@ let fit model =
 
 let update msg model =
   let model, cmd = step msg model in
+  let model =
+    match msg with
+    | Scroll _ | Select_cell _ | Act _ | Focus_prompt | Return | Close ->
+      { model with help = false }
+    | _ -> model
+  in
   fit model, cmd
 ;;
 
@@ -1029,7 +1030,7 @@ let subscriptions model =
                 ; Shortcut.tab, Focus_prompt
                 ; Shortcut.enter, Return
                 ; Shortcut.char 'q', Close
-                ; Shortcut.escape, Close
+                ; (Shortcut.escape, if model.help then Toggle_help else Close)
                 ]
                 @
                 match v.policy with
