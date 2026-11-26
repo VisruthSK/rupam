@@ -46,6 +46,15 @@ let rec display = function
   | Frame f -> Printf.sprintf "<table of %d rows>" f.rows
 ;;
 
+let rows = function
+  | Frame f ->
+    Some
+      ( List.map fst f.columns
+      , List.init f.rows (fun i -> List.map (fun (_, column) -> display column.(i)) f.columns)
+      )
+  | _ -> None
+;;
+
 let integer = function
   | Int i -> i
   | _ -> invalid_arg "Expected an integer"

@@ -21,6 +21,7 @@
   uucp
   toml
   (ppx_expect :with-test)
+  (qcheck-core :with-test)
   (cmdliner (>= 2.0))
   mosaic
   (ocamlformat (and :with-dev-setup (= 0.29.0)))))

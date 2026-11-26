@@ -1,0 +1,11 @@
+(executable
+ (name differential)
+ (libraries rupam qcheck-core))
+
+(rule
+ (alias integration)
+ (enabled_if
+  (<> %{os_type} Win32))
+ (deps small.csv)
+ (action
+  (run %{exe:differential.exe})))

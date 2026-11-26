@@ -1,3 +1,5 @@
+suppressPackageStartupMessages(library(bit64))
+
 rp_variant <- function(tag, ...) structure(list(...), tag = tag)
 
 rp_dynamic <- function(v) {
@@ -61,7 +63,16 @@ rp_slice <- function(x, a, b) {
 rp_coalesce <- function(x, fallback) if (is.null(x)) fallback else x
 
 rp_sort <- function(xs) {
-  absent <- vapply(xs, function(v) length(v) == 0 || is.na(v), logical(1))
+  absent <- vapply(xs, is.null, logical(1))
   present <- xs[!absent]
+  if (length(present) == 0) return(xs)
   c(present[order(do.call(c, present))], xs[absent])
+}
+
+rp_unique <- function(xs) {
+  absent <- vapply(xs, is.null, logical(1))
+  repeated <- logical(length(xs))
+  repeated[!absent] <- duplicated(do.call(c, xs[!absent]))
+  repeated[absent] <- duplicated(absent[absent])
+  xs[!repeated]
 }

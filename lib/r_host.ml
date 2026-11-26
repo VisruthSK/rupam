@@ -73,7 +73,7 @@ let builtin (row : Prelude.row) args =
   | Size, [ a ] -> integer64 (R.call "length" [ a ])
   | Reverse, [ a ] -> R.call "rev" [ a ]
   | Sorted, [ a ] -> R.call "rp_sort" [ a ]
-  | Deduplicate, [ a ] -> R.call "unique" [ a ]
+  | Deduplicate, [ a ] -> R.call "rp_unique" [ a ]
   | Map_each, [ a; f ] -> R.call "lapply" [ a; f ]
   | Retain, [ a; f ] -> R.call "Filter" [ f; a ]
   | Fold, [ a; init; f ] -> R.call "Reduce" [ f; a; init ]
