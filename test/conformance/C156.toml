@@ -1,0 +1,17 @@
+id = "C156"
+status = "active"
+case = '''date column with a missing value: `mutate(later = when + months(1), gap = when - d"2026-01-01")`'''
+expected = '''per-row clamped dates and day counts; missing stays `None`'''
+
+[run]
+source = '''
+let s = read_csv("conformance/data/dates.csv")
+let t = s |> mutate(later = when + months(1), gap = when - d"2026-01-01") |> select(later, gap)
+'''
+
+[expect]
+value = '''later,gap
+d"2026-02-28",30
+d"2024-03-29",-672
+None,None
+d"2026-08-04",184'''

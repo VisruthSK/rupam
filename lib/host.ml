@@ -41,6 +41,9 @@ let rec descriptor t : Yojson.Basic.t =
   | Float -> `String "float"
   | Bool -> `String "bool"
   | String -> `String "string"
+  | Date -> `String "date"
+  | Duration -> `String "duration"
+  | Period -> `String "period"
   | List t -> `List [ `String "list"; descriptor t ]
   | Option t -> `List [ `String "option"; descriptor t ]
   | Tuple ts -> `List (`String "tuple" :: List.map descriptor ts)
@@ -91,4 +94,13 @@ let nonportable items =
        List.rev !found)
     items
   |> List.sort_uniq compare
+;;
+
+let column_kind t =
+  match T.repr (T.present t) with
+  | Int -> "Int64"
+  | Float -> "Float64"
+  | Bool -> "Bool"
+  | Date -> "Date"
+  | _ -> "String"
 ;;

@@ -15,6 +15,7 @@ let missing typ =
   | Int -> R.Namespaced ("bit64", "NA_integer64_")
   | Float -> R.Name "NA_real_"
   | String -> R.Name "NA_character_"
+  | Date -> R.call "as.Date" [ R.Na ]
   | _ -> R.Na
 ;;
 
@@ -35,7 +36,39 @@ let operator : Syntax.binary -> R.operator = function
   | Or -> Either
 ;;
 
+let posix a field = R.Dollar (R.call "as.POSIXlt" [ a ], field)
+let plus a n = R.Binary (Add, a, R.Number n)
+let monday_offset a = R.Binary (Modulo, plus (posix a "wday") "6L", R.Number "7L")
+
+let dates (row : Prelude.row) args =
+  match row, args with
+  | Year_of, [ a ] -> Some (integer64 (plus (posix a "year") "1900L"))
+  | Month_of, [ a ] -> Some (integer64 (plus (posix a "mon") "1L"))
+  | Day_of, [ a ] -> Some (integer64 (posix a "mday"))
+  | Wday, [ a ] -> Some (integer64 (plus (monday_offset a) "1L"))
+  | Yday, [ a ] -> Some (integer64 (plus (posix a "yday") "1L"))
+  | Floor_year, [ a ] -> Some (R.call "as.Date" [ R.call "format" [ a; R.String "%Y-01-01" ] ])
+  | Floor_month, [ a ] -> Some (R.call "as.Date" [ R.call "format" [ a; R.String "%Y-%m-01" ] ])
+  | Floor_week, [ a ] -> Some (R.Binary (Subtract, a, monday_offset a))
+  | (Days | Months), [ n ] -> Some (R.call "as.integer" [ n ])
+  | Years, [ n ] -> Some (R.Binary (Multiply, R.call "as.integer" [ n ], R.Number "12L"))
+  | Parse_date, [ s; f ] ->
+    Some (R.Call (R.Name "as.Date", [ R.Positional s; R.Named ("format", f) ]))
+  | _ -> None
+;;
+
+let date_arithmetic (op : Syntax.binary) ta tb a b =
+  match op, T.repr (T.present ta), T.repr (T.present tb) with
+  | Add, Date, Period -> Some (R.call "rp_add_months" [ a; b ])
+  | Sub, Date, Period -> Some (R.call "rp_add_months" [ a; R.Negate b ])
+  | Sub, Date, Date -> Some (integer64 (R.call "as.numeric" [ R.Binary (Subtract, a, b) ]))
+  | _ -> None
+;;
+
 let builtin (row : Prelude.row) args =
+  match dates row args with
+  | Some e -> e
+  | None ->
   match row, args with
   | Abs, [ x ] -> R.call "abs" [ x ]
   | Sign, [ x ] -> integer64 (R.call "sign" [ x ])
@@ -82,6 +115,7 @@ let rec expression names (e : C.expr) : R.expr =
   | Constant (Number s) -> R.Number s
   | Constant (Bool b) -> R.Logical b
   | Constant (Text s) -> R.String s
+  | Constant (Date d) -> R.call "as.Date" [ R.String (Calendar.to_iso d) ]
   | Absent -> missing e.typ
   | If (c, a, b) -> if_else (go c) (go a) (go b)
   | Coalesce (a, b) ->
@@ -90,7 +124,10 @@ let rec expression names (e : C.expr) : R.expr =
   | Convert x -> R.call "as.double" [ go x ]
   | Unary (Not, x) -> R.Not (go x)
   | Unary (Negate, x) -> R.Negate (go x)
-  | Binary (op, a, b) -> R.Binary (operator op, go a, go b)
+  | Binary (op, a, b) ->
+    Option.value
+      (date_arithmetic op a.typ b.typ (go a) (go b))
+      ~default:(R.Binary (operator op, go a, go b))
   | Require x -> R.call "rp_present" [ go x ]
   | Count -> integer64 (R.qualified "dplyr" "n" [])
   | Reduce (r, policy, x) -> reduce names r policy x
@@ -260,11 +297,7 @@ let file (f : C.file) =
                R.Named
                  ( n
                  , R.String
-                     (match T.repr (T.present t) with
-                      | Int -> "Int64"
-                      | Float -> "Float64"
-                      | Bool -> "Bool"
-                      | _ -> "String") ))
+                     (Host.column_kind t) ))
             f.columns )
     ]
 ;;

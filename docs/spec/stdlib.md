@@ -164,6 +164,9 @@ database; `to_zone` preserves the instant. `floor_date` rounds down to the
 start of the given calendar/time unit in the value's zone. Unsupported date
 ranges or timestamp precision are capability errors, not silent truncation.
 See [Types](types.md#dates-and-times) for arithmetic and DST rules.
+`floor_date` units are `"year"`, `"month"` and `"week"` (weeks start on
+Monday); the unit is a literal. `parse_date(s, format)` reads `%Y`, `%m` and
+`%d` fields and literal characters, consuming the whole string.
 
 ## Vectors
 

@@ -1,3 +1,5 @@
+import calendar
+import datetime
 import functools
 import json
 import math
@@ -50,6 +52,12 @@ def rp_format(v, shape):
         return "TRUE" if v else "FALSE"
     if shape == "string":
         return json.dumps(v, ensure_ascii=False)
+    if shape == "date":
+        return 'd"' + v.isoformat() + '"'
+    if shape == "duration":
+        return f"days({v.days})"
+    if shape == "period":
+        return f"months({v})"
     if shape == "function":
         return "<function>"
     if isinstance(shape, str):
@@ -97,3 +105,17 @@ def rp_slice(x, a, b):
         raise IndexError(f"slice {a}..={b} is outside 1..{n}")
     return x[a - 1 : b]
 
+
+
+def rp_add_months(d, n):
+    total = d.year * 12 + d.month - 1 + n
+    year, month = divmod(total, 12)
+    month += 1
+    return datetime.date(year, month, min(d.day, calendar.monthrange(year, month)[1]))
+
+
+def rp_parse_date(text, fmt):
+    try:
+        return datetime.datetime.strptime(text, fmt).date()
+    except ValueError:
+        return None

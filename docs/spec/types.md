@@ -437,6 +437,9 @@ type Usd = new Float deriving (comparable)
 - `Date` and `DateTime` do not compare.
 - `DateTime + Duration` is exact. `+ Period` is calendar arithmetic; month
   arithmetic clamps to the last day of the month.
+- `Date ± days(n)` moves whole days; `Date ± months(n)` and `± years(n)` clamp
+  to the month's last day. `Date - Date` is the `Int` number of days between.
+  Dates compare in calendar order.
 - Constructing a date-time from a wall-clock reading in a daylight-saving gap
   or overlap requires `nonexistent =` and `ambiguous =`.
 

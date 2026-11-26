@@ -30,6 +30,18 @@ type row =
   | Retain
   | Fold
   | Sequence
+  | Year_of
+  | Month_of
+  | Day_of
+  | Wday
+  | Yday
+  | Floor_year
+  | Floor_month
+  | Floor_week
+  | Days
+  | Months
+  | Years
+  | Parse_date
 [@@deriving sexp_of]
 
 type reduction =
@@ -83,6 +95,16 @@ let rows =
   ; "keep", Retain
   ; "reduce", Fold
   ; "seq", Sequence
+  ; "year", Year_of
+  ; "month", Month_of
+  ; "day", Day_of
+  ; "wday", Wday
+  ; "yday", Yday
+  ; "floor_date", Floor_month
+  ; "days", Days
+  ; "months", Months
+  ; "years", Years
+  ; "parse_date", Parse_date
   ]
 ;;
 

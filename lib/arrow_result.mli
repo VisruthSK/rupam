@@ -11,6 +11,7 @@ type value =
   | Int of int64
   | Float of float
   | Text of string
+  | Date of int
 
 val value : t -> int -> int -> value
 val cells : t -> columns:int array -> offset:int -> limit:int -> string option array array

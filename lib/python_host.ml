@@ -38,6 +38,7 @@ let reserved =
   ; "yield"
   ; "pl"
   ; "math"
+  ; "datetime"
   ; "functools"
   ; "re"
   ; "print"
@@ -51,6 +52,10 @@ let names () = Host.names reserved
 let math name a = P.Call (P.Attribute (P.Name "math", name), [ P.Positional a ])
 let as_float e = P.call "float" [ e ]
 let is_none e = P.Binary (Is, e, P.Null)
+
+let days n =
+  P.Call (P.Attribute (P.Name "datetime", "timedelta"), [ P.Keyword ("days", n) ])
+;;
 
 let builtin (row : Prelude.row) args =
   match row, args with
@@ -104,6 +109,19 @@ let builtin (row : Prelude.row) args =
   | Fold, [ a; init; f ] ->
     P.Call (P.Attribute (P.Name "functools", "reduce"), [ P.Positional f; P.Positional a; P.Positional init ])
   | Sequence, [ a; b; s ] -> P.call "rp_seq" [ a; b; s ]
+  | Year_of, [ a ] -> P.Attribute (a, "year")
+  | Month_of, [ a ] -> P.Attribute (a, "month")
+  | Day_of, [ a ] -> P.Attribute (a, "day")
+  | Wday, [ a ] -> P.meth a "isoweekday" []
+  | Yday, [ a ] -> P.Attribute (P.meth a "timetuple" [], "tm_yday")
+  | Floor_year, [ a ] ->
+    P.meth a "replace" [ P.Keyword ("month", P.Int "1"); P.Keyword ("day", P.Int "1") ]
+  | Floor_month, [ a ] -> P.meth a "replace" [ P.Keyword ("day", P.Int "1") ]
+  | Floor_week, [ a ] -> P.Binary (Subtract, a, days (P.meth a "weekday" []))
+  | Days, [ n ] -> days n
+  | Months, [ n ] -> n
+  | Years, [ n ] -> P.Binary (Multiply, n, P.Int "12")
+  | Parse_date, [ s; f ] -> P.call "rp_parse_date" [ s; f ]
   | _ -> invalid_arg "Wrong arguments to a builtin"
 ;;
 
@@ -130,6 +148,11 @@ let constant : C.constant -> P.expr = function
   | Number s -> P.Int s
   | Text s -> P.Str s
   | Bool b -> P.Bool b
+  | Date d ->
+    let y, m, day = Calendar.ymd d in
+    P.Call
+      ( P.Attribute (P.Name "datetime", "date")
+      , List.map (fun n -> P.Positional (P.Int (string_of_int n))) [ y; m; day ] )
 ;;
 
 let conjunction = function
@@ -157,6 +180,13 @@ and node names (e : C.expr) : P.expr =
   | Unary (Not, x) -> P.Unary (Not, go x)
   | Unary (Negate, x) when integer -> P.call "rp_int" [ P.Unary (Negate, go x) ]
   | Unary (Negate, x) -> P.Unary (Negate, go x)
+  | Binary (((Add | Sub) as op), a, b)
+    when List.mem (T.repr (T.present a.typ)) [ T.Date; T.Duration; T.Period ] ->
+    (match op, T.repr (T.present a.typ), T.repr (T.present b.typ) with
+     | Add, Date, Period -> P.call "rp_add_months" [ go a; go b ]
+     | Sub, Date, Period -> P.call "rp_add_months" [ go a; P.Unary (Negate, go b) ]
+     | Sub, Date, Date -> P.Attribute (P.Binary (Subtract, go a, go b), "days")
+     | _ -> P.Binary (operator op, go a, go b))
   | Binary (((Add | Sub | Mul) as op), a, b) ->
     let v = P.Binary (operator op, go a, go b) in
     if integer then P.call "rp_int" [ v ] else P.call "rp_real" [ v ]

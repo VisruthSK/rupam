@@ -25,12 +25,15 @@ rp_format <- function(v, shape) {
       float = rp_float(v),
       bool = if (isTRUE(v)) "TRUE" else "FALSE",
       string = encodeString(v, quote = '"'),
+      date = paste0('d"', format(v), '"'),
+      duration = paste0("days(", v, ")"),
+      period = paste0("months(", v, ")"),
       `function` = "<function>",
       rp_dynamic(v)))
   }
   switch(shape[[1]],
     list = paste0("[", paste(vapply(v, rp_format, "", shape[[2]]), collapse = ", "), "]"),
-    option = if (is.null(v)) "None" else rp_format(v, shape[[2]]),
+    option = if (is.null(v) || (length(v) == 1 && is.na(v))) "None" else rp_format(v, shape[[2]]),
     tuple = paste0("(", paste(mapply(rp_format, v, shape[-1]), collapse = ", "), ")"),
     record = paste0("{", paste(vapply(shape[[2]], function(f)
       paste0(f[[1]], " = ", rp_format(v[[f[[1]]]], f[[2]])), ""), collapse = ", "), "}"),
@@ -75,4 +78,12 @@ rp_unique <- function(xs) {
   repeated[!absent] <- duplicated(do.call(c, xs[!absent]))
   repeated[absent] <- duplicated(absent[absent])
   xs[!repeated]
+}
+
+rp_add_months <- function(x, n) {
+  lt <- as.POSIXlt(x)
+  total <- lt$year * 12L + lt$mon + as.integer(n)
+  first <- as.Date(sprintf("%04d-%02d-01", total %/% 12L + 1900L, total %% 12L + 1L))
+  last <- as.Date(sprintf("%04d-%02d-01", (total + 1L) %/% 12L + 1900L, (total + 1L) %% 12L + 1L)) - 1L
+  pmin(first + lt$mday - 1L, last)
 }

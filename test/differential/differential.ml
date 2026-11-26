@@ -26,6 +26,8 @@ let rec int depth =
       ; G.map (fun xs -> call "length" [ xs ]) (ints (depth - 1))
       ; G.map (fun xs -> call "reduce" [ xs; "0"; "fn(a, v) => a + v" ]) (ints (depth - 1))
       ; G.map (fun a -> call "coalesce" [ "None"; a ]) sub
+      ; G.map2 (fun f d -> call f [ d ]) (pick [ "year"; "month"; "day"; "wday"; "yday" ]) (date (depth - 1))
+      ; G.map2 (fun a b -> binary "-" a b) (date (depth - 1)) (date (depth - 1))
       ])
 
 and float depth =
@@ -54,6 +56,25 @@ and bool depth =
       ; G.map (fun a -> "(not " ^ a ^ ")") sub
       ; G.map3 binary (pick [ "and"; "or" ]) sub sub
       ; G.map2 (fun s p -> call "str_detect" [ s; p ]) (text (depth - 1)) (pick [ {|"o"|}; {|"^b"|} ])
+      ])
+
+and date depth =
+  let leaf =
+    G.map3
+      (fun y m d -> Printf.sprintf {|d"%04d-%02d-%02d"|} y m d)
+      (G.int_range 1999 2030)
+      (G.int_range 1 12)
+      (G.int_range 1 28)
+  in
+  if depth = 0
+  then leaf
+  else (
+    let sub = date (depth - 1) in
+    G.oneof
+      [ leaf
+      ; G.map3 binary (pick [ "+"; "-" ]) sub (G.map (fun n -> call "months" [ string_of_int n ]) (G.int_range (-30) 30))
+      ; G.map3 binary (pick [ "+"; "-" ]) sub (G.map (fun n -> call "days" [ string_of_int n ]) (G.int_range (-400) 400))
+      ; G.map2 (fun d u -> call "floor_date" [ d; u ]) sub (pick [ {|"year"|}; {|"month"|}; {|"week"|} ])
       ])
 
 and text depth =
@@ -86,7 +107,7 @@ and ints depth =
 ;;
 
 let scalar =
-  let* parts = G.list_size (G.int_range 1 4) (G.oneof [ int 3; float 3; bool 3; text 2; ints 2 ]) in
+  let* parts = G.list_size (G.int_range 1 4) (G.oneof [ int 3; float 3; bool 3; text 2; ints 2; date 2 ]) in
   G.return
     (match parts with
      | [ one ] -> one
@@ -102,6 +123,8 @@ let pipeline =
       ; "mutate(z = x * 3 + 1)"
       ; "mutate(w = coalesce(y, 0.0) * 2.0)"
       ; "mutate(u = str_to_upper(coalesce(s, \"none\")))"
+      ; "mutate(e = d + months(1), f = floor_date(d, \"week\"), k = d - d\"2025-01-01\", q = wday(d))"
+      ; "filter(d >= d\"2025-01-01\", missing = skip)"
       ]
   in
   let* stages = G.list_size (G.int_range 0 4) stage in
@@ -144,6 +167,7 @@ let cell = function
   | Int i -> Int64.to_string i
   | Float f -> Display.float f
   | Text s -> Printf.sprintf "%S" s
+  | Date d -> Printf.sprintf {|d"%s"|} (Calendar.to_iso d)
 ;;
 
 let counter = ref 0

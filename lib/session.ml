@@ -263,7 +263,11 @@ let histogram r name =
 let cell r ~row name =
   if List.mem name r.table.restricted
   then Diagnostic.fail Restricted_output "This column is restricted";
-  List.assoc name r.table.schema, Arrow_result.value r.arrow row (column_index r name)
+  let typ = List.assoc name r.table.schema in
+  ( typ
+  , match Types.repr (Types.present typ), Arrow_result.value r.arrow row (column_index r name) with
+    | Date, Int days -> Arrow_result.Date (Int64.to_int days)
+    | _, value -> value )
 ;;
 
 let total r = Arrow_result.rows r.arrow

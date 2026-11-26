@@ -34,7 +34,7 @@ rp_read <- function(path, digest, format, columns) {
   bytes <- readBin(path, "raw", file.size(path))
   if (!identical(unname(tools::sha256sum(bytes = bytes)), digest))
     stop(path, " changed since rupam lock: run rupam lock, then recompile", call. = FALSE)
-  types <- list(Int64 = arrow::int64(), Float64 = arrow::float64(), Bool = arrow::boolean(), String = arrow::utf8())
+  types <- list(Int64 = arrow::int64(), Float64 = arrow::float64(), Bool = arrow::boolean(), String = arrow::utf8(), Date = arrow::date32())
   data <- if (format == "parquet") {
     arrow::read_parquet(bytes, col_select = dplyr::all_of(names(columns)), as_data_frame = FALSE)
   } else {

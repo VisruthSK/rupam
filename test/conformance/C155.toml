@@ -1,0 +1,12 @@
+id = "C155"
+status = "active"
+case = '''`parse_date("04/07/2026", "%d/%m/%Y")`, `parse_date("2026-07-04x", "%Y-%m-%d")`'''
+expected = '''`d"2026-07-04"`, `None`'''
+
+[run]
+source = '''
+(parse_date("04/07/2026", "%d/%m/%Y"), parse_date("2026-07-04x", "%Y-%m-%d"))
+'''
+
+[expect]
+value = '''(d"2026-07-04", None)'''

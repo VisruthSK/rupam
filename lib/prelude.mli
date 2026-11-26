@@ -30,6 +30,18 @@ type row =
   | Retain
   | Fold
   | Sequence
+  | Year_of
+  | Month_of
+  | Day_of
+  | Wday
+  | Yday
+  | Floor_year
+  | Floor_month
+  | Floor_week
+  | Days
+  | Months
+  | Years
+  | Parse_date
 [@@deriving sexp_of]
 
 type reduction =

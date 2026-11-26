@@ -7,6 +7,9 @@ type t =
   | Float
   | Bool
   | String
+  | Date
+  | Duration
+  | Period
   | Option of t
   | List of t
   | Tuple of t list
@@ -69,7 +72,7 @@ let rec iter_vars f t =
   | Tuple ts | Variant (_, ts) -> List.iter (iter_vars f) ts
   | Record row | Table row -> iter_row f row
   | Arrow (args, result) -> List.iter (iter_vars f) (result :: args)
-  | Int | Float | Bool | String -> ()
+  | Int | Float | Bool | String | Date | Duration | Period -> ()
 
 and iter_row f { fields; rest } =
   List.iter (fun (_, t) -> iter_vars f t) fields;
@@ -134,6 +137,9 @@ let display t =
     | Float -> "Float"
     | Bool -> "Bool"
     | String -> "String"
+    | Date -> "Date"
+    | Duration -> "Duration"
+    | Period -> "Period"
     | Option t -> show t ^ "?"
     | List t -> "[" ^ show t ^ "]"
     | Tuple ts -> "(" ^ String.concat ", " (List.map show ts) ^ ")"
@@ -185,7 +191,7 @@ let rec unify a b =
      | _ -> ());
     occurs_and_adjust v level t;
     v := Link t
-  | Int, Int | Float, Float | Bool, Bool | String, String -> ()
+  | Int, Int | Float, Float | Bool, Bool | String, String | Date, Date | Duration, Duration | Period, Period -> ()
   | Option a, Option b | List a, List b -> unify a b
   | Tuple xs, Tuple ys when List.length xs = List.length ys -> List.iter2 unify xs ys
   | Variant (m, xs), Variant (n, ys) when m = n && List.length xs = List.length ys ->

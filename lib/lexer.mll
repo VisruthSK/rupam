@@ -20,6 +20,7 @@ rule token = parse
  | number as n { INT (digits n) }
  | number ('.' number exponent? | exponent) as n { FLOAT (digits n) }
  | '"' (([^'"' '\\' '\n'] | '\\' [^'\n'])* as s) '"' { STRING (Scanf.unescaped s) }
+ | 'd' '"' ([^'"' '\n']* as s) '"' { DATE s }
  | '|' { BAR } | '?' { QUESTION } | '@' { AT }
  | '[' { LB } | ']' { RB } | '{' { LC } | '}' { RC }
  | '(' { LP } | ')' { RP } | ',' { COMMA } | '.' { DOT } | ';' { Diagnostic.fail Syntax_error "Rupam has no `;`. End each item with a new line" }

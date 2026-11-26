@@ -1,5 +1,5 @@
 id = "C32"
-status = "pending"
+status = "active"
 case = '''`d"2026-01-31" + months(1)`'''
 expected = '''`d"2026-02-28"`'''
 

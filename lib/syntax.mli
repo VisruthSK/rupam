@@ -21,6 +21,7 @@ type literal =
   | Float of string
   | Text of string
   | Bool of bool
+  | Date of string
   | Absent
 [@@deriving sexp_of]
 

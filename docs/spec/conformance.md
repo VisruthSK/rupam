@@ -186,6 +186,11 @@ check that proved obligations emit no redundant runtime assertions.
 | C149 | `as_enum(island)` over values Torgersen, Biscoe, Dream, `None` | enum levels Biscoe, Dream, Torgersen; `None` kept; provisional until `:lock` |
 | C150 | `as_enum(x)` over 51 distinct values | enum of 51 levels with the `many-levels` warning |
 | C151 | `summarise(n = n())` | parsed and formatted as `summarize(n = n())` |
+| C152 | `d"2024-02-29" + years(1)`, `d"2026-03-31" - months(1)`, `d"2026-03-01" - days(1)` | `d"2025-02-28"`, `d"2026-02-28"`, `d"2026-02-28"` |
+| C153 | `d"2026-03-10" - d"2026-01-01"`; `d"2026-01-01" < d"2026-02-01"` | `68`; `TRUE` |
+| C154 | `wday`, `yday`, `floor_date(_, "week")` of `d"2026-01-01"` | `4`, `1`, `d"2025-12-29"` |
+| C155 | `parse_date("04/07/2026", "%d/%m/%Y")`, `parse_date("2026-07-04x", "%Y-%m-%d")` | `d"2026-07-04"`, `None` |
+| C156 | date column with a missing value: `mutate(later = when + months(1), gap = when - d"2026-01-01")` | per-row clamped dates and day counts; missing stays `None` |
 
 ## Additional implementation requirements
 

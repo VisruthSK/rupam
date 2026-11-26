@@ -7,6 +7,9 @@ type t =
   | Float
   | Bool
   | String
+  | Date
+  | Duration
+  | Period
   | Option of t
   | List of t
   | Tuple of t list

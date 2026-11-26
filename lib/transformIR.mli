@@ -18,6 +18,7 @@ type constant =
   | Number of string
   | Text of string
   | Bool of bool
+  | Date of int
 
 type direction =
   | Ascending

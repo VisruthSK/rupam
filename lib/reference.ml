@@ -6,6 +6,9 @@ type value =
   | Float of float
   | Bool of bool
   | Text of string
+  | Date of int
+  | Duration of int
+  | Period of int
   | Missing
   | Tuple of value list
   | List of value list
@@ -36,6 +39,9 @@ let rec display = function
   | Bool b -> Display.bool b
   | Text s -> Printf.sprintf "%S" s
   | Missing -> "None"
+  | Date d -> "d\"" ^ Calendar.to_iso d ^ "\""
+  | Duration d -> Printf.sprintf "days(%d)" d
+  | Period m -> Printf.sprintf "months(%d)" m
   | Tuple vs -> "(" ^ String.concat ", " (List.map display vs) ^ ")"
   | List vs -> "[" ^ String.concat ", " (List.map display vs) ^ "]"
   | Record fs ->
@@ -106,6 +112,15 @@ let binary e (op : Syntax.binary) a b =
   | Greater, a, b -> Bool (compare_values a b > 0)
   | Less_equal, a, b -> Bool (compare_values a b <= 0)
   | Greater_equal, a, b -> Bool (compare_values a b >= 0)
+  | Add, Date d, Duration n | Add, Duration n, Date d -> Date (d + n)
+  | Sub, Date d, Duration n -> Date (d - n)
+  | Add, Date d, Period m -> Date (Calendar.add_months d m)
+  | Sub, Date d, Period m -> Date (Calendar.add_months d (-m))
+  | Sub, Date a, Date b -> Int (Int64.of_int (a - b))
+  | Add, Duration a, Duration b -> Duration (a + b)
+  | Sub, Duration a, Duration b -> Duration (a - b)
+  | Add, Period a, Period b -> Period (a + b)
+  | Sub, Period a, Period b -> Period (a - b)
   | Add, Int a, Int b -> checked e (fun () -> Int (Integer.add a b))
   | Sub, Int a, Int b -> checked e (fun () -> Int (Integer.sub a b))
   | Mul, Int a, Int b -> checked e (fun () -> Int (Integer.mul a b))
@@ -198,6 +213,19 @@ let builtin e call (row : Prelude.row) args =
   | Ends, [ v; p ] -> Bool (String.ends_with ~suffix:(text p) (text v))
   | Detect, [ v; p ] -> Bool (Re.execp (Re.compile (Re.Perl.re (text p))) (text v))
   | Sequence, [ first; last; step ] -> sequence e first last step
+  | Year_of, [ Date d ] -> let y, _, _ = Calendar.ymd d in Int (Int64.of_int y)
+  | Month_of, [ Date d ] -> let _, m, _ = Calendar.ymd d in Int (Int64.of_int m)
+  | Day_of, [ Date d ] -> let _, _, day = Calendar.ymd d in Int (Int64.of_int day)
+  | Wday, [ Date d ] -> Int (Int64.of_int (Calendar.weekday d))
+  | Yday, [ Date d ] -> Int (Int64.of_int (Calendar.year_day d))
+  | Floor_year, [ Date d ] -> let y, _, _ = Calendar.ymd d in Date (Option.get (Calendar.of_ymd (y, 1, 1)))
+  | Floor_month, [ Date d ] -> let y, m, _ = Calendar.ymd d in Date (Option.get (Calendar.of_ymd (y, m, 1)))
+  | Floor_week, [ Date d ] -> Date (d - Calendar.weekday d + 1)
+  | Days, [ n ] -> Duration (Int64.to_int (integer n))
+  | Months, [ n ] -> Period (Int64.to_int (integer n))
+  | Years, [ n ] -> Period (12 * Int64.to_int (integer n))
+  | Parse_date, [ s; f ] ->
+    Option.fold ~none:Missing ~some:(fun d -> Date d) (Calendar.parse ~format:(text f) (text s))
   | _ -> invalid_arg "Wrong arguments to a builtin"
 ;;
 
@@ -297,6 +325,7 @@ and constant : C.constant -> value = function
   | Number s -> Int (Int64.of_string s)
   | Text s -> Text s
   | Bool b -> Bool b
+  | Date d -> Date d
 ;;
 
 let rec eval env ?rows (e : C.expr) =
@@ -488,6 +517,7 @@ and read (file : C.file) =
          let f = float_of_string s in
          if Float.is_nan f then Missing else Float f
        | Bool -> Bool (String.lowercase_ascii s = "true")
+       | Date -> Date (Option.get (Calendar.of_iso s))
        | _ -> Text s)
   in
   { rows = Array.length rows

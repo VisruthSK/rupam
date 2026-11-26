@@ -83,6 +83,7 @@ let columns path =
     | "DOUBLE" -> Supported Types.Float
     | "BOOLEAN" -> Supported Types.Bool
     | "VARCHAR" -> Supported Types.String
+    | "DATE" -> Supported Types.Date
     | other -> Unsupported other
   in
   List.mapi

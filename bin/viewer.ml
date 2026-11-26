@@ -278,6 +278,7 @@ let cell_literal typ value =
   | Int, Int i -> lit (Int (Int64.to_string i))
   | Float, Float f -> lit (Float (Display.float f))
   | String, Text s -> lit (Text s)
+  | Date, Date d -> lit (Date (Calendar.to_iso d))
   | Variant _, Text tag -> node (Syntax.Name (Lexical, tag))
   | _ -> Diagnostic.fail Unsupported_column_type "This cell has no Rupam scalar literal"
 ;;

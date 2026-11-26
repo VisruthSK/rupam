@@ -27,6 +27,9 @@ let dtype t =
   | Int -> "Int64"
   | Float -> "Float64"
   | Bool -> "Boolean"
+  | Date -> "Date"
+  | Duration -> "Duration"
+  | Period -> "Int64"
   | _ -> "String"
 ;;
 
@@ -34,10 +37,24 @@ let batches e f dtype' =
   P.meth e "map_batches" [ P.Positional f; P.Keyword ("return_dtype", pl dtype') ]
 ;;
 
+let dt x name = cast (P.meth (P.Attribute (x, "dt")) name []) "Int64"
+let truncate x every = P.meth (P.Attribute (x, "dt")) "truncate" [ P.Positional (P.Str every) ]
+
 let builtin (row : Prelude.row) args =
   let on x name = P.meth x name [] in
   let text x name args = P.meth (P.Attribute (x, "str")) name (positional args) in
   match row, args with
+  | Year_of, [ x ] -> dt x "year"
+  | Month_of, [ x ] -> dt x "month"
+  | Day_of, [ x ] -> dt x "day"
+  | Wday, [ x ] -> dt x "weekday"
+  | Yday, [ x ] -> dt x "ordinal_day"
+  | Floor_year, [ x ] -> truncate x "1y"
+  | Floor_month, [ x ] -> truncate x "1mo"
+  | Floor_week, [ x ] -> truncate x "1w"
+  | Days, [ n ] -> P.Call (pl "duration", [ P.Keyword ("days", n) ])
+  | Months, [ n ] -> n
+  | Years, [ n ] -> P.Binary (Multiply, n, P.Int "12")
   | Abs, [ x ] -> on x "abs"
   | Sign, [ x ] -> cast (on x "sign") "Int64"
   | Sqrt, [ x ] -> on x "sqrt"
@@ -105,6 +122,11 @@ let rec expression ~scalar (e : C.expr) : P.expr =
     | Column n -> col n
     | If (c, a, b) -> choose (go c) (go a) (go b)
     | Coalesce (a, b) -> P.Call (pl "coalesce", positional [ go a; go b ])
+    | Builtin (Parse_date, [ s; { node = Constant (Text f); _ } ]) ->
+      P.meth
+        (P.Attribute (go s, "str"))
+        "to_date"
+        [ P.Keyword ("format", P.Str f); P.Keyword ("strict", P.Bool false) ]
     | Builtin (row, args) -> builtin row (List.map go args)
     | Foreign ("polars", "sqrt", [ x ]) -> P.meth (go x) "sqrt" []
     | Convert x -> cast (go x) "Float64"
@@ -112,6 +134,18 @@ let rec expression ~scalar (e : C.expr) : P.expr =
     | Unary (Not, x) -> P.Unary (Invert, go x)
     | Unary (Negate, x) when integer -> narrow (P.Unary (Negate, wide (go x)))
     | Unary (Negate, x) -> P.Unary (Negate, go x)
+    | Binary (((Add | Sub) as op), a, b) when T.repr (T.present a.typ) = Date ->
+      let offset sign =
+        P.meth
+          (P.Attribute (go a, "dt"))
+          "offset_by"
+          [ P.Positional (P.Call (pl "format", [ P.Positional (P.Str (sign ^ "{}mo")); P.Positional (go b) ])) ]
+      in
+      (match op, T.repr (T.present b.typ) with
+       | Add, Period -> offset ""
+       | Sub, Period -> offset "-"
+       | Sub, Date -> cast (P.meth (P.Attribute (P.Binary (Subtract, go a, go b), "dt")) "total_days" []) "Int64"
+       | _ -> P.Binary (operator op, go a, go b))
     | Binary (((Add | Sub | Mul) as op), a, b) when integer ->
       narrow (P.Binary (operator op, wide (go a), go b))
     | Binary (op, a, b) -> P.Binary (operator op, go a, go b)
@@ -277,11 +311,7 @@ let file (f : C.file) =
            (fun (n, t) ->
               ( P.Str n
               , P.Str
-                  (match T.repr (T.present t) with
-                   | Int -> "Int64"
-                   | Float -> "Float64"
-                   | Bool -> "Bool"
-                   | _ -> "String") ))
+                  (Host.column_kind t) ))
            f.columns)
     ]
 ;;

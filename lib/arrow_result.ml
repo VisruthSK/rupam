@@ -11,6 +11,7 @@ type value =
   | Int of int64
   | Float of float
   | Text of string
+  | Date of int
 
 external value : t -> int -> int -> value = "rupam_arrow_value"
 

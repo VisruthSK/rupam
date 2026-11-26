@@ -41,6 +41,9 @@ let conjunction = function
 ;;
 
 let builtin (row : Prelude.row) args =
+  match Dplyr.dates row args with
+  | Some e -> e
+  | None ->
   match row, args with
   | Abs, [ a ] -> R.call "abs" [ a ]
   | Sign, [ a ] -> integer64 (R.call "sign" [ number a ])
@@ -104,6 +107,7 @@ let constant : C.constant -> R.expr = function
   | Number s -> R.Number s
   | Text s -> R.String s
   | Bool b -> R.Logical b
+  | Date d -> R.call "as.Date" [ R.String (Calendar.to_iso d) ]
 ;;
 
 let rec value names (e : C.expr) = R.Located (e.span, node names e)
@@ -124,7 +128,10 @@ and node names (e : C.expr) : R.expr =
   | Builtin (row, args) -> builtin row (List.map go args)
   | Unary (Not, x) -> R.Not (go x)
   | Unary (Negate, x) -> R.Negate (go x)
-  | Binary (op, a, b) -> R.Binary (operator op, go a, go b)
+  | Binary (op, a, b) ->
+    Option.value
+      (Dplyr.date_arithmetic op a.typ b.typ (go a) (go b))
+      ~default:(R.Binary (operator op, go a, go b))
   | Convert x -> number (go x)
   | Lift (bound, body) ->
     let tests = List.map (fun (id, _) -> is_null (name id)) bound in

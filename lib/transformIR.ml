@@ -23,6 +23,7 @@ type constant =
   | Number of string
   | Text of string
   | Bool of bool
+  | Date of int
 [@@deriving sexp_of]
 
 type direction =

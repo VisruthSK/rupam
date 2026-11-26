@@ -28,6 +28,7 @@ type literal =
   | Float of string
   | Text of string
   | Bool of bool
+  | Date of string
   | Absent
 [@@deriving sexp_of]
 
@@ -182,6 +183,7 @@ let literal_text = function
     |> String.concat "{{"
     |> String.split_on_char '}'
     |> String.concat "}}"
+  | Date s -> "d\"" ^ s ^ "\""
   | Bool true -> "TRUE"
   | Bool false -> "FALSE"
   | Absent -> "None"

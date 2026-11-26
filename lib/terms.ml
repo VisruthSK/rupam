@@ -67,6 +67,10 @@ let constant span = function
   | Float s -> Float (float_of_string s)
   | Text s -> Text s
   | Bool b -> Bool b
+  | Date s ->
+    (match Calendar.of_iso s with
+     | Some d -> Date d
+     | None -> fail span Syntax_error ("Invalid date " ^ s ^ "; write d\"YYYY-MM-DD\""))
   | Absent -> assert false
 ;;
 
@@ -137,6 +141,11 @@ let row_signature level (row : Prelude.row) =
   | Length -> [ T.String ], T.Int
   | Lower | Upper | Trim -> [ T.String ], T.String
   | Starts | Ends | Detect -> [ T.String; T.String ], T.Bool
+  | Year_of | Month_of | Day_of | Wday | Yday -> [ T.Date ], T.Int
+  | Floor_year | Floor_month | Floor_week -> [ T.Date ], T.Date
+  | Days -> [ T.Int ], T.Duration
+  | Months | Years -> [ T.Int ], T.Period
+  | Parse_date -> [ T.String; T.String ], T.Option T.Date
   | Size -> [ T.List (T.fresh level) ], T.Int
   | Reverse | Sorted | Deduplicate ->
     let a = T.List (T.fresh level) in

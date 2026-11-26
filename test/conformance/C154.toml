@@ -1,0 +1,12 @@
+id = "C154"
+status = "active"
+case = '''`wday`, `yday`, `floor_date(_, "week")` of `d"2026-01-01"`'''
+expected = '''`4`, `1`, `d"2025-12-29"`'''
+
+[run]
+source = '''
+(wday(d"2026-01-01"), yday(d"2026-01-01"), floor_date(d"2026-01-01", "week"))
+'''
+
+[expect]
+value = '''(4, 1, d"2025-12-29")'''

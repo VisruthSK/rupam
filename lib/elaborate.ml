@@ -34,6 +34,7 @@ let rec expr ctx (x : Syntax.expr) : C.expr =
        | Float _ -> T.Float
        | Text _ -> T.String
        | Bool _ -> T.Bool
+       | Date _ -> T.Date
        | Int _ | Number _ -> T.Int)
       (Constant c)
   | Name (reference, n) -> name ctx span reference n
@@ -333,6 +334,22 @@ and binary ctx span op a b =
       number (T.present a.typ);
       number (T.present b.typ);
       to_float a, to_float b, T.Float
+    | (Add | Sub) when T.repr (T.present a.typ) = Date || T.repr (T.present b.typ) = Date ->
+      let result =
+        match op, T.repr (T.present a.typ), T.repr (T.present b.typ) with
+        | (Add | Sub), Date, (Duration | Period) -> T.Date
+        | Sub, Date, Date -> T.Int
+        | _ ->
+          fail
+            span
+            Type_mismatch
+            "Dates take + or - with days(), months() or years(), and - with another Date"
+      in
+      a, b, result
+    | (Add | Sub)
+      when List.mem (T.repr (T.present a.typ)) [ T.Duration; T.Period ] ->
+      let a, b, t = common span a b in
+      a, b, t
     | _ ->
       let a, b, t = common span a b in
       ( a
@@ -344,7 +361,7 @@ and binary ctx span op a b =
          | Equal | Not_equal -> T.Bool
          | Less | Greater | Less_equal | Greater_equal ->
            (match T.repr t with
-            | String -> ()
+            | String | Date -> ()
             | _ -> number t);
            T.Bool
          | Add | Sub | Mul | Mod ->
@@ -587,10 +604,18 @@ and builtin ctx span n b args =
     in
     chain values
   | Row row, values ->
-    let row =
+    let row, values =
       match row, values with
-      | Round, [ _; _ ] -> Prelude.Round_digits
-      | row, _ -> row
+      | Round, [ _; _ ] -> Prelude.Round_digits, values
+      | Floor_month, [ x; { node = Constant (Text unit); _ } ] ->
+        ( (match unit with
+           | "year" -> Prelude.Floor_year
+           | "month" -> Floor_month
+           | "week" -> Floor_week
+           | _ -> fail span Wrong_arguments "floor_date takes unit \"year\", \"month\" or \"week\"")
+        , [ x ] )
+      | Floor_month, [ _; _ ] -> fail span Wrong_arguments "floor_date needs a literal unit"
+      | row, _ -> row, values
     in
     let params, result = row_signature ctx.level row in
     if List.length params <> List.length values
@@ -713,6 +738,7 @@ and match_ ctx span (subject : C.expr) syntax_arms =
        | Float _ -> expect span T.Float (T.present t)
        | Text _ -> expect span T.String (T.present t)
        | Bool _ -> expect span T.Bool (T.present t)
+       | Date _ -> expect span T.Date (T.present t)
        | Int _ -> ());
       C.Equals c, []
     | Prange { low; high } ->

@@ -46,6 +46,8 @@ let cell t = function
     Some
       (match Types.repr (Types.present t) with
        | Bool -> Display.bool (String.lowercase_ascii text = "true")
+       | Date ->
+         Option.fold ~none:text ~some:Calendar.to_iso (int_of_string_opt text)
        | _ -> text)
 ;;
 

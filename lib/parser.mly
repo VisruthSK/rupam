@@ -30,7 +30,7 @@ let subject start finish = function [x] -> x | xs -> at start finish (Tuple xs)
 %token SET FALLBACK MATCH_PRESENT LAST
 %token CLOSED_CLOSED CLOSED_OPEN OPEN_CLOSED OPEN_OPEN CLOSED_FROM OPEN_FROM
 %token LET USE CONTRACT AS FN IF ELSE
-%token <string> NAME INT FLOAT STRING TAP
+%token <string> NAME INT FLOAT STRING TAP DATE
 %token TRUE FALSE NONE
 %token IN LB RB LC RC
 %token LP RP COMMA EQ DOT PIPE DOLLAR CARET ARROW END EOF
@@ -100,7 +100,7 @@ alternative: NAME { if $1="_" then Wildcard else if Char.uppercase_ascii $1.[0]=
 bound: INT { Int $1 } | FLOAT { Float $1 };
 signed: bound { $1 } | MINUS bound { negative $2 };
 patterns: pattern { [$1] } | patterns COMMA pattern { $3 :: $1 };
-literal: INT { Int $1 } | FLOAT { Float $1 } | STRING { Text $1 }
+literal: INT { Int $1 } | FLOAT { Float $1 } | STRING { Text $1 } | DATE { Date $1 }
  | TRUE { Bool true } | FALSE { Bool false } | NONE { Absent };
 return_type: /* empty */ { None } | COLON annotation { Some $2 };
 param: NAME { $1,None } | NAME COLON annotation { $1,Some $3 };
