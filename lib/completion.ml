@@ -147,11 +147,34 @@ let tables session =
     (bindings session)
 ;;
 
-let files session prefix =
+let accepted before =
+  let before = String.trim before in
+  let before =
+    if String.ends_with ~suffix:"(" before
+    then String.sub before 0 (String.length before - 1)
+    else before
+  in
+  match String.sub before (word_start before) (String.length before - word_start before) with
+  | "read_csv" | "write_csv" -> Some ([ ".csv" ], "CSV file")
+  | "read_tsv" | "write_tsv" -> Some ([ ".tsv" ], "TSV file")
+  | "read_parquet" | "write_parquet" -> Some ([ ".parquet" ], "Parquet file")
+  | "contract" -> Some ([ ".yaml"; ".yml" ], "data dictionary")
+  | _ -> None
+;;
+
+let files session ?kind prefix =
   let directory = Filename.concat (Session.directory session) (Filename.dirname prefix) in
+  let keep e =
+    match kind with
+    | None -> true
+    | Some (extensions, _) ->
+      Sys.is_directory (Filename.concat directory e)
+      || List.exists (fun x -> Filename.check_suffix e x) extensions
+  in
   match Sys.readdir directory with
   | entries ->
     Array.to_list entries
+    |> List.filter keep
     |> List.sort compare
     |> List.map (fun e ->
       let path =
@@ -161,7 +184,9 @@ let files session prefix =
       in
       { text = path
       ; detail =
-          (if Sys.is_directory (Filename.concat directory e) then "directory" else "file")
+          (if Sys.is_directory (Filename.concat directory e)
+           then "directory"
+           else Option.fold ~none:"file" ~some:snd kind)
       })
   | exception Sys_error _ -> []
 ;;
@@ -181,7 +206,7 @@ let complete session line =
     then (
       let quote = String.rindex line '"' + 1 in
       let prefix = String.sub line quote (String.length line - quote) in
-      files session prefix, quote, prefix)
+      files session ?kind:(accepted (String.sub line 0 (quote - 1))) prefix, quote, prefix)
     else if start > 0 && line.[start - 1] = '.'
     then (
       let base = String.sub line 0 (start - 1) in

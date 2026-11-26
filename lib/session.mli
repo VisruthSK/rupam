@@ -8,7 +8,7 @@ type event =
   | Value of string * Types.t
   | Table of Page.t
   | Viewed of Syntax.expr * result
-  | Schema of (string * Types.t) list
+  | Schema of int * (string * Types.t) list
   | Typed of Types.t
   | Histogram of string * Arrow_result.summary
   | Bars of string * Arrow_result.frequencies

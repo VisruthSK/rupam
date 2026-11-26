@@ -60,7 +60,7 @@ obligations emit no redundant runtime assertions.
 | C34 | `PatientId` joined against `HospitalId` | type error |
 | C35 | `left_join` on a non-key without `relationship` | type error |
 | C36 | `1=..=0`; `1=..=5 \|> rev()`; `1:3` outside a selector | empty vector; `[5, 4, 3, 2, 1]`; `r-range` with fix `1=..=3` |
-| C37 | `[1, 2, 3] + [1, 2]` | length error |
+| C37 | `[1, 2, 3] + [1, 2]` | type error: vectors have no elementwise arithmetic; use `map` |
 | C38 | `arrange(name)` on mixed-case strings | byte order |
 | C39 | `match bmi { ..<18.5 => Under, 18.5=..<25.0 => Healthy, 25.0=.. => Over }` on a column | enum column; exhaustive without `_` |
 | C40 | `Int(x)` with `x : Float`; `Int(round(x))` | type error; accepted with checked range |
@@ -125,7 +125,6 @@ obligations emit no redundant runtime assertions.
 | C94 | source with unsupported formula or module import | unsupported-feature or parse error, not silent acceptance |
 | C95 | nominal Usd used in `log` without explicit unwrapping | type error; explicit base conversion works with positive refinement |
 | C96 | a proved key, bounds, promotion or overflow obligation in deterministic locked analysis | no redundant assertion or lock verification in emitted analysis |
-| C97 | floating reduction `[1e16, 1.0, -1e16]` followed by sign-based branch | document native rounding dependence; do not require cross-dialect discrete equality |
 | C98 | foreign declaration in strict mode; non-strict foreign return of incompatible representation | strict rejection; return-boundary error in non-strict mode |
 
 | C99 | `let zero = 0.0; x == zero` versus `x == 0.0`, including signed zero and tiny nonzero | identical exact results and refinements |

@@ -23,6 +23,9 @@ type tap =
   | Bar
 [@@deriving sexp_of]
 
+let taps = [ "print", Print; "view", View; "schema", Schema; "hist", Hist; "bar", Bar ]
+let tap_name tap = fst (List.find (fun (_, t) -> t = tap) taps)
+
 type literal =
   | Int of string
   | Float of string

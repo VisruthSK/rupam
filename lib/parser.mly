@@ -148,9 +148,11 @@ expr: MATCH_PRESENT expr LC arms RC { at $startpos $endpos (Match_present ($2,Li
  | expr OPEN_OPEN expr { at $startpos $endpos (Sequence { first = $1; first_closed = false; last = $3; last_closed = false }) }
  | LAST { at $startpos $endpos Last }
  | TAP LP args RP
-   { let tap = match $1 with
-       | "print" -> Print | "view" -> View | "schema" -> Schema | "hist" -> Hist | "bar" -> Bar
-       | name -> Diagnostic.fail ~span:($startpos, $endpos) Syntax_error ("Unknown inspection !" ^ name ^ ". Use !print, !view, !schema, !hist or !bar")
+   { let tap = match List.assoc_opt $1 taps with
+       | Some tap -> tap
+       | None ->
+         Diagnostic.fail ~span:($startpos, $endpos) Syntax_error
+           ("Unknown inspection !" ^ $1 ^ ". Use " ^ String.concat ", " (List.map (fun (n, _) -> "!" ^ n) taps))
      in
      at $startpos $endpos (Tap (tap,$3)) }
  | IF LP expr RP expr ELSE expr { at $startpos $endpos (If ($3,$5,$7)) }

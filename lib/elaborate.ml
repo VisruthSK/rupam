@@ -18,6 +18,26 @@ let policy_of (x : Syntax.expr) =
   | _ -> fail x.span Invalid_policy "A missing policy is skip, keep or error"
 ;;
 
+let rec substitute names (x : Syntax.expr) =
+  match x.form with
+  | Name (Bare, n) when List.mem_assoc n names -> List.assoc n names
+  | Lambda (params, _) when List.exists (fun p -> List.mem_assoc p names) params -> x
+  | _ -> Syntax.map (substitute names) x
+;;
+
+let uses_table_verb body =
+  let found = ref false in
+  let rec visit (x : Syntax.expr) =
+    (match x.form with
+     | Call ({ form = Name (Bare, n); _ }, _)
+       when Verbs.mem n || List.mem_assoc n TransformIR.join_kinds -> found := true
+     | _ -> ());
+    ignore (Syntax.map (fun child -> visit child; child) x)
+  in
+  visit body;
+  !found
+;;
+
 let rec expr ctx (x : Syntax.expr) : C.expr =
   let span = x.span in
   let make = make span in
@@ -251,9 +271,12 @@ and name ctx span reference n =
             span
             Not_a_value
             (n ^ " reads its table's columns, so it can be called but not passed as a value")
+        | None when List.mem_assoc n Syntax.taps ->
+          fail span Unknown_name (Printf.sprintf "Unknown name: %s. Did you mean the inspection !%s()?" n n)
         | None ->
           let columns = List.map fst known in
-          (match closest n (columns @ List.map fst ctx.env.names) with
+          let names = List.map fst ctx.env.names @ Verbs.names @ List.map fst Prelude.all in
+          (match closest n (columns @ names) with
            | Some m when List.mem m columns ->
              fail span Unknown_column ("No column named " ^ n ^ did_you_mean (Some m))
            | hint -> fail span Unknown_name ("Unknown name: " ^ n ^ did_you_mean hint))))
@@ -407,9 +430,8 @@ and call ctx span (f : Syntax.expr) args =
   | Name (Bare, n) ->
     (match List.assoc_opt n ctx.env.names with
      | Some (Function { template; id; scheme }) ->
-       let _, values = arguments ctx span n args in
-       let values = List.map (expr ctx) values in
-       if List.length values <> List.length template.params
+       let _, syntax = arguments ctx span n args in
+       if List.length syntax <> List.length template.params
        then
          fail
            span
@@ -419,8 +441,42 @@ and call ctx span (f : Syntax.expr) args =
               n
               (List.length template.params)
               (if List.length template.params = 1 then "" else "s"));
+       let free n =
+         match List.assoc_opt n ctx.env.names with
+         | Some (Function { id = None; _ }) -> true
+         | Some _ -> false
+         | None ->
+           Prelude.find n = None
+           && (not (Verbs.mem n))
+           && not
+                (match ctx.columns with
+                 | Some row -> List.mem_assoc n (T.known row)
+                 | None -> false)
+       in
+       let unresolved (x : Syntax.expr) =
+         let found = ref false in
+         let rec visit (e : Syntax.expr) =
+           (match e.form with
+            | Name (Bare, n) when free n -> found := true
+            | _ -> ());
+           ignore (Syntax.map (fun child -> visit child; child) e)
+         in
+         visit x;
+         !found
+       in
+       let deferred, given =
+         List.partition (fun (_, x) -> unresolved x) (List.combine template.params syntax)
+       in
+       let values = List.map (fun (_, x) -> expr ctx x) given in
+       let template =
+         { template with
+           params = List.map fst given
+         ; body = substitute deferred template.body
+         }
+       in
        let inline =
-         ctx.columns <> None
+         deferred <> []
+         || ctx.columns <> None
          || scheme = None
          || List.exists
               (fun (v : C.expr) ->
@@ -1272,6 +1328,9 @@ let finish ~default (e : C.expr) =
 
 let function_ env name params body =
   let template = { params; body; closure = env } in
+  if uses_table_verb body
+  then bind env name (Function { id = None; scheme = None; template }), []
+  else (
   let ctx = { env; level = 1; columns = None; missing = env.missing } in
   let host () =
     let lambda = expr ctx { body with form = Lambda (params, body) } in
@@ -1298,7 +1357,7 @@ let function_ env name params body =
   in
   try host () with
   | Diagnostic.Error { code = Column_required | Missing_policy_required; _ } ->
-    contextual ()
+    contextual ())
 ;;
 
 let printed (x : Syntax.expr) =
@@ -1461,4 +1520,13 @@ let program env declarations =
     declarations
 ;;
 
-let builtins () = List.map (fun (n, b) -> n, T.display (builtin_type 1 b)) Prelude.all
+let builtins () =
+  List.map
+    (fun (n, b) ->
+       ( n
+       , match b with
+         | Prelude.Coalesce ->
+           "(a?, ..., a?, a) -> a; the first present argument, or a? when every argument is optional"
+         | b -> T.display (builtin_type 1 b) ))
+    Prelude.all
+;;

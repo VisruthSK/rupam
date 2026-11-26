@@ -106,7 +106,6 @@ rp_approx <- function(a, b) abs(a - b) <= sqrt(.Machine$double.eps) * pmax(abs(a
 
 rp_vreduce <- function(kind, policy, xs) {
   absent <- vapply(xs, is.null, logical(1))
-  if (policy == "error" && any(absent)) rp_fail("missing-under-error", "A reduction met a missing value and missing = error")
   if (policy == "keep" && !(kind %in% c("n_distinct", "first", "last")) && any(absent)) return(NULL)
   kept <- if (policy == "keep") xs else xs[!absent]
   if (kind %in% c("first", "last")) {
@@ -118,7 +117,7 @@ rp_vreduce <- function(kind, policy, xs) {
   if (!length(present) || (kind %in% c("var", "sd") && length(present) < 2)) return(NULL)
   v <- do.call(c, present)
   switch(kind,
-    sum = rp_checked(sum(v)),
+    sum = sum(v),
     min = min(v),
     max = max(v),
     mean = mean(as.double(v)),

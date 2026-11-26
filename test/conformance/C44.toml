@@ -1,5 +1,7 @@
 id = "C44"
-status = "active"
+status = "dialect"
+dialects = []
+reason = "Rupam establishes this before export; compiled code runs no checks."
 case = '''maximum portable Int plus one; literal `-9_223_372_036_854_775_808`'''
 expected = '''overflow; out-of-range literal error'''
 

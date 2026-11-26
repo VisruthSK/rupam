@@ -47,7 +47,7 @@ type event =
   | Value of string * Types.t
   | Table of Page.t
   | Viewed of Syntax.expr * result
-  | Schema of (string * Types.t) list
+  | Schema of int * (string * Types.t) list
   | Typed of Types.t
   | Histogram of string * Arrow_result.summary
   | Bars of string * Arrow_result.frequencies
@@ -315,6 +315,15 @@ let declare t (env, accepted, events) (source : Syntax.item) =
   in
   let events = List.rev_append (describe env d) events in
   let events =
+    match d, deferred with
+    | Let (name, _, _), false ->
+      (match Scope.lookup env name with
+       | Some (Table_value { table; _ }) ->
+         Schema (total (result t table), table.schema) :: events
+       | _ -> events)
+    | _ -> events
+  in
+  let events =
     List.fold_left
       (fun events (item : TransformIR.item) ->
          match item with
@@ -351,7 +360,8 @@ let inspect t env (tap : Tap.t) =
   | Print, [ (Show e as item) ], [] ->
     Value (String.trim (run (establish t) [ item ]), e.typ)
   | View, [ Show { node = Table table; _ } ], [] -> Viewed (tap.subject, result t table)
-  | Schema, [ Show { node = Table table; _ } ], [] -> Schema table.schema
+  | Schema, [ Show { node = Table table; _ } ], [] ->
+    Schema (total (result t table), table.schema)
   | Schema, [ Show e ], [] -> Typed e.typ
   | Hist, [ Show { node = Table table; _ } ], [ (None, { form = Name (_, column); _ }) ]
     ->

@@ -137,8 +137,8 @@ There is no null, NA, NaN or infinity.
 
 | Constraint | Types |
 | --- | --- |
-| `number` | `Int`, `Float` |
-| `comparable` | numbers, `String`, `Bool`, dates and times of compatible types, enums (declaration order), vectors of comparables (lexicographic), newtypes deriving `comparable` |
+| `Number` | `Int`, `Float` |
+| `Comparable` | numbers, `String`, `Bool`, dates and times of compatible types, enums (declaration order), vectors of comparables (lexicographic), newtypes deriving `comparable` |
 | `equatable` | `Int`, `Float`, `Bool`, `String`, dates and times, enums, and vectors, records and variants with equatable components; eligible newtypes |
 | `showable` | primitive values, tables and composites of showable values; not functions |
 

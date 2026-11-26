@@ -64,7 +64,7 @@ let options t =
       "target.dialect"
       (part (fun (t : Target.t) -> Target.dialect_name t.dialect))
       t.target
-  ; row "check.strict" string_of_bool t.strict
+  ; row "check.strict" Display.bool t.strict
   ; row "preview.digits" string_of_int t.preview_digits
   ]
 ;;

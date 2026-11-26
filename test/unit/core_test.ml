@@ -35,12 +35,12 @@ let%expect_test "functions generalise and literals adapt" =
   run "let half(x) = x / 2\nhalf(9)";
   [%expect
     {|
-    square : (number) -> number
+    square : (Number) -> Number
     9 : Int
     2.25 : Float
-    inc : (number) -> number
+    inc : (Number) -> Number
     (3, 3.5) : (Int, Float)
-    half : (number) -> Float
+    half : (Number) -> Float
     4.5 : Float
     |}]
 ;;
@@ -94,7 +94,7 @@ let%expect_test "reductions and table parameters are typed at definition" =
   [%expect
     {|
     center : (Float) -> Float?
-    active_mean : (Table<{active: Bool, weight: number, ..a}>) -> Table<{m: Float?}>
+    active_mean : (data: Table) -> Table
     unknown-name
     |}]
 ;;
@@ -105,7 +105,7 @@ let%expect_test "optional values lift" =
   run "\"n = {1 + 1}\"";
   [%expect
     {|
-    inc : (number) -> number
+    inc : (Number) -> Number
     (3, None) : (Int?, Int?)
     4 : Int
     "n = 2" : String
@@ -125,12 +125,12 @@ let%expect_test "matches are exhaustive" =
      grade(22.0)";
   [%expect
     {|
-    get : (Maybe<number>) -> number
+    get : (Maybe<Number>) -> Number
     5 : Int
     nonexhaustive-match
     nonexhaustive-match
-    f : ((a, number?)) -> number
-    grade : (Float) -> number
+    f : ((a, Number?)) -> Number
+    grade : (Float) -> Number
     2 : Int
     |}]
 ;;

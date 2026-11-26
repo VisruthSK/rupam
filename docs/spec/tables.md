@@ -18,7 +18,7 @@ produces an unordered table; it establishes a schema, not key uniqueness.
 | Verb | Result |
 | --- | --- |
 | `mutate(name = e, ...)` | adds or replaces columns in order; each binding sees earlier ones |
-| `filter(predicate)` | rows selected by the predicate and missing policy |
+| `filter(p, q, ...)` | rows selected by every predicate (`p and q and ...`) and the missing policy |
 | `select(a, b, new = old)` | selected columns, in order, renamed as given |
 | `rename(new = old)` | table with columns renamed in place |
 | `arrange(a, desc(b))` | rows sorted lexicographically; establishes order |

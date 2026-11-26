@@ -136,7 +136,7 @@ and node names (e : C.expr) : R.expr =
     Option.value
       (Dplyr.date_arithmetic op a.typ b.typ (go a) (go b))
       ~default:(R.Binary (operator op, go a, go b))
-  | Convert x -> R.call "rp_exact_float" [ go x ]
+  | Convert x -> number (go x)
   | Lift (bound, body) ->
     let tests = List.map (fun (id, _) -> is_null (name id)) bound in
     let test =
@@ -297,7 +297,7 @@ let show names (e : C.expr) =
       , [ R.Positional
             (R.call
                "rp_show"
-               [ R.call "rp_checked" [ value names e ]
+               [ value names e
                ; R.String (Yojson.Basic.to_string (Host.descriptor e.typ))
                ])
         ; R.Positional (R.String "\n")
@@ -310,7 +310,7 @@ let statement names : C.item -> R.statement option = function
     let v =
       match e.node with
       | Lambda _ | Table _ -> value names e
-      | _ -> R.call "rp_checked" [ value names e ]
+      | _ -> value names e
     in
     Some (R.Assign (Host.name names id, v))
   | Variant _ -> None

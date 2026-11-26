@@ -64,7 +64,21 @@ let describe = function
   | Value { scheme; _ } -> Some (T.display scheme.body)
   | Table_value { table; _ } -> Some (T.display (T.Table (T.closed table.schema)))
   | Function { scheme = Some scheme; _ } -> Some (T.display scheme.body)
-  | Function { template; _ } -> Some ("fn(" ^ String.concat ", " template.params ^ ")")
+  | Function { template; _ } ->
+    let piped = ref [] in
+    let rec visit (x : Syntax.expr) =
+      (match x.form with
+       | Pipe ({ form = Name (Bare, p); _ }, _) -> piped := p :: !piped
+       | _ -> ());
+      ignore (Syntax.map (fun child -> visit child; child) x)
+    in
+    visit template.body;
+    let role p = p ^ ": " ^ if List.mem p !piped then "Table" else "column" in
+    Some
+      ("("
+       ^ String.concat ", " (List.map role template.params)
+       ^ ") -> "
+       ^ if !piped = [] then "column" else "Table")
   | Constructor { scheme; _ } -> Some (T.display scheme.body)
   | Contract _ -> Some "contract"
   | Module m -> Some ("module " ^ m)

@@ -106,12 +106,15 @@ and resolve_row row =
 ;;
 
 let default_numbers t =
-  iter_vars
-    (fun v ->
-       match !v with
-       | Unbound { kind = Number; _ } -> v := Link Int
-       | _ -> ())
-    t
+  match repr t with
+  | Arrow _ -> ()
+  | _ ->
+    iter_vars
+      (fun v ->
+         match !v with
+         | Unbound { kind = Number; _ } -> v := Link Int
+         | _ -> ())
+      t
 ;;
 
 let display t =
@@ -123,8 +126,8 @@ let display t =
       let same = List.length (List.filter (fun (_, (k, _)) -> k = kind) !names) in
       let n =
         match kind, same with
-        | Number, 0 -> "number"
-        | Number, n -> "number" ^ string_of_int (n + 1)
+        | Number, 0 -> "Number"
+        | Number, n -> "Number" ^ string_of_int (n + 1)
         | Any, n when n < 26 -> String.make 1 (Char.chr (Char.code 'a' + n))
         | Any, n -> "t" ^ string_of_int n
       in

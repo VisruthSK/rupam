@@ -16,10 +16,10 @@ The session protocol checks, submits against an expected revision and rejects st
   $ cp ../../examples/penguins.csv .
   $ rupam session < requests
   {"jsonrpc":"2.0","id":1,"result":{"revision":0,"value":[{"name":"y","type":"Float"}]}}
-  {"jsonrpc":"2.0","id":2,"result":{"revision":1,"value":[{"kind":"bound","name":"f","type":"(number) -> number"}]}}
+  {"jsonrpc":"2.0","id":2,"result":{"revision":1,"value":[{"kind":"bound","name":"f","type":"(Number) -> Number"}]}}
   {"jsonrpc":"2.0","id":3,"error":{"code":-32000,"message":"Expected revision 0, the session is at 1","data":{"category":"superseded","revision":1}}}
-  {"jsonrpc":"2.0","id":4,"error":{"code":-32000,"message":"Expected number, found String","data":{"category":"diagnostic","code":"type-mismatch","message":"Expected number, found String","span":{"start":{"line":1,"column":3},"end":{"line":1,"column":6}}}}}
-  {"jsonrpc":"2.0","id":5,"result":{"revision":1,"value":[{"name":"f","type":"(number) -> number"}]}}
+  {"jsonrpc":"2.0","id":4,"error":{"code":-32000,"message":"Expected Number, found String","data":{"category":"diagnostic","code":"type-mismatch","message":"Expected Number, found String","span":{"start":{"line":1,"column":3},"end":{"line":1,"column":6}}}}}
+  {"jsonrpc":"2.0","id":5,"result":{"revision":1,"value":[{"name":"f","type":"(Number) -> Number"}]}}
   {"jsonrpc":"2.0","id":6,"error":{"code":-32602,"message":"Unknown method nonsense","data":{"category":"protocol","revision":1}}}
   {"jsonrpc":"2.0","id":7,"result":{"revision":0,"value":true}}
   {"jsonrpc":"2.0","id":8,"result":{"revision":0,"value":[]}}

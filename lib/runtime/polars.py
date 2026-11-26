@@ -28,40 +28,12 @@ def rp_result(frame, path):
     return data.height
 
 
-def rp_finite(series):
-    if (series.is_infinite() | series.is_nan()).any():
-        raise RupamError("arithmetic-overflow", "arithmetic overflow: a result is not finite")
-    return series
-
-
-def rp_covered(left, right, key, kind):
-    sides = {"left": [(left, right)], "right": [(right, left)]}.get(kind, [(left, right), (right, left)])
-    for rows, other in sides:
-        if rows.join(other, on=key, how="anti", nulls_equal=False).select(pl.len()).collect().item():
-            raise RupamError("join-keys", f"{kind}_join with unmatched = error found rows with no match on {key}")
-    return left
-
-
-def rp_assert_key(frame, columns):
-    if frame.select(pl.any_horizontal(pl.col(columns).is_null().any())).collect().item():
-        raise RupamError("not-a-key", f"{', '.join(columns)} is not a key: some rows are missing it")
-    if frame.select(pl.struct(columns).is_duplicated().any()).collect().item():
-        raise RupamError("not-a-key", f"{', '.join(columns)} is not a key: some rows repeat it")
-    return frame
-
-
 def rp_show_float(series):
     return pl.Series([None if v is None else repr(v) for v in series], dtype=pl.String)
 
 
 def rp_formatter(spec):
     return lambda series: pl.Series([None if v is None else format(v, spec) for v in series], dtype=pl.String)
-
-
-def rp_present(series):
-    if series.null_count() > 0:
-        raise ValueError("filter condition is missing and missing = error")
-    return series
 
 
 def rp_wider(data, ids, key, value, labels):

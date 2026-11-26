@@ -68,26 +68,27 @@ The manifest is derived from the TransformIR, lock and capability table.
 
 ## Checks and adapters
 
-Discharge obligations statically first, then at analysis/lock time where
-values are fixed, then by native host semantics. Emit a runtime check only
-when necessary for an unresolved obligation (e.g. random-dependent
-arithmetic, foreign returns, or effects not fixed by the lock). Do not repeat
-proved domain, key, bounds or schema checks per stage. No build mode changes
-language semantics. Use a small adapter only where native semantics differ;
-emit it only when used. Keep adapter bodies separate from the analysis.
+Generated code contains no checks. Rupam discharges every obligation during
+development: statically, or against the locked snapshot at analysis and lock
+time. Overflow, exact Int-to-Float conversion, finite results, keys, join
+coverage, `missing = error` and domain requirements are established before
+export, never re-verified by the script. An obligation Rupam cannot discharge
+(random-dependent arithmetic, foreign returns, effects not fixed by the lock)
+is reported and blocks a strict export rather than becoming a runtime check.
+Use a small adapter only where native semantics differ in value, not to
+verify; emit it only when used.
 
 | Adapter category | Required behavior |
 | --- | --- |
-| numeric representation | exact Int, checked promotion/overflow, finite floats, guarded domains |
+| numeric representation | exact Int and finite floats, as established by Rupam |
 | reductions | undefined statistics and empty/all-missing sums return `None`; exact integer accumulation; explicit policies |
 | table semantics | exact join, ordering, pivot, grouping and schema rules where host defaults differ |
 | ingestion | exact parsing, optionality and normalisation of NaN; reject infinity |
 | display | rupam formatting; omit restricted values |
 
-The compiler may eliminate a value-dependent check only when its proof is
-valid for the target lock and all possible unpinned effect outcomes. Host
-numerical operations that cannot provide the required checked semantics must
-use an adapter or be rejected. No new general dataframe runtime is required.
+A proof justifies an export only when it is valid for the target lock and all
+possible unpinned effect outcomes. No new general dataframe runtime is
+required.
 
 A numerical obligation established by computing on locked data (a sign,
 presence or bound) eliminates its check only if the computation that

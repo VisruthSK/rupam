@@ -1,7 +1,7 @@
 id = "C37"
-status = "pending"
+status = "active"
 case = '''`[1, 2, 3] + [1, 2]`'''
-expected = '''length error'''
+expected = '''type error: vectors have no elementwise arithmetic; use `map`'''
 
 [run]
 source = '''
@@ -9,4 +9,4 @@ source = '''
 '''
 
 [expect]
-diagnostic = "length"
+diagnostic = "type-mismatch"

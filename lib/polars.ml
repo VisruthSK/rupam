@@ -7,11 +7,6 @@ let col n = P.Call (pl "col", [ P.Positional (P.Str n) ])
 let positional xs = List.map (fun x -> P.Positional x) xs
 let cast x dtype = P.meth x "cast" [ P.Positional (pl dtype) ]
 let alias n e = P.meth e "alias" [ P.Positional (P.Str n) ]
-let wide e = cast e "Int128"
-
-let narrow e =
-  P.meth e "cast" [ P.Positional (pl "Int64"); P.Keyword ("strict", P.Bool true) ]
-;;
 
 let length = cast (P.Call (pl "len", [])) "Int64"
 
@@ -115,7 +110,6 @@ let columnar =
 
 let rec expression ~scalar (e : C.expr) : P.expr =
   let go = expression ~scalar in
-  let integer = T.repr (T.present e.typ) = Int in
   if not (columnar e)
   then
     P.Call (pl "lit", [ P.Positional (scalar e); P.Keyword ("dtype", pl (dtype e.typ)) ])
@@ -134,7 +128,6 @@ let rec expression ~scalar (e : C.expr) : P.expr =
     | Convert x -> cast (go x) "Float64"
     | Count -> length
     | Unary (Not, x) -> P.Unary (Invert, go x)
-    | Unary (Negate, x) when integer -> narrow (P.Unary (Negate, wide (go x)))
     | Unary (Negate, x) -> P.Unary (Negate, go x)
     | Binary (Approx, a, b) ->
       let magnitude x = P.meth x "abs" [] in
@@ -157,10 +150,8 @@ let rec expression ~scalar (e : C.expr) : P.expr =
        | Sub, Period -> offset "-"
        | Sub, Date -> cast (P.meth (P.Attribute (P.Binary (Subtract, go a, go b), "dt")) "total_days" []) "Int64"
        | _ -> P.Binary (operator op, go a, go b))
-    | Binary (((Add | Sub | Mul) as op), a, b) when integer ->
-      narrow (P.Binary (operator op, wide (go a), go b))
     | Binary (op, a, b) -> P.Binary (operator op, go a, go b)
-    | Require x -> batches (go x) (P.Name "rp_present") "Boolean"
+    | Require x -> go x
     | Member (x, { node = List items; _ }) ->
       P.meth (go x) "is_in" [ P.Positional (P.List (List.map scalar items)) ]
     | Text pieces ->
@@ -205,18 +196,12 @@ let rec expression ~scalar (e : C.expr) : P.expr =
 
 and reduce ~scalar (e : C.expr) r policy x =
   let source = expression ~scalar x in
-  let a =
-    if policy = C.Fail then batches source (P.Name "rp_present") (dtype x.typ) else source
-  in
+  let a = source in
   let ddof = [ P.Keyword ("ddof", P.Int "1") ] in
   let value =
     match (r : Prelude.reduction) with
     | Sum ->
-      let total =
-        if T.repr (T.present x.typ) = Int
-        then narrow (P.meth (wide a) "sum" [])
-        else P.meth a "sum" []
-      in
+      let total = P.meth a "sum" [] in
       choose (P.Binary (Greater, P.meth a "count" [], P.Int "0")) total P.Null
     | Mean -> P.meth a "mean" []
     | Median -> P.meth a "median" []
@@ -237,14 +222,6 @@ and reduce ~scalar (e : C.expr) r policy x =
   else value
 ;;
 
-let finite n = batches (col n) (P.Name "rp_finite") "Float64"
-
-let checks columns =
-  match List.filter (fun (_, x) -> Host.risky x && Host.float x) columns with
-  | [] -> []
-  | risky ->
-    [ P.link "with_columns" (List.map (fun (n, _) -> P.Positional (finite n)) risky) ]
-;;
 
 let step ~scalar span : C.step -> P.link list =
   let go = expression ~scalar in
@@ -254,7 +231,7 @@ let step ~scalar span : C.step -> P.link list =
   | Mutate { name; value; by } ->
     let v = go value in
     let v = if by = [] then v else P.meth v "over" [ P.Positional (P.names by) ] in
-    at "with_columns" [ P.Positional (alias name v) ] :: checks [ name, value ]
+    [ at "with_columns" [ P.Positional (alias name v) ] ]
   | Select columns -> [ at "select" [ P.Positional (P.names columns) ] ]
   | Rename changes ->
     [ at
@@ -273,7 +250,7 @@ let step ~scalar span : C.step -> P.link list =
            [ P.Positional (P.names by); P.Keyword ("maintain_order", P.Bool true) ]
        ; P.link "agg" [ P.Positional aggregates ]
        ])
-    @ checks measures
+
   | Arrange keys ->
     [ at
         "sort"
@@ -286,9 +263,7 @@ let step ~scalar span : C.step -> P.link list =
     ]
   | Take n -> [ at "head" [ P.Positional (P.Int (string_of_int n)) ] ]
   | Distinct _ -> [ at "unique" [ P.Keyword ("maintain_order", P.Bool true) ] ]
-  | Assert_key columns ->
-    [ at "pipe" [ P.Positional (P.Name "rp_assert_key"); P.Positional (P.names columns) ]
-    ]
+  | Assert_key _ -> []
   | Pivot_longer { ids; columns; names_to; values_to } ->
     [ at
         "unpivot"
@@ -331,14 +306,9 @@ let rec table ~scalar ~name (t : C.table) =
     match t.source with
     | Read f | Load { file = f; _ } -> file f
     | Bound id -> P.Name (name id)
-    | Join { left; right; key; kind; relationship; covered } ->
+    | Join { left; right; key; kind; relationship; covered = _ } ->
       let l = table ~scalar ~name left
       and r = table ~scalar ~name right in
-      let l =
-        if covered
-        then P.call "rp_covered" [ l; r; P.Str key; P.Str (C.join_name kind) ]
-        else l
-      in
       let fields =
         C.names left
         @

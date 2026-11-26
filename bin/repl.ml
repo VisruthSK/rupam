@@ -149,11 +149,13 @@ type t =
 
 let digits r = (Session.project r.session).preview_digits.value
 
+let print_columns columns =
+  let width = List.fold_left (fun w (n, _) -> max w (String.length n)) 0 columns in
+  List.iter (fun (n, typ) -> Printf.printf "  %-*s  %s\n" width n (Types.display typ)) columns
+;;
+
 let print_schema r (t : TransformIR.table) =
-  let width = List.fold_left (fun w (n, _) -> max w (String.length n)) 0 t.schema in
-  List.iter
-    (fun (n, typ) -> Printf.printf "%-*s  %s\n" width n (Types.display typ))
-    t.schema;
+  print_columns t.schema;
   Printf.printf
     "%d columns from %s\n"
     (List.length t.schema)
@@ -305,9 +307,9 @@ let present r (event : Session.event) =
   | Table page -> r.show ~digits:(digits r) page
   | Viewed (subject, result) -> r.view subject result
   | Inspection_failed d -> report_diagnostic d
-  | Schema columns ->
-    let width = List.fold_left (fun w (n, _) -> max w (String.length n)) 0 columns in
-    List.iter (fun (n, t) -> Printf.printf "%-*s  %s\n" width n (Types.display t)) columns
+  | Schema (rows, columns) ->
+    Printf.printf "%d rows \xc3\x97 %d columns\n" rows (List.length columns);
+    print_columns columns
   | Typed t -> print_endline (Types.display t)
   | Bars (column, f) -> List.iter print_endline (bars column f)
   | Histogram (_, s) -> List.iter print_endline (histogram ~digits:(digits r) s)
@@ -378,14 +380,15 @@ let complete r line =
 let bindings r = Completion.bindings r.session
 let guard f = ignore (diagnostic f)
 let evaluate r source = guard (fun () -> submit r (Frontend.read source))
+let inspect_schema r source = evaluate r ("(" ^ source ^ ") |> !schema()")
 
 let schemas r =
   List.iter
     (fun (name, (b : Scope.binding), _) ->
        match b with
-       | Table_value { table; _ } ->
+       | Table_value _ ->
          print_endline name;
-         print_schema r table
+         inspect_schema r name
        | Contract contract -> Contract.describe contract
        | _ -> ())
     (bindings r)
@@ -425,7 +428,7 @@ let missing_argument line =
 let describe_topic r topic =
   let env = Session.env r.session in
   match Scope.lookup env topic with
-  | Some (Table_value { table; _ }) -> print_schema r table
+  | Some (Table_value _) -> inspect_schema r topic
   | Some (Contract contract) -> Contract.describe contract
   | Some binding ->
     Option.iter (fun t -> Printf.printf "%s : %s\n" topic t) (Scope.describe binding)
@@ -519,13 +522,13 @@ let dispatch r = function
       let env = Session.env r.session in
       match view, Scope.lookup env source with
       | Schema, Some (Contract contract) -> Contract.describe contract
-      | Schema, Some (Table_value { table; _ }) -> print_schema r table
+      | Schema, Some (Table_value _) -> inspect_schema r source
       | Contract, Some (Table_value { table; _ }) ->
         print_endline (Scope.origin env table)
       | _ ->
         let t = Session.table r.session source in
         (match view with
-         | Schema -> print_schema r t
+         | Schema -> inspect_schema r source
          | Contract -> print_endline (Scope.origin env t)
          | Validate ->
            List.iter Contract.validate (List.sort_uniq compare (TransformIR.contracts t));
@@ -540,6 +543,11 @@ let dispatch r = function
             | _ -> Diagnostic.fail Not_a_table "Expected a table expression")));
     true
   | Source "" -> true
+  | Source source
+    when List.mem_assoc (String.trim source) (Elaborate.builtins ())
+         && Scope.lookup (Session.env r.session) (String.trim source) = None ->
+    describe_topic r (String.trim source);
+    true
   | Source source ->
     evaluate r source;
     true

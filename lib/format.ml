@@ -113,12 +113,7 @@ and expr x =
   | Last -> "end"
   | Tap (tap, args) ->
     "!"
-    ^ (match tap with
-       | Print -> "print"
-       | View -> "view"
-       | Schema -> "schema"
-       | Hist -> "hist"
-       | Bar -> "bar")
+    ^ Syntax.tap_name tap
     ^ "("
     ^ comma
         (fun (label, x) ->

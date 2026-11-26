@@ -1,5 +1,7 @@
 id = "C67"
-status = "active"
+status = "dialect"
+dialects = []
+reason = "Rupam establishes this before export; compiled code runs no checks."
 case = '''left join with unmatched left order, `unmatched = error`'''
 expected = '''coverage error; unrelated unused right rows alone do not fail'''
 

@@ -16,6 +16,9 @@ type tap =
   | Bar
 [@@deriving sexp_of]
 
+val taps : (string * tap) list
+val tap_name : tap -> string
+
 type literal =
   | Int of string
   | Float of string

@@ -59,19 +59,6 @@ let rec descriptor t : Yojson.Basic.t =
   | Arrow _ -> `String "function"
 ;;
 
-let float e = T.repr (T.present e.C.typ) = Float
-let integer e = T.repr (T.present e.C.typ) = Int
-
-let risky =
-  C.exists (fun e ->
-    match e.node with
-    | Binary ((Add | Sub | Mul | Div | Power), _, _) -> float e || integer e
-    | Unary (Negate, _) -> integer e
-    | Builtin ((Exp | Log | Log2 | Log10 | Sqrt), _) -> true
-    | Reduce ((Sum | Mean | Var | Sd), _, _) -> true
-    | _ -> false)
-;;
-
 let nonportable items =
   List.concat_map
     (fun (item : C.item) ->

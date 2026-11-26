@@ -19,6 +19,7 @@ type msg =
   | Complete
   | Clear
   | Quit
+  | Discard
   | Resize of int * int
   | Scroll of Viewer.move
   | Select_cell of int * int
@@ -961,6 +962,7 @@ let step msg model =
         model.viewer;
       { model with closing = true }, Cmd.none)
     else close_viewer model, Cmd.none
+  | Discard -> { model with input = Editor.empty; menu = None; search = None }, Cmd.none
   | Focus_prompt -> { model with editing = true }, Cmd.none
   | Focus_grid -> { model with editing = false; menu = None }, Cmd.none
   | Draft_tick ->
@@ -1105,6 +1107,7 @@ let subscriptions model =
               then
                 [ Shortcut.enter, Return
                 ; Shortcut.tab, Complete
+                ; Shortcut.key ~shift:true Tab, Focus_grid
                 ; Shortcut.escape, Focus_grid
                 ]
               else
@@ -1159,6 +1162,7 @@ let subscriptions model =
                | Some { selected = Some _; _ } -> Accept
                | _ -> Submit (Editor.text model.input) )
              ; Shortcut.ctrl 'l', Clear
+             ; Shortcut.ctrl 'c', Discard
              ]
            @ if Editor.text model.input = "" then [ Shortcut.ctrl 'd', Quit ] else [])
       ]

@@ -402,8 +402,17 @@ let mutate context span (t : C.table) arguments =
     add span (Select names) { t with schema = List.map (fun n -> n, typ t n) names })
 ;;
 
-let filter context span (t : C.table) = function
-  | (None, (x : Syntax.expr)) :: options ->
+let filter context span (t : C.table) arguments =
+  let conditions, options = List.partition (fun (label, _) -> label = None) arguments in
+  match List.map snd conditions with
+  | first :: rest ->
+    let x =
+      List.fold_left
+        (fun (a : Syntax.expr) (b : Syntax.expr) ->
+           { Syntax.form = Binary (And, a, b); span = fst a.span, snd b.span })
+        first
+        rest
+    in
     let policy =
       match options with
       | [] -> context.missing
@@ -411,8 +420,7 @@ let filter context span (t : C.table) = function
         (match p.form with
          | Name (_, n) when List.mem_assoc n C.policies -> Some (List.assoc n C.policies)
          | _ -> fail p.span Invalid_policy "A missing policy is skip, keep or error")
-      | _ ->
-        fail span Wrong_arguments "filter takes one condition and an optional missing ="
+      | _ -> fail span Wrong_arguments "filter takes conditions and an optional missing ="
     in
     let predicate = context.expression ?missing:policy (C.row t) x in
     if predicate.shape <> Columnar
@@ -454,7 +462,7 @@ let filter context span (t : C.table) = function
       }
     in
     if private_ t predicate then everything t else t
-  | _ -> fail span Wrong_arguments "filter takes one condition and an optional missing ="
+  | [] -> fail span Wrong_arguments "filter needs at least one condition"
 ;;
 
 let arrange context span (t : C.table) arguments =

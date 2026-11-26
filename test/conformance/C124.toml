@@ -1,5 +1,5 @@
 id = "C124"
-status = "pending"
+status = "active"
 case = '''`let center(x) = x - mean(x); let apply(f, x) = f(x)` then `mutate(z = apply(center, value), by = group)`'''
 expected = '''same result as `mutate(z = value - mean(value), by = group)`'''
 

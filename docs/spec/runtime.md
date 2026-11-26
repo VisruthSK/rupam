@@ -21,9 +21,10 @@ not establish them.
 
 ## Adapters
 
-Generated R and Python are readable and contain only what implements Rupam
-semantics: conversions, missingness, guarded evaluation, key and order
-behaviour. Rupam verifies and locks during development. Standalone code
+Generated R and Python are readable, idiomatic host code that computes
+values: conversions, missingness, guarded evaluation and order. They contain
+no checks of any kind; every guarantee is established by Rupam during
+development and compilation. Rupam verifies and locks during development. Standalone code
 performs no input hashing, lock, contract, environment or snapshot verification.
 Supply the locked snapshot and backend when running a native export. Changed
 inputs need a fresh Rupam check, lock and export. A format whose standalone reader cannot reproduce canonical ingestion is

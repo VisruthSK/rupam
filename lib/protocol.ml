@@ -188,9 +188,10 @@ let event : Session.event -> Yojson.Safe.t = function
       ; "source", `String (Format.expression subject)
       ; "rows", `Int (Session.total r)
       ]
-  | Schema columns ->
+  | Schema (rows, columns) ->
     `Assoc
       [ "kind", `String "schema"
+      ; "rows", `Int rows
       ; ( "columns"
         , `List
             (List.map (fun (n, t) -> `Assoc [ "name", `String n; "type", typ t ]) columns)

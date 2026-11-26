@@ -10,7 +10,6 @@ type reply =
   { revision : int
   ; output : string option [@yojson.option]
   ; error : string option [@yojson.option]
-  ; code : string option [@yojson.option]
   }
 [@@deriving of_yojson]
 
@@ -41,8 +40,6 @@ for line in sys.stdin:
         reply = {"output": output.getvalue()}
     except Exception as exc:
         reply = {"error": str(exc)}
-        if getattr(exc, "code", None):
-            reply["code"] = exc.code
     print(json.dumps(dict(reply, revision=request["revision"])), flush=True)
 |}
 ;;
@@ -58,7 +55,7 @@ repeat {
   reply <- tryCatch({
     output <- capture.output(eval(parse(text = request$script), envir = session))
     list(output = paste(c(output, ""), collapse = "\n"))
-  }, error = function(e) c(list(error = conditionMessage(e)), if (is.character(e$code)) list(code = e$code)))
+  }, error = function(e) list(error = conditionMessage(e)))
   reply$revision <- request$revision
   cat(jsonlite::toJSON(reply, auto_unbox = TRUE), "\n", sep = "")
   flush(stdout())
@@ -149,8 +146,6 @@ let evaluate w script =
   if reply.revision <> w.revision then invalid_arg "Stale backend response";
   match reply.error, reply.output with
   | Some message, _ ->
-    Diagnostic.fail
-      (Option.value (Option.bind reply.code Diagnostic.of_name) ~default:Diagnostic.Host_failure)
-      (host_error message)
+    Diagnostic.fail Host_failure (host_error message)
   | None, output -> Option.value output ~default:""
 ;;

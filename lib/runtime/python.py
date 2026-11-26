@@ -6,24 +6,6 @@ import math
 import re
 
 
-class RupamError(Exception):
-    def __init__(self, code, message):
-        super().__init__(message)
-        self.code = code
-
-
-def rp_int(x):
-    if not -(2**63) < x < 2**63:
-        raise RupamError("arithmetic-overflow", "arithmetic overflow: Int out of range")
-    return x
-
-
-def rp_real(x):
-    if math.isinf(x) or math.isnan(x):
-        raise RupamError("arithmetic-overflow", "arithmetic overflow: a result is not finite")
-    return x
-
-
 def rp_dynamic(v):
     if isinstance(v, bool):
         return "TRUE" if v else "FALSE"
@@ -84,13 +66,6 @@ def rp_show(value, shape):
     return rp_format(value, json.loads(shape))
 
 
-def rp_exact_float(i):
-    f = float(i)
-    if int(f) != i:
-        raise RupamError("inexact-float", f"{i} has no exact Float value")
-    return f
-
-
 def rp_seq(first, last, step=1):
     if step == 0:
         raise ValueError("seq needs a nonzero step")
@@ -148,8 +123,6 @@ def rp_or(a, b):
 
 def rp_vreduce(kind, policy, xs):
     present = [v for v in xs if v is not None]
-    if policy == "error" and len(present) < len(xs):
-        raise RupamError("missing-under-error", "A reduction met a missing value and missing = error")
     if policy == "keep" and kind not in ("n_distinct", "first", "last") and len(present) < len(xs):
         return None
     kept = xs if policy == "keep" else present
@@ -160,8 +133,7 @@ def rp_vreduce(kind, policy, xs):
     if not present or (kind in ("var", "sd") and len(present) < 2):
         return None
     if kind == "sum":
-        total = sum(present)
-        return rp_int(total) if isinstance(total, int) else rp_real(total)
+        return sum(present)
     if kind in ("min", "max"):
         return min(present) if kind == "min" else max(present)
     floats = [float(v) for v in present]

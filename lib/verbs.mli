@@ -8,6 +8,7 @@ type context =
 
 type arguments = (string option * Syntax.expr) list
 
+val names : string list
 val mem : string -> bool
 
 val apply

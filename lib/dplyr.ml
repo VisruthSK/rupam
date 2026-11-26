@@ -121,7 +121,7 @@ let rec expression names (e : C.expr) : R.expr =
   | Coalesce (a, b) ->
     R.qualified "dplyr" "coalesce" [ R.Positional (go a); R.Positional (go b) ]
   | Builtin (row, args) -> builtin row (List.map go args)
-  | Convert x -> R.call "rp_exact_float" [ go x ]
+  | Convert x -> R.call "as.double" [ go x ]
   | Unary (Not, x) -> R.Not (go x)
   | Unary (Negate, x) -> R.Negate (go x)
   | Binary (Approx, a, b) -> R.call "rp_approx" [ go a; go b ]
@@ -129,7 +129,7 @@ let rec expression names (e : C.expr) : R.expr =
     Option.value
       (date_arithmetic op a.typ b.typ (go a) (go b))
       ~default:(R.Binary (operator op, go a, go b))
-  | Require x -> R.call "rp_present" [ go x ]
+  | Require x -> go x
   | Count -> integer64 (R.qualified "dplyr" "n" [])
   | Reduce (r, policy, x) when x.shape = Scalar ->
     R.call
@@ -184,7 +184,7 @@ let rec expression names (e : C.expr) : R.expr =
 
 and reduce names r policy x =
   let source = expression names x in
-  let x = if policy = C.Fail then R.call "rp_present" [ source ] else source in
+  let x = source in
   let present f = R.Call (f, [ R.Positional x; R.Named ("na.rm", R.Logical true) ]) in
   let unless_empty value = if_else (R.call "all" [ R.call "is.na" [ x ] ]) R.Na value in
   let value =
@@ -250,17 +250,13 @@ and text names pieces =
       joined
 ;;
 
-let checked names e =
-  let v = expression names e in
-  if Host.risky e then R.call "rp_checked" [ v ] else v
-;;
 
 let step names : C.step -> R.expr = function
   | Filter x -> R.call "filter" [ expression names x ]
   | Mutate { name; value; by } ->
     R.Call
       ( R.Name "mutate"
-      , R.Named (name, checked names value)
+      , R.Named (name, expression names value)
         :: (if by = [] then [] else [ R.Named (".by", all_of by) ]) )
   | Select columns -> R.call "select" [ all_of columns ]
   | Rename changes ->
@@ -269,7 +265,7 @@ let step names : C.step -> R.expr = function
   | Summarize { by; measures } ->
     R.Call
       ( R.Name "summarise"
-      , List.map (fun (n, x) -> R.Named (n, checked names x)) measures
+      , List.map (fun (n, x) -> R.Named (n, expression names x)) measures
         @ if by = [] then [] else [ R.Named (".by", all_of by) ] )
   | Arrange keys ->
     R.call
@@ -281,7 +277,7 @@ let step names : C.step -> R.expr = function
          keys)
   | Take n -> R.Call (R.Name "slice_head", [ R.Named ("n", R.Number (string_of_int n)) ])
   | Distinct _ -> R.call "distinct" []
-  | Assert_key columns -> R.call "rp_assert_key" [ R.strings columns ]
+  | Assert_key _ -> invalid_arg "assert_key generates no code"
   | Pivot_longer { columns; names_to; values_to; _ } ->
     R.qualified
       "tidyr"
@@ -318,17 +314,9 @@ let rec table names (t : C.table) =
     match t.source with
     | Read f | Load { file = f; _ } -> file f
     | Bound id -> R.Name (Host.name names id)
-    | Join { left; right; key; kind; relationship; covered } ->
+    | Join { left; right; key; kind; relationship; covered = _ } ->
       let left_table = table names left
       and right_table = table names right in
-      let left_table =
-        if covered
-        then
-          R.call
-            "rp_covered"
-            [ left_table; right_table; R.String key; R.String (C.join_name kind) ]
-        else left_table
-      in
       R.Call
         ( R.Name (C.join_name kind ^ "_join")
         , [ R.Positional left_table
@@ -351,7 +339,10 @@ let rec table names (t : C.table) =
             ] )
   in
   List.fold_left
-    (fun input (s : C.stage) -> R.pipe input (R.Located (s.at, step names s.step)))
+    (fun input (s : C.stage) ->
+       match s.step with
+       | Assert_key _ -> input
+       | kind -> R.pipe input (R.Located (s.at, step names kind)))
     base
     t.stages
 ;;

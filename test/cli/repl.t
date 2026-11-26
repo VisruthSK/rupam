@@ -12,10 +12,19 @@ Errors report a code and a span, and the session continues.
   > square(3)
   > INPUT
   $ rupam repl --target r-dplyr < session.txt
-  square : (number) -> number
+  square : (Number) -> Number
   49 : Int
   1:1  unknown-name
     Unknown name: squar. Did you mean square?
+  344 rows × 8 columns
+    species      String
+    island       String
+    bill_len     Float?
+    bill_dep     Float?
+    flipper_len  Int?
+    body_mass    Int?
+    sex          String?
+    year         Int
   1:17  unknown-column
     No column named speciez. Did you mean species?
   1:17  optional-condition
