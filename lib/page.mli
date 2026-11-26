@@ -29,7 +29,8 @@ val read
   -> t
 
 val of_arrow
-  :  Arrow_result.t
+  :  ?columns:string list
+  -> Arrow_result.t
   -> ordered:bool
   -> offset:int
   -> limit:int

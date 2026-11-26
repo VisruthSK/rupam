@@ -94,7 +94,7 @@ formula       = [ disjunct ] "~" disjunct | disjunct ;
 disjunct      = conjunct { "or" conjunct } ;
 conjunct      = boolean_not { "and" boolean_not } ;
 boolean_not   = "not" boolean_not | comparison ;
-comparison    = fallback [ compare_op fallback ] ;
+comparison    = fallback { compare_op fallback } ;
 compare_op    = "==" | "!=" | "~=" | "≈" | "<" | "<=" | ">" | ">=" | "in" | "not" "in" ;
 fallback      = range [ "??" fallback ] ;
 range         = sum [ ( between | ":" ) sum ] ;

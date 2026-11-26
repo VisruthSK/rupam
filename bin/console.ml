@@ -11,6 +11,8 @@ type msg =
   | Quit
   | Resize of int * int
   | Scroll of Viewer.move
+  | Act of Viewer.action
+  | Return
   | Close
 
 type model =
@@ -21,7 +23,7 @@ type model =
   ; recalled : int option
   ; menu : menu option
   ; pages : Rupam.Page.t list ref
-  ; opened : (string * Rupam.Session.result) option ref
+  ; opened : string option ref
   ; viewer : Viewer.t option
   ; size : int * int
   }
@@ -143,14 +145,19 @@ let status session =
 ;;
 
 let grid model (v : Viewer.t) =
+  let body =
+    match Viewer.bars v with
+    | [] ->
+      page_view
+        ~limit:(fst model.size)
+        ~digits:(Repl.digits model.session)
+        (Viewer.visible v)
+    | bars -> List.map (fun line -> text ~style:(style typed) line) bars
+  in
   box
     ~flex_direction:Column
     ~size:{ width = pct 100; height = px (snd model.size) }
-    (page_view
-       ~limit:(fst model.size)
-       ~digits:(Repl.digits model.session)
-       (Viewer.visible v)
-     @ [ text ~style:(style faint) (Viewer.status v) ])
+    (text ~style:(style faint) (Viewer.status v) :: body)
 ;;
 
 let view model =
@@ -286,9 +293,9 @@ let evaluate model source =
         ; menu = None
         ; viewer =
             Option.map
-              (fun (title, result) ->
+              (fun title ->
                  let width, height = model.size in
-                 Viewer.open_ ~title ~width ~height result)
+                 Viewer.open_ model.session.session ~title ~width ~height)
               !(model.opened)
         }
       , committed ))
@@ -374,6 +381,19 @@ let update msg model =
   | Scroll step ->
     ( { model with viewer = Option.map (fun v -> Viewer.move v step) model.viewer }
     , Cmd.none )
+  | Act action ->
+    ( { model with viewer = Option.map (fun v -> Viewer.act v action) model.viewer }
+    , Cmd.none )
+  | Return ->
+    ( { model with
+        viewer = None
+      ; input =
+          Option.fold
+            ~none:model.input
+            ~some:(fun v -> Editor.of_string (Viewer.source v))
+            model.viewer
+      }
+    , Cmd.none )
   | Close -> { model with viewer = None }, Cmd.none
 ;;
 
@@ -399,6 +419,12 @@ let subscriptions model =
           ; Shortcut.space, Scroll (Rows page)
           ; Shortcut.char 'g', Scroll Top
           ; Shortcut.char 'G', Scroll Bottom
+          ; Shortcut.char 's', Act (Sort true)
+          ; Shortcut.char 'S', Act (Sort false)
+          ; Shortcut.char 'f', Act Keep_value
+          ; Shortcut.char 'u', Act Undo
+          ; Shortcut.char 'd', Act Distribution
+          ; Shortcut.enter, Return
           ; Shortcut.char 'q', Close
           ; Shortcut.escape, Close
           ]
@@ -426,7 +452,7 @@ let start ~project ?path () =
     let session =
       { session with
         show = (fun ~digits:_ page -> pages := page :: !pages)
-      ; view = (fun ~title result -> opened := Some (title, result))
+      ; view = (fun ~title _ -> opened := Some title)
       }
     in
     let config = Matrix.config ~mode:`Primary ~mouse:`Off () in

@@ -202,7 +202,8 @@ analysis. `LoadError` is an enum of the failure kinds.
 Evaluate replacing the mosaic REPL and viewer with Bonsai (`bonsai_term`),
 sharing components with the Bonsai notebook. Adopt it if incremental
 rendering measurably cuts frame time and the frontend code shrinks enough to
-justify the Core/Async dependency cost; measure on wide grids and live editing.
+justify the Core/Async dependency cost, and it builds and runs natively on
+Windows; measure on wide grids and live editing.
 
 ## Unicode operators
 

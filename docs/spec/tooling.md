@@ -65,7 +65,12 @@ and columns not shown.
 ## Viewer
 
 `:view` opens a full-screen object viewer on a completed binding, expression or
-pipeline stage. Tables open in the grid, vectors by index and records by field.
+pipeline stage. Keys: arrows or `hjkl` move, PgUp/PgDn and space page, `g`/`G` jump to
+the ends, `s`/`S` sort by the current column, `f` keeps rows equal to the
+current cell, `u` undoes the last step, `d` shows the column's distribution,
+Enter returns the resulting Rupam expression to the prompt, `q`/Esc close.
+Sorts and filters are Rupam steps run through the target; key columns stay
+pinned while scrolling sideways. Tables open in the grid, vectors by index and records by field.
 Drill into a value and return to the same selection. Closing the viewer restores
 the REPL draft and cursor. Pin the viewed revision until the analyst switches
 inputs, including when a binding is shadowed.

@@ -26,7 +26,8 @@ val submit : t -> Syntax.item list -> event list
 val check : t -> Syntax.item -> TransformIR.item list
 val table : t -> string -> TransformIR.table
 val result : t -> TransformIR.table -> result
-val page : result -> offset:int -> limit:int -> Page.t
+val page : ?columns:string list -> result -> offset:int -> limit:int -> Page.t
+val histogram : result -> string -> Arrow_result.histogram
 val total : result -> int
 val preview : t -> TransformIR.table -> offset:int -> limit:int -> Page.t
 val code : t -> Target.t option -> TransformIR.table -> string

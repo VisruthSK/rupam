@@ -30,16 +30,26 @@ let cell t = function
        | _ -> text)
 ;;
 
-let of_arrow arrow ~ordered ~offset ~limit fields =
+let of_arrow ?columns arrow ~ordered ~offset ~limit fields =
   let names = Arrow_result.names arrow in
-  let cells = Arrow_result.cells arrow ~offset ~limit in
+  let index name =
+    let rec find i = if names.(i) = name then i else find (i + 1) in
+    find 0
+  in
+  let selected = Option.value columns ~default:(Array.to_list names) in
+  let cells =
+    Arrow_result.cells
+      arrow
+      ~columns:(Array.of_list (List.map index selected))
+      ~offset
+      ~limit
+  in
   { columns =
-      Array.to_list
-        (Array.mapi
-           (fun i name ->
-              let typ = List.assoc name fields in
-              { name; typ; cells = Array.map (cell typ) cells.(i) })
-           names)
+      List.mapi
+        (fun i name ->
+           let typ = List.assoc name fields in
+           { name; typ; cells = Array.map (cell typ) cells.(i) })
+        selected
   ; offset
   ; total = Arrow_result.rows arrow
   ; ordered

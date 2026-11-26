@@ -3,7 +3,14 @@ type t
 external open_ipc : string -> t = "rupam_arrow_open"
 external rows : t -> int = "rupam_arrow_rows"
 external names : t -> string array = "rupam_arrow_names"
-external cells_ : t -> int -> int -> string option array array = "rupam_arrow_cells"
+
+external cells_
+  :  t
+  -> int
+  -> int
+  -> int array
+  -> string option array array
+  = "rupam_arrow_cells"
 
 type histogram =
   { low : float
@@ -26,4 +33,4 @@ let histogram t ~column ~bins =
 
 external close : t -> unit = "rupam_arrow_close"
 
-let cells t ~offset ~limit = cells_ t offset limit
+let cells t ~columns ~offset ~limit = cells_ t offset limit columns

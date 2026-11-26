@@ -217,8 +217,8 @@ static value cell(struct ArrowArrayView *column, int64_t i) {
   }
 }
 
-CAMLprim value rupam_arrow_cells(value handle, value v_offset, value v_limit) {
-  CAMLparam3(handle, v_offset, v_limit);
+CAMLprim value rupam_arrow_cells(value handle, value v_offset, value v_limit, value v_columns) {
+  CAMLparam4(handle, v_offset, v_limit, v_columns);
   CAMLlocal3(columns, column, c);
   struct ArrowError error;
   result *r = live(handle);
@@ -228,19 +228,26 @@ CAMLprim value rupam_arrow_cells(value handle, value v_offset, value v_limit) {
   if (offset > r->rows) offset = r->rows;
   if (limit > r->rows - offset) limit = r->rows - offset;
   if (limit < 0) limit = 0;
-  int64_t width = r->schema.n_children;
+  int64_t width = Wosize_val(v_columns);
+  for (int64_t j = 0; j < width; j++)
+    if (Long_val(Field(v_columns, j)) < 0 || Long_val(Field(v_columns, j)) >= r->schema.n_children)
+      caml_invalid_argument("column index");
   columns = caml_alloc(width, 0);
   for (int64_t j = 0; j < width; j++) Store_field(columns, j, caml_alloc(limit, 0));
   int64_t row = offset;
-  int64_t b = 0;
-  while (b < r->batches && r->starts[b + 1] <= row) b++;
+  int64_t low = 0, high = r->batches;
+  while (low < high) {
+    int64_t mid = low + (high - low) / 2;
+    if (r->starts[mid + 1] <= row) low = mid + 1; else high = mid;
+  }
+  int64_t b = low;
   while (row < offset + limit && b < r->batches) {
     struct ArrowArrayView *v = batch(r, b, &error);
     if (!v) caml_failwith("The result file has an unreadable batch");
     int64_t end = r->starts[b + 1];
     for (; row < end && row < offset + limit; row++) {
       for (int64_t j = 0; j < width; j++) {
-        c = cell(v->children[j], row - r->starts[b]);
+        c = cell(v->children[Long_val(Field(v_columns, j))], row - r->starts[b]);
         column = Field(columns, j);
         Store_field(column, row - offset, c);
       }

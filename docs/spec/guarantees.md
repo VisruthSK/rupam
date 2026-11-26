@@ -30,7 +30,7 @@ checked operations are errors, not silent fallback values.
   can use optional predicates only with a missing policy.
 - Boolean operators obey three-valued logic; direct comparisons against
   literal `None` are rejected. Presence tests establish refinements.
-- Every `match` is exhaustive. `-x^y` and chained comparisons do not parse.
+- Every `match` is exhaustive. `-x^y` does not parse; ordering comparisons chain in one direction.
 
 ## Tables and columns
 
@@ -69,7 +69,7 @@ checked operations are errors, not silent fallback values.
   reanalysis, relocking and recompilation. Contract and schema obligations
   are checked before relying on their properties.
 - Proven obligations emit no redundant checks; necessary checks are never
-  disabled. A standalone script verifies its lock before analysis.
+  disabled. A standalone script is valid for its locked snapshot; Rupam, not the script, verifies inputs ([Runtime](runtime.md#adapters)).
 - A check removed on the strength of a numerical proof stays removed only if
   the proof holds for every execution the locked environment permits,
   including any accumulation order of floating-point reductions.

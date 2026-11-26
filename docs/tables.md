@@ -162,7 +162,7 @@ orders |> summarize(average = mean(cost), by = region, missing = skip)
 orders |> summarize(average = mean(cost, missing = keep), by = region)
 ```
 
-`skip` leaves missing values out, `propagate` makes the result missing, and
+`skip` leaves missing values out, `keep` makes the result missing, and
 `error` stops the run. A call's own `missing =` wins over its verb's, and a
 verb's wins over a file-wide default:
 
@@ -172,7 +172,7 @@ set missing = skip
 
 Grouping keys that can be missing take `group_missing =` the same way:
 `skip` leaves those rows out of `summarize` (and gives `None` for
-group-dependent `mutate` results), `propagate` makes missing one group.
+group-dependent `mutate` results), `keep` makes missing one group.
 Without a policy, a filter, reduction or grouping on a column that can be
 missing is a type error.
 

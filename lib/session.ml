@@ -169,8 +169,30 @@ let result t (table : TransformIR.table) =
     r
 ;;
 
-let page r ~offset ~limit =
-  Page.of_arrow r.arrow ~ordered:(r.table.order <> None) ~offset ~limit r.table.schema
+let column_index r name =
+  let names = Arrow_result.names r.arrow in
+  let rec find i =
+    if i >= Array.length names
+    then Diagnostic.fail Unknown_column ("!hist has no column " ^ name)
+    else if names.(i) = name
+    then i
+    else find (i + 1)
+  in
+  find 0
+;;
+
+let page ?columns r ~offset ~limit =
+  Page.of_arrow
+    ?columns
+    r.arrow
+    ~ordered:(r.table.order <> None)
+    ~offset
+    ~limit
+    r.table.schema
+;;
+
+let histogram r name =
+  Arrow_result.histogram r.arrow ~column:(column_index r name) ~bins:20
 ;;
 
 let total r = Arrow_result.rows r.arrow
@@ -241,18 +263,6 @@ let declare t (env, accepted, events) (source : Syntax.item) =
     | _ -> { source; items } :: accepted
   in
   env, accepted, events
-;;
-
-let column_index r name =
-  let names = Arrow_result.names r.arrow in
-  let rec find i =
-    if i >= Array.length names
-    then Diagnostic.fail Unknown_column ("!hist has no column " ^ name)
-    else if names.(i) = name
-    then i
-    else find (i + 1)
-  in
-  find 0
 ;;
 
 let inspect t env (tap : Tap.t) =
