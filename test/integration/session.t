@@ -28,5 +28,5 @@ Switching target never replays writes, and :save writes the accepted analysis.
       |> arrange(region)
   
   small |> write_parquet("out.parquet")
-  $ rupam --version | cut -c1-15
-  rupam 0.0.0-dev
+  $ rupam --version | cut -d+ -f1
+  0.0.0-dev
