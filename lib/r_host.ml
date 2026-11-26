@@ -137,6 +137,12 @@ and node names (e : C.expr) : R.expr =
   | Construct (tag, args) -> R.call "rp_variant" (R.String tag :: List.map go args)
   | Let (id, v, body) -> R.Block ([ Host.name names id, go v ], go body)
   | Tuple xs | List xs -> R.call "list" (List.map go xs)
+  | Sequence (a, b) -> R.call "rp_seq" [ go a; go b ]
+  | Element (x, i) -> R.call "rp_element" [ go x; Option.fold ~none:R.Null ~some:go i ]
+  | Slice (x, a, b) ->
+    R.call
+      "rp_slice"
+      [ go x; Option.fold ~none:R.Null ~some:go a; Option.fold ~none:R.Null ~some:go b ]
   | Record fields ->
     R.Call (R.Name "list", List.map (fun (n, x) -> R.Named (n, go x)) fields)
   | Field (x, n) -> R.Element (go x, R.String n)
@@ -187,12 +193,16 @@ and match_ names subject arms =
       let tests, bound = pattern path p in
       R.Not (is_null path) :: tests, bound
     | Equals c -> [ R.call "identical" [ path; constant c ] ], []
-    | Between (low, high, inclusive) ->
-      ( Option.to_list (Option.map (fun l -> R.Binary (Less_equal, constant l, path)) low)
+    | Between (low, high) ->
+      ( Option.to_list
+          (Option.map
+             (fun (l, closed) ->
+                R.Binary ((if closed then Less_equal else Less), constant l, path))
+             low)
         @ Option.to_list
             (Option.map
-               (fun h ->
-                  R.Binary ((if inclusive then Less_equal else Less), path, constant h))
+               (fun (h, closed) ->
+                  R.Binary ((if closed then Less_equal else Less), path, constant h))
                high)
       , [] )
     | Tag (tag, ps) ->
@@ -294,19 +304,7 @@ let script items =
   R.program (preamble items @ statements names items)
 ;;
 
-let result names (t : C.table) ~id =
-  R.Expression (R.call "cat" [ R.call "rp_result" [ Dplyr.table names t; R.String id ] ])
-;;
-
-let page ~id ~offset ~limit ~path =
+let result names (t : C.table) ~path =
   R.Expression
-    (R.call
-       "rp_page"
-       [ R.String id
-       ; R.Number (string_of_int offset)
-       ; R.Number (string_of_int limit)
-       ; R.String path
-       ])
+    (R.call "cat" [ R.call "rp_result" [ Dplyr.table names t; R.String path ] ])
 ;;
-
-let release ~id = R.Expression (R.call "rp_release" [ R.String id ])

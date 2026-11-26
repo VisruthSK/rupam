@@ -10,7 +10,7 @@ let measured = penguins
        bill_ratio = bill_len / bill_dep,
        size = match body_mass {
          ..<3500 => "small",
-         3500..<4500 => "medium",
+         3500=..<4500 => "medium",
          _ => "large",
        },
        mass_z = standardize(body_mass),

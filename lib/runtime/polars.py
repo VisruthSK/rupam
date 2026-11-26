@@ -29,20 +29,10 @@ def read_locked(path, digest, format, columns):
     return pl.from_arrow(table).with_columns(pl.col(pl.Float64).fill_nan(None)).lazy()
 
 
-RESULTS = {}
-
-
-def rp_result(frame, id):
-    RESULTS[id] = frame.collect()
-    return RESULTS[id].height
-
-
-def rp_page(id, offset, limit, path):
-    RESULTS[id].slice(offset, limit).write_parquet(path)
-
-
-def rp_release(id):
-    RESULTS.pop(id, None)
+def rp_result(frame, path):
+    data = frame.collect()
+    data.write_ipc(path, compression="uncompressed", compat_level=pl.CompatLevel.oldest())
+    return data.height
 
 
 def rp_finite(series):

@@ -3,9 +3,9 @@ project file or session.
 
   $ export XDG_CONFIG_HOME=$PWD/config APPDATA=$PWD/config
   $ mkdir -p config/rupam analysis && cd analysis
-  $ printf ':options\n:quit\n' | rupam repl
-  target.language  unset          default
-  target.dialect   unset          default
+  $ printf ':options\n:quit\n' | rupam repl --target r-dplyr
+  target.language  r              session --target
+  target.dialect   dplyr          session --target
   check.strict     true           default
   preview.digits   2              default
   $ printf '[target]\nlanguage = "r"\ndialect = "dplyr"\n[preview]\ndigits = 4\n' > ../config/rupam/rupam.toml

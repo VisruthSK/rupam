@@ -31,4 +31,5 @@ fi
 
 mkdir -p "$destination"
 tar xzf "$archive" -C "$destination"
+curl -fsSL -o "$destination/LICENSE" "https://raw.githubusercontent.com/duckdb/duckdb/v$version/LICENSE"
 echo "DuckDB $version ($platform) in vendor/duckdb"

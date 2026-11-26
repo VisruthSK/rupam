@@ -88,6 +88,8 @@ let rec desugar parse x =
      | [ Text_piece plain ] -> { x with form = Literal (Text plain) }
      | [] -> { x with form = Literal (Text "") }
      | pieces -> { x with form = Interpolate pieces })
+  | Pipe (piped, { form = Tap (tap, args); _ }) ->
+    { x with form = Tap (tap, (None, piped) :: args) }
   | Pipe (piped, ({ form = Call (f, args); _ } as call))
     when List.exists (fun (_, a) -> hole a) args ->
     let filled = ref false in

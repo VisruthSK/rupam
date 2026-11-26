@@ -29,8 +29,8 @@ type Reading<a> =
   | Fault(reason: String)
 let group(age) = match age {
   ..<18 => "child",
-  18..<65 => "adult",
-  65.. => "senior",
+  18=..<65 => "adult",
+  65=.. => "senior",
 }
 group(70)
 let assess(reading) = match reading {

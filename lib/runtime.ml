@@ -17,6 +17,22 @@ let resolve (project : Project.t) (language : Target.language) =
   | R, _ -> { command = [| "Rscript"; "--vanilla" |]; prelude = "" }
 ;;
 
+let available runtime (language : Target.language) =
+  let probe =
+    match language with
+    | R -> [| "-e"; "invisible(0)" |]
+    | Python -> [| "-c"; "0" |]
+  in
+  let argv = Array.append runtime.command probe in
+  let null = Unix.openfile (if Sys.win32 then "NUL" else "/dev/null") [ O_RDWR ] 0 in
+  Fun.protect
+    ~finally:(fun () -> Unix.close null)
+    (fun () ->
+       match Unix.create_process argv.(0) argv null null null with
+       | pid -> snd (Unix.waitpid [] pid) = Unix.WEXITED 0
+       | exception Unix.Unix_error _ -> false)
+;;
+
 let suffix : Target.language -> string = function
   | Python -> ".py"
   | R -> ".R"

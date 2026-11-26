@@ -2,7 +2,7 @@
 open Parser
 let keyword = function
   | "import" -> IMPORT | "match" -> MATCH | "type" -> TYPE | "in" -> IN | "let" -> LET | "fn" -> FN | "if" -> IF | "else" -> ELSE
-  | "use" -> USE | "set" -> SET | "as" -> AS | "contract" -> CONTRACT
+  | "use" -> USE | "set" -> SET | "end" -> LAST | "as" -> AS | "contract" -> CONTRACT
   | "and" -> AND | "or" -> OR | "not" -> NOT
   | "TRUE" -> TRUE | "FALSE" -> FALSE | "None" -> NONE | s -> NAME s
 let digits s = String.concat "" (String.split_on_char '_' s)
@@ -23,7 +23,10 @@ rule token = parse
  | '|' { BAR } | '?' { QUESTION } | '@' { AT }
  | '[' { LB } | ']' { RB } | '{' { LC } | '}' { RC }
  | '(' { LP } | ')' { RP } | ',' { COMMA } | '.' { DOT } | ';' { Diagnostic.fail Syntax_error "Rupam has no `;`. End each item with a new line" }
+ | "=..=" { CLOSED_CLOSED } | "=..<" { CLOSED_OPEN } | "<..=" { OPEN_CLOSED } | "<..<" { OPEN_OPEN }
+ | "=.." { CLOSED_FROM } | "<.." { OPEN_FROM }
  | "..=" { DOTDOTEQ } | "..<" { DOTDOTLT } | ".." { DOTDOT } | "->" { TYPEARROW }
+ | '!' (id as name) { TAP name }
  | "==" { EQUAL } | "!=" { NE } | ">=" { GE } | "<=" { LE } | '=' { EQ }
  | '>' { GT } | '<' { LT } | "=>" { ARROW } | "|>" { PIPE }
  | "??" { FALLBACK } | "match?" { MATCH_PRESENT }

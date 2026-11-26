@@ -27,9 +27,10 @@ let compare start finish op (a : expr) (b : expr) =
 let subject start finish = function [x] -> x | xs -> at start finish (Tuple xs)
 %}
 %token DOTDOT DOTDOTEQ DOTDOTLT TYPEARROW IMPORT TYPE MATCH BAR QUESTION AT
-%token SET FALLBACK MATCH_PRESENT
+%token SET FALLBACK MATCH_PRESENT LAST
+%token CLOSED_CLOSED CLOSED_OPEN OPEN_CLOSED OPEN_OPEN CLOSED_FROM OPEN_FROM
 %token LET USE CONTRACT AS FN IF ELSE
-%token <string> NAME INT FLOAT STRING
+%token <string> NAME INT FLOAT STRING TAP
 %token TRUE FALSE NONE
 %token IN LB RB LC RC
 %token LP RP COMMA EQ DOT PIPE DOLLAR CARET ARROW END EOF
@@ -44,15 +45,17 @@ let subject start finish = function [x] -> x | xs -> at start finish (Tuple xs)
 %nonassoc NOT
 %left GT LT GE LE NE EQUAL IN
 %right FALLBACK
-%nonassoc COLON
+%nonassoc COLON CLOSED_CLOSED CLOSED_OPEN OPEN_CLOSED OPEN_OPEN
 %left PLUS MINUS
 %left TIMES DIV MOD
 %nonassoc UNARY
 %right CARET
-%left LP DOT
+%left LP DOT LB
 %start program
 %type <Syntax.item list> program
 %%
+between: CLOSED_CLOSED { true, true } | CLOSED_OPEN { true, false } | OPEN_CLOSED { false, true } | OPEN_OPEN { false, false };
+from: CLOSED_FROM { true } | OPEN_FROM { false };
 program: items EOF { List.rev $1 };
 items: /* empty */ { [] } | items separator { $1 } | items decl separator { { declaration = $2; span = $startpos($2), $endpos($2) } :: $1 };
 separator: END {};
@@ -89,11 +92,10 @@ alternative: NAME { if $1="_" then Wildcard else if Char.uppercase_ascii $1.[0]=
  | LC names COMMA DOTDOT RC { Precord (List.rev $2) }
  | literal { Pliteral $1 }
  | MINUS bound { Pliteral (negative $2) }
- | signed DOTDOTEQ signed { Prange { low = Some $1; high = Some $3; inclusive = true } }
- | signed DOTDOTLT signed { Prange { low = Some $1; high = Some $3; inclusive = false } }
- | DOTDOTEQ signed { Prange { low = None; high = Some $2; inclusive = true } }
- | DOTDOTLT signed { Prange { low = None; high = Some $2; inclusive = false } }
- | signed DOTDOT { Prange { low = Some $1; high = None; inclusive = false } }
+ | signed between signed { Prange { low = Some { value = $1; closed = fst $2 }; high = Some { value = $3; closed = snd $2 } } }
+ | DOTDOTEQ signed { Prange { low = None; high = Some { value = $2; closed = true } } }
+ | DOTDOTLT signed { Prange { low = None; high = Some { value = $2; closed = false } } }
+ | signed from { Prange { low = Some { value = $1; closed = $2 }; high = None } }
  | LP pattern COMMA patterns RP { Ptuple ($2 :: List.rev $4) };
 bound: INT { Int $1 } | FLOAT { Float $1 };
 signed: bound { $1 } | MINUS bound { negative $2 };
@@ -131,6 +133,21 @@ expr: MATCH_PRESENT expr LC arms RC { at $startpos $endpos (Match_present ($2,Li
  | CARET NAME { at $startpos $endpos (Name (Lexical,$2)) } | literal { at $startpos $endpos (Literal $1) }
  | LP expr RP { $2 } | expr DOT NAME { at $startpos $endpos (Field ($1,$3)) }
  | expr LP args RP { at $startpos $endpos (Call ($1,$3)) }
+ | expr LB expr RB { at $startpos $endpos (Index ($1,Element $3)) }
+ | expr LB expr from RB { at $startpos $endpos (Index ($1,From ($3,$4))) }
+ | expr LB DOTDOTEQ expr RB { at $startpos $endpos (Index ($1,Upto ($4,true))) }
+ | expr LB DOTDOTLT expr RB { at $startpos $endpos (Index ($1,Upto ($4,false))) }
+ | expr CLOSED_CLOSED expr { at $startpos $endpos (Sequence { first = $1; first_closed = true; last = $3; last_closed = true }) }
+ | expr CLOSED_OPEN expr { at $startpos $endpos (Sequence { first = $1; first_closed = true; last = $3; last_closed = false }) }
+ | expr OPEN_CLOSED expr { at $startpos $endpos (Sequence { first = $1; first_closed = false; last = $3; last_closed = true }) }
+ | expr OPEN_OPEN expr { at $startpos $endpos (Sequence { first = $1; first_closed = false; last = $3; last_closed = false }) }
+ | LAST { at $startpos $endpos Last }
+ | TAP LP args RP
+   { let tap = match $1 with
+       | "print" -> Print | "view" -> View | "schema" -> Schema | "hist" -> Hist
+       | name -> Diagnostic.fail ~span:($startpos, $endpos) Syntax_error ("Unknown inspection !" ^ name ^ ". Use !print, !view, !schema or !hist")
+     in
+     at $startpos $endpos (Tap (tap,$3)) }
  | IF LP expr RP expr ELSE expr { at $startpos $endpos (If ($3,$5,$7)) }
  | FN LP params RP ARROW expr { at $startpos $endpos (Lambda (List.map fst $3,parameters $3 $6)) }
  | MINUS expr %prec UNARY

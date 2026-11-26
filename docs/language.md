@@ -95,8 +95,8 @@ Constructors start with an uppercase letter and are called like functions:
 ```text
 let group(age) = match age {
   ..<18 => "child",
-  18..<65 => "adult",
-  65.. => "senior",
+  18=..<65 => "adult",
+  65=.. => "senior",
 }
 
 let assess(reading) = match reading {
@@ -106,7 +106,7 @@ let assess(reading) = match reading {
 }
 ```
 
-A pattern can be `_`, a name, a literal, a range (`a..=b`, `a..<b`, `..<b`,
+A pattern can be `_`, a name, a literal, a range (`a=..=b`, `a=..<b`, `..<b`,
 `a..`), a constructor, `Some(p)` or `None`, a tuple, a record `{a, b}`, a set
 of alternatives `p | q`, or `name @ p`, which binds the whole value. An arm
 can end in a guard, `if condition`. `match a, b { p, q => ... }` matches two

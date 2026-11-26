@@ -116,6 +116,9 @@ let rec expression names (e : C.expr) : R.expr =
       Dialect_capability
       ("R target cannot execute the Python capability " ^ m ^ "." ^ f)
   | Member _
+  | Sequence _
+  | Element _
+  | Slice _
   | Match _
   | Lambda _
   | Construct _

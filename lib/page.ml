@@ -30,6 +30,22 @@ let cell t = function
        | _ -> text)
 ;;
 
+let of_arrow arrow ~ordered ~offset ~limit fields =
+  let names = Arrow_result.names arrow in
+  let cells = Arrow_result.cells arrow ~offset ~limit in
+  { columns =
+      Array.to_list
+        (Array.mapi
+           (fun i name ->
+              let typ = List.assoc name fields in
+              { name; typ; cells = Array.map (cell typ) cells.(i) })
+           names)
+  ; offset
+  ; total = Arrow_result.rows arrow
+  ; ordered
+  }
+;;
+
 let read ~path ~total ~ordered ~offset ~limit fields =
   let names, rows =
     Data_file.query

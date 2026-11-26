@@ -281,7 +281,7 @@ orders |> left_join(customers, by = (customer_id == id), unmatched = error)
   are inferred per column; absent columns become optional. Incompatible
   nominal types are errors. It does not establish order.
 - `expand(a, b)` returns the Cartesian product of distinct values of those
-  columns, or specified domains (`year = 2020..=2026`). Known enums supply all
+  columns, or specified domains (`year = 2020=..=2026`). Known enums supply all
   declared values. `nesting(a, b)` supplies only observed combinations as one domain
   in a product. The result has only domain columns and grouping uniqueness.
 - `complete(a, b, fill = {cases = 0}, explicit = new_only)` retains all input

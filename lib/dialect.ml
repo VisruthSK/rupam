@@ -24,22 +24,10 @@ let statements (target : Target.t) names items =
 let r statement = fst (R_syntax.program [ statement ])
 let python statement = fst (Python_syntax.program [ statement ])
 
-let result (target : Target.t) names table ~id =
+let result (target : Target.t) names table ~path =
   match target.dialect with
-  | Dplyr -> r (R_host.result names table ~id)
-  | Polars -> python (Python_host.result names table ~id)
-;;
-
-let page (target : Target.t) ~id ~offset ~limit ~path =
-  match target.language with
-  | R -> r (R_host.page ~id ~offset ~limit ~path)
-  | Python -> python (Python_host.page ~id ~offset ~limit ~path)
-;;
-
-let release (target : Target.t) ~id =
-  match target.language with
-  | R -> r (R_host.release ~id)
-  | Python -> python (Python_host.release ~id)
+  | Dplyr -> r (R_host.result names table ~path)
+  | Polars -> python (Python_host.result names table ~path)
 ;;
 
 let table (target : Target.t) names table =

@@ -6,6 +6,10 @@ type event =
   | Output of string
   | Value of string * Types.t
   | Table of Page.t
+  | Viewed of string * result
+  | Schema of (string * Types.t) list
+  | Typed of Types.t
+  | Histogram of string * Arrow_result.histogram
 
 val create : project:Project.t -> directory:string -> t
 val load : t -> string -> unit

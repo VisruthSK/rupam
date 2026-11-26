@@ -182,6 +182,27 @@ let event : Session.event -> Yojson.Safe.t = function
   | Value (text, t) ->
     `Assoc [ "kind", `String "value"; "value", `String text; "type", typ t ]
   | Table p -> `Assoc [ "kind", `String "table"; "page", page p ]
+  | Viewed (title, r) ->
+    `Assoc
+      [ "kind", `String "view"; "title", `String title; "rows", `Int (Session.total r) ]
+  | Schema columns ->
+    `Assoc
+      [ "kind", `String "schema"
+      ; ( "columns"
+        , `List
+            (List.map (fun (n, t) -> `Assoc [ "name", `String n; "type", typ t ]) columns)
+        )
+      ]
+  | Typed t -> `Assoc [ "kind", `String "type"; "type", typ t ]
+  | Histogram (column, h) ->
+    `Assoc
+      [ "kind", `String "histogram"
+      ; "column", `String column
+      ; "low", `Float h.low
+      ; "high", `Float h.high
+      ; "missing", `Int h.missing
+      ; "counts", `List (Array.to_list (Array.map (fun c -> `Int c) h.counts))
+      ]
 ;;
 
 let item : TransformIR.item -> Yojson.Safe.t option = function

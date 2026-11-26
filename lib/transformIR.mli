@@ -69,6 +69,9 @@ and node =
   | Record of (string * expr) list
   | Field of expr * string
   | Member of expr * expr
+  | Sequence of expr * expr
+  | Element of expr * expr option
+  | Slice of expr * expr option * expr option
   | Foreign of string * string * expr list
   | Text of piece list
   | Table of table
@@ -85,7 +88,7 @@ and pattern =
   | Equals of constant
   | Missing
   | Present of pattern
-  | Between of constant option * constant option * bool
+  | Between of (constant * bool) option * (constant * bool) option
   | Tag of string * pattern list
   | Elements of pattern list
   | Fields of (string * id) list

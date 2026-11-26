@@ -34,6 +34,11 @@ dialect = "dplyr"
 | `python` | `polars` |
 
 `--target r-dplyr` and `:target python-polars` choose a pair atomically.
+Every session runs against a target. `rupam repl` takes it from `--target`,
+then the project, then the user's `rupam.toml`; otherwise an interactive
+prompt asks for one and a non-interactive one fails with `missing-target`.
+The chosen interpreter is checked before the prompt appears; the worker
+starts on first use.
 `:language` and `:dialect` change one part; a language change that leaves no
 unambiguous dialect requires a choice. `:options` shows both and their origins.
 
@@ -123,6 +128,14 @@ ingestion, checking and successful evaluation, bound to input identity,
 TransformIR stage, evaluation scope, parsing rules and, where relevant, the
 target. Tentative observations are separate from committed evidence; a
 preview or nondeterministic reduction never proves a universal fact.
+
+Each completed table is published once as an uncompressed Arrow IPC file in
+batches of 65,536 rows and released from worker memory. The session memory-maps
+it, indexes batch offsets from the footer and decodes only the batches a page
+touches, as zero-copy views; the operating system pages data in and out, so a
+result never has to fit in memory. A bounded set of results is kept; evicted
+ones are unmapped and deleted. Viewer sorting and filtering run as Rupam
+expressions through the selected backend, never as separate SQL.
 
 Compatible full-column checks fuse into one scan: presence, bounds, nonzero,
 positivity and exact integer-to-float representability. Implied facts are

@@ -121,7 +121,7 @@ let%expect_test "matches are exhaustive" =
   run "let f(n) = match n { 0 => TRUE }";
   run "let f(x) = match x { (a, Some(b)) => b, (_, None) => 0 }";
   run
-    "let grade(bmi) = match bmi { ..<18.5 => 1, 18.5..<25.0 => 2, 25.0.. => 3 }\n\
+    "let grade(bmi) = match bmi { ..<18.5 => 1, 18.5=..<25.0 => 2, 25.0=.. => 3 }\n\
      grade(22.0)";
   [%expect
     {|

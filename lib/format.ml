@@ -24,12 +24,15 @@ let rec pattern = function
   | Pliteral l -> literal_text l
   | Tag (n, ps) -> n ^ "(" ^ comma pattern ps ^ ")"
   | Ptuple ps -> "(" ^ comma pattern ps ^ ")"
-  | Prange { low; high; inclusive } ->
-    Option.fold ~none:"" ~some:literal_text low
-    ^
-      (match high with
-      | None -> ".."
-      | Some h -> (if inclusive then "..=" else "..<") ^ literal_text h)
+  | Prange { low; high } ->
+    (match low with
+     | None -> ""
+     | Some b -> literal_text b.value ^ if b.closed then "=" else "<")
+    ^ ".."
+    ^ Option.fold
+        ~none:""
+        ~some:(fun b -> (if b.closed then "=" else "<") ^ literal_text b.value)
+        high
   | Palt ps -> String.concat " | " (List.map pattern ps)
   | Pas (n, p) -> n ^ " @ " ^ pattern p
 ;;
@@ -52,6 +55,9 @@ let level x =
   | Unary (Negate, _) -> 3
   | Range _ -> 6
   | Fallback _ -> 7
+  | Sequence _ -> 6
+  | Index _ | Last -> 1
+  | Tap _ -> 1
   | Member _ | Chain _ -> 8
   | Unary (Not, { form = Member _; _ }) -> 8
   | Unary (Not, _) -> 9
@@ -92,6 +98,31 @@ and expr x =
     ^ "}"
   | Member (a, b) -> at 7 a ^ " in " ^ at 7 b
   | Fallback (a, b) -> at 6 a ^ " ?? " ^ at 7 b
+  | Sequence r ->
+    at 5 r.first
+    ^ (if r.first_closed then "=" else "<")
+    ^ ".."
+    ^ (if r.last_closed then "=" else "<")
+    ^ at 5 r.last
+  | Index (x, Element i) -> at 1 x ^ "[" ^ expr i ^ "]"
+  | Index (x, From (i, closed)) ->
+    at 1 x ^ "[" ^ at 5 i ^ (if closed then "=.." else "<..") ^ "]"
+  | Index (x, Upto (i, inclusive)) ->
+    at 1 x ^ "[" ^ (if inclusive then "..=" else "..<") ^ at 5 i ^ "]"
+  | Last -> "end"
+  | Tap (tap, args) ->
+    "!"
+    ^ (match tap with
+       | Print -> "print"
+       | View -> "view"
+       | Schema -> "schema"
+       | Hist -> "hist")
+    ^ "("
+    ^ comma
+        (fun (label, x) ->
+           Option.fold ~none:"" ~some:(fun l -> Identifier.quote l ^ " = ") label ^ expr x)
+        args
+    ^ ")"
   | Match_present (x, bs) ->
     "match? "
     ^ at 13 x
@@ -162,6 +193,8 @@ and expr x =
   | If (c, y, n) -> "if (" ^ expr c ^ ") " ^ expr y ^ " else " ^ expr n
   | Lambda (ps, body) -> "fn(" ^ String.concat ", " ps ^ ") => " ^ expr body
 ;;
+
+let expression = expr
 
 let declaration = function
   | Import (n, alias) -> "import " ^ n ^ if n = alias then "" else " as " ^ alias

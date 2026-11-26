@@ -58,10 +58,10 @@ check that proved obligations emit no redundant runtime assertions.
 | C33 | `DateTime<"UTC">` compared with `DateTime<"Europe/Paris">` | type error |
 | C34 | `PatientId` joined against `HospitalId` | type error |
 | C35 | `left_join` on a non-key without `relationship` | type error |
-| C36 | `1..=0`; `1..=5 \|> rev()`; `1:3` outside a selector | empty vector; `[5, 4, 3, 2, 1]`; `r-range` with fix `1..=3` |
+| C36 | `1=..=0`; `1=..=5 \|> rev()`; `1:3` outside a selector | empty vector; `[5, 4, 3, 2, 1]`; `r-range` with fix `1=..=3` |
 | C37 | `[1, 2, 3] + [1, 2]` | length error |
 | C38 | `arrange(name)` on mixed-case strings | byte order |
-| C39 | `match bmi { ..<18.5 => Under, 18.5..<25.0 => Healthy, 25.0.. => Over }` on a column | enum column; exhaustive without `_` |
+| C39 | `match bmi { ..<18.5 => Under, 18.5=..<25.0 => Healthy, 25.0=.. => Over }` on a column | enum column; exhaustive without `_` |
 | C40 | `Int(x)` with `x : Float`; `Int(round(x))` | type error; accepted with checked range |
 
 ## Interaction and boundary cases
@@ -107,8 +107,8 @@ check that proved obligations emit no redundant runtime assertions.
 | C77 | `across(starts_with("score_"), standardize)` | statically expanded columns; zero matches is a no-op; collisions rejected |
 | C78 | row bind `{id:Int, x:Int}` with `{id:Int, y:Float}` | schema id:Int, x:Int?, y:Float?; missing cells added |
 | C79 | `Table([{a = 1}, {a = 2.5}])` | table `{a:Float}`; unordered, no inferred uniqueness solely from construction |
-| C80 | complete January and March cases to months `1..=3` | February row created with None; fill changes only new cells by default |
-| C81 | `expand` over known enum with an unobserved level and year `2025..=2026` | complete Cartesian product, including unobserved level |
+| C80 | complete January and March cases to months `1=..=3` | February row created with None; fill changes only new cells by default |
+| C81 | `expand` over known enum with an unobserved level and year `2025=..=2026` | complete Cartesian product, including unobserved level |
 | C82 | required contracted float with NaN; conditional assertion `not active or population > 0` | requiredness fails after normalisation; no unconditional positive refinement |
 | C83 | contracted entity keys patients.id and hospitals.id; visits.patient_id foreign key to patients | patient and hospital nominal domains incompatible; visits key shares patient domain |
 | C84 | two contract enums with equal labels; explicit shared enum annotation | independent domains initially incompatible; shared validated declaration permits combination |
@@ -177,11 +177,11 @@ check that proved obligations emit no redundant runtime assertions.
 | C140 | `elevation` (four ranges over `[1, 3000]`) applied to a contract-bounded column, then to an unbounded one | first checks; second is `nonexhaustive-match` naming the uncovered intervals |
 | C141 | `income ?? income2 ?? 0.0` with `income2` failing where `income` is present | no failure; result `Float`; `revenue ?? 0.0 > 1.0` parses as `(revenue ?? 0.0) > 1.0` |
 | C142 | `x not in ys` and `not (x in ys)` over optional `x`, empty `ys` and `ys` containing `None` | identical results |
-| C143 | `match? score { 90.. => "A", ..<90 => "B" }` over `[95, None, 10]` | `["A", None, "B"]`, type `String?` |
+| C143 | `match? score { 90=.. => "A", ..<90 => "B" }` over `[95, None, 10]` | `["A", None, "B"]`, type `String?` |
 | C144 | `:target python-polars` after a `write` in an R session | no rewrite of the file; R-specific evidence discarded; values re-established only on demand |
 | C145 | pipeline with `!view()` and `!hist(revenue)` taps, then `:save` | taps run once in pipeline order, leave the value unchanged and are absent from saved source |
 | C146 | `0 < x <= 10` over `[0, 5, 10, 11]`; `1 < 2 > 0`; `1 == 1 == 1` | `[FALSE, TRUE, TRUE, FALSE]`; both others `syntax-error` |
-| C147 | `let p(x: Float in 0..=1) = x`; `p(0.5)`, `p(1.5)`, `p(mean(probs))` where `probs` has contract bounds [0, 1] | 0.5; `refinement-required` naming (1, 1.5]; checks |
+| C147 | `let p(x: Float in 0=..=1) = x`; `p(0.5)`, `p(1.5)`, `p(mean(probs))` where `probs` has contract bounds [0, 1] | 0.5; `refinement-required` naming (1, 1.5]; checks |
 | C148 | `Float in 0<..<1` written as a parameter and displayed by `:type` | displayed as written |
 
 ## Additional implementation requirements

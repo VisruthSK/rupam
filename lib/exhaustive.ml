@@ -42,18 +42,23 @@ let uncovered env level subject (arms : Syntax.arm list) =
       | _ -> nan
     in
     let interval = function
-      | Prange { low; high; inclusive } ->
-        let low = Option.fold ~none:neg_infinity ~some:number low in
+      | Prange { low; high } ->
+        let low, low_closed =
+          match low with
+          | None -> neg_infinity, true
+          | Some b when integral && not b.closed -> number b.value +. 1., true
+          | Some b -> number b.value, b.closed
+        in
         let high, closed =
           match high with
           | None -> infinity, false
-          | Some h when integral && inclusive -> number h +. 1., false
-          | Some h -> number h, inclusive
+          | Some b when integral && b.closed -> number b.value +. 1., false
+          | Some b -> number b.value, b.closed
         in
-        Some (low, high, closed)
+        Some (low, low_closed, high, closed)
       | Pliteral ((Syntax.Int _ | Float _) as l) ->
         let x = number l in
-        Some (if integral then x, x +. 1., false else x, x, true)
+        Some (if integral then x, true, x +. 1., false else x, true, x, true)
       | _ -> None
     in
     let reach, _ =
@@ -64,8 +69,8 @@ let uncovered env level subject (arms : Syntax.arm list) =
         rows
       |> List.sort compare
       |> List.fold_left
-           (fun (reach, closed) (low, high, high_closed) ->
-              if low <= reach
+           (fun (reach, closed) (low, low_closed, high, high_closed) ->
+              if low < reach || (low = reach && (closed || low_closed))
               then
                 if high > reach
                 then high, high_closed

@@ -28,5 +28,13 @@ val read
   -> (string * Types.t) list
   -> t
 
+val of_arrow
+  :  Arrow_result.t
+  -> ordered:bool
+  -> offset:int
+  -> limit:int
+  -> (string * Types.t) list
+  -> t
+
 val lines : ?limit:int -> digits:int -> t -> (part * string) list list
 val plain : digits:int -> t -> string list

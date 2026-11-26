@@ -149,7 +149,7 @@ and report a fix or decision naming the Rupam form:
 | `case_when(...)` | `r-case-when` | `match` |
 | `function(x) ...`, `\(x) ...` | `r-function` | `fn(x) => ...` |
 | `T`, `F` | `r-logical` | `TRUE`, `FALSE` |
-| `1:n` outside a selector | `r-range` | `1..=n`; `n:1` is `1..=n \|> rev()` |
+| `1:n` outside a selector | `r-range` | `1=..=n`; `n:1` is `1=..=n \|> rev()` |
 | `<-` | `r-assign` | `let` |
 | `nrow(t)`, `length(unique(x))` | `r-function-name` | `n()`, `n_distinct(x)` |
 

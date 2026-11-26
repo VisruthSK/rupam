@@ -67,3 +67,24 @@ def rp_format(v, shape):
 
 def rp_show(value, shape):
     return rp_format(value, json.loads(shape))
+
+
+def rp_seq(a, b):
+    return list(range(a, b + 1))
+
+
+def rp_element(x, i):
+    n = len(x)
+    i = n if i is None else i
+    if i < 1 or i > n:
+        raise IndexError(f"index {i} is outside 1..{n}")
+    return x[i - 1]
+
+
+def rp_slice(x, a, b):
+    n = len(x)
+    a = 1 if a is None else a
+    b = n if b is None else b
+    if a < 1 or b > n:
+        raise IndexError(f"slice {a}..={b} is outside 1..{n}")
+    return x[a - 1 : b]

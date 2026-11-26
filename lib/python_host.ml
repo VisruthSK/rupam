@@ -166,6 +166,12 @@ and node names (e : C.expr) : P.expr =
     P.Call (P.Lambda ([ Host.name names id ], go body), [ P.Positional (go v) ])
   | Tuple xs -> P.Tuple (List.map go xs)
   | List xs -> P.List (List.map go xs)
+  | Sequence (a, b) -> P.call "rp_seq" [ go a; go b ]
+  | Element (x, i) -> P.call "rp_element" [ go x; Option.fold ~none:P.Null ~some:go i ]
+  | Slice (x, a, b) ->
+    P.call
+      "rp_slice"
+      [ go x; Option.fold ~none:P.Null ~some:go a; Option.fold ~none:P.Null ~some:go b ]
   | Record fields -> P.Dict (List.map (fun (n, x) -> P.Str n, go x) fields)
   | Field (x, n) -> P.Subscript (go x, P.Str n)
   | Member (x, set) -> P.Binary (In, go x, go set)
@@ -208,12 +214,16 @@ and match_ names subject arms =
       let tests, bound = pattern path p in
       P.Binary (Is_not, path, P.Null) :: tests, bound
     | Equals c -> [ P.Binary (Equal, path, constant c) ], []
-    | Between (low, high, inclusive) ->
-      ( Option.to_list (Option.map (fun l -> P.Binary (Less_equal, constant l, path)) low)
+    | Between (low, high) ->
+      ( Option.to_list
+          (Option.map
+             (fun (l, closed) ->
+                P.Binary ((if closed then Less_equal else Less), constant l, path))
+             low)
         @ Option.to_list
             (Option.map
-               (fun h ->
-                  P.Binary ((if inclusive then Less_equal else Less), path, constant h))
+               (fun (h, closed) ->
+                  P.Binary ((if closed then Less_equal else Less), path, constant h))
                high)
       , [] )
     | Tag (tag, ps) ->
@@ -311,15 +321,6 @@ let script items =
   P.program (preamble items @ statements names items)
 ;;
 
-let result names (t : C.table) ~id =
-  P.Expression (P.call "print" [ P.call "rp_result" [ table names t; P.Str id ] ])
+let result names (t : C.table) ~path =
+  P.Expression (P.call "print" [ P.call "rp_result" [ table names t; P.Str path ] ])
 ;;
-
-let page ~id ~offset ~limit ~path =
-  P.Expression
-    (P.call
-       "rp_page"
-       [ P.Str id; P.Int (string_of_int offset); P.Int (string_of_int limit); P.Str path ])
-;;
-
-let release ~id = P.Expression (P.call "rp_release" [ P.Str id ])

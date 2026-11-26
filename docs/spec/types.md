@@ -271,10 +271,10 @@ uncovered interval. There is no new syntax.
 
 ```rupam
 let elevation(x) = match? x {
-  1..<1000 => "Low",
-  1000..<1500 => "Medium",
-  1500..<2000 => "High",
-  2000..=3000 => "Very high",
+  1=..<1000 => "Low",
+  1000=..<1500 => "Medium",
+  1500=..<2000 => "High",
+  2000=..=3000 => "Very high",
 }
 ```
 
@@ -288,23 +288,23 @@ written in range notation after `in`:
 
 | Interval | Rupam |
 | --- | --- |
-| [0, 1] | `Float in 0..=1` |
-| [0, 1) | `Float in 0..<1` |
+| [0, 1] | `Float in 0=..=1` |
+| [0, 1) | `Float in 0=..<1` |
 | (0, 1] | `Float in 0<..=1` |
 | (0, 1) | `Float in 0<..<1` |
-| [0, ∞) | `Int in 0..` |
+| [0, ∞) | `Int in 0=..` |
 | (−∞, 1] | `Float in ..=1` |
 
-`a<..` excludes its lower bound; a bare lower bound includes it, as in
-patterns. Bounds are numeric literals. Common domains:
+Bounds use the symmetric interval notation of [Syntax](syntax.md#ranges-and-indexing)
+and are numeric literals. Common domains:
 
 ```rupam
-type Probability = Float in 0..=1
-type Correlation = Float in -1..=1
-type Percentage = Float in 0..=100
-type Latitude = Float in -90..=90
-type Longitude = Float in -180..=180
-type Count = Int in 0..
+type Probability = Float in 0=..=1
+type Correlation = Float in -1=..=1
+type Percentage = Float in 0=..=100
+type Latitude = Float in -90=..=90
+type Longitude = Float in -180=..=180
+type Count = Int in 0=..
 ```
 
 An interval is a refinement like the sign forms (`Float > 0` is

@@ -144,11 +144,45 @@ let strict =
 
 let command name doc term = Cmd.v (Cmd.info name ~doc) term
 
+let choose (project : Project.t) =
+  match project.target.value with
+  | Some _ -> project
+  | None when not (Lazy.force Line.interactive) ->
+    ignore (Project.require_target project);
+    project
+  | None ->
+    print_endline "Select an execution target:";
+    List.iteri (fun i (name, _) -> Printf.printf "  %d  %s\n" (i + 1) name) Target.targets;
+    print_string "> ";
+    flush stdout;
+    let chosen =
+      match
+        int_of_string_opt
+          (String.trim (In_channel.input_line stdin |> Option.value ~default:""))
+      with
+      | Some i when i >= 1 && i <= List.length Target.targets ->
+        snd (List.nth Target.targets (i - 1))
+      | _ -> Diagnostic.fail Missing_target "No target chosen"
+    in
+    { project with target = { value = Some chosen; origin = Session "selection" } }
+;;
+
+let ready (project : Project.t) =
+  let target = Project.require_target project in
+  if not (Runtime.available (Runtime.resolve project target.language) target.language)
+  then
+    Diagnostic.fail
+      Host_failure
+      (Printf.sprintf
+         "%s is not available here. Install it or choose another target with --target"
+         (Target.language_name target.language))
+;;
+
 let repl target strict path =
   let directory = Option.fold ~none:(Sys.getcwd ()) ~some:Filename.dirname path in
   guarded (fun () ->
-    let project = settings directory target strict in
-    Option.iter (fun _ -> ignore (Project.require_target project)) path;
+    let project = choose (settings directory target strict) in
+    ready project;
     if Lazy.force Line.interactive
     then Console.start ~project ?path ()
     else Repl.start ~project ?path ();

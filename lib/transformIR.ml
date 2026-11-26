@@ -78,6 +78,9 @@ and node =
   | Record of (string * expr) list
   | Field of expr * string
   | Member of expr * expr
+  | Sequence of expr * expr
+  | Element of expr * expr option
+  | Slice of expr * expr option * expr option
   | Foreign of string * string * expr list
   | Text of piece list
   | Table of table
@@ -94,7 +97,7 @@ and pattern =
   | Equals of constant
   | Missing
   | Present of pattern
-  | Between of constant option * constant option * bool
+  | Between of (constant * bool) option * (constant * bool) option
   | Tag of string * pattern list
   | Elements of pattern list
   | Fields of (string * id) list
@@ -231,7 +234,10 @@ let rec exists f e =
     any xs
   | Reduce (_, _, x) | Unary (_, x) | Convert x | Require x | Lambda (_, x) | Field (x, _)
     -> exists f x
-  | Binary (_, a, b) | Coalesce (a, b) | Let (_, a, b) | Member (a, b) -> any [ a; b ]
+  | Binary (_, a, b) | Coalesce (a, b) | Let (_, a, b) | Member (a, b) | Sequence (a, b)
+    -> any [ a; b ]
+  | Element (x, i) -> any (x :: Option.to_list i)
+  | Slice (x, a, b) -> any ((x :: Option.to_list a) @ Option.to_list b)
   | If (a, b, c) -> any [ a; b; c ]
   | Lift (bound, body) -> any (body :: List.map snd bound)
   | Match (x, arms) ->

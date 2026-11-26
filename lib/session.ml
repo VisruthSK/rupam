@@ -18,12 +18,11 @@ type host =
 
 type result =
   { table : TransformIR.table
-  ; id : string
-  ; total : int
-  ; session : t
+  ; file : string
+  ; arrow : Arrow_result.t
   }
 
-and t =
+type t =
   { directory : string
   ; mutable project : Project.t
   ; mutable path : string option
@@ -33,7 +32,6 @@ and t =
   ; mutable host : host option
   ; mutable saved : int option
   ; mutable results : (string * result) list
-  ; mutable serial : int
   ; mutable counter : int
   }
 
@@ -42,10 +40,19 @@ type event =
   | Output of string
   | Value of string * Types.t
   | Table of Page.t
+  | Viewed of string * result
+  | Schema of (string * Types.t) list
+  | Typed of Types.t
+  | Histogram of string * Arrow_result.histogram
 
 let history_limit = 100
 let result_limit = 8
 let remove path = if Sys.file_exists path then Sys.remove path
+
+let discard r =
+  Arrow_result.close r.arrow;
+  remove r.file
+;;
 
 let create ~project ~directory =
   { directory
@@ -61,7 +68,6 @@ let create ~project ~directory =
   ; host = None
   ; saved = None
   ; results = []
-  ; serial = 0
   ; counter = 0
   }
 ;;
@@ -76,6 +82,7 @@ let target t = t.project.target.value
 
 let close t =
   Option.iter (fun h -> Worker.stop h.worker) t.host;
+  List.iter (fun (_, r) -> discard r) t.results;
   t.results <- []
 ;;
 
@@ -144,12 +151,6 @@ let commit t revision =
   t.current <- revision
 ;;
 
-let release t (r : result) =
-  match t.host with
-  | Some h -> ignore (Worker.evaluate h.worker (Dialect.release h.target ~id:r.id))
-  | None -> ()
-;;
-
 let result t (table : TransformIR.table) =
   let h = establish t in
   let key =
@@ -160,37 +161,19 @@ let result t (table : TransformIR.table) =
   match List.assoc_opt key t.results with
   | Some r -> r
   | None ->
-    t.serial <- t.serial + 1;
-    let id = Printf.sprintf "result_%d" t.serial in
-    let total = Worker.evaluate h.worker (Dialect.result h.target h.names table ~id) in
-    let r = { table; id; total = int_of_string (String.trim total); session = t } in
-    let kept = List.filteri (fun i _ -> i < result_limit - 1) t.results in
-    List.iteri (fun i (_, old) -> if i >= result_limit - 1 then release t old) t.results;
-    t.results <- (key, r) :: kept;
+    let file = Filename.temp_file "rupam" ".arrow" in
+    ignore (Worker.evaluate h.worker (Dialect.result h.target h.names table ~path:file));
+    let r = { table; file; arrow = Arrow_result.open_ipc file } in
+    List.iteri (fun i (_, old) -> if i >= result_limit - 1 then discard old) t.results;
+    t.results <- (key, r) :: List.filteri (fun i _ -> i < result_limit - 1) t.results;
     r
 ;;
 
 let page r ~offset ~limit =
-  let t = r.session in
-  if not (List.exists (fun (_, x) -> x == r) t.results)
-  then Diagnostic.fail Unreadable_input "This result was released; evaluate it again";
-  let h = establish t in
-  let path = Filename.temp_file "rupam" ".parquet" in
-  Fun.protect
-    ~finally:(fun () -> remove path)
-    (fun () ->
-       ignore
-         (Worker.evaluate h.worker (Dialect.page h.target ~id:r.id ~offset ~limit ~path));
-       Page.read
-         ~path
-         ~total:r.total
-         ~ordered:(r.table.order <> None)
-         ~offset
-         ~limit
-         r.table.schema)
+  Page.of_arrow r.arrow ~ordered:(r.table.order <> None) ~offset ~limit r.table.schema
 ;;
 
-let total r = r.total
+let total r = Arrow_result.rows r.arrow
 let preview t table ~offset ~limit = page (result t table) ~offset ~limit
 
 let describe env (d : Syntax.declaration) =
@@ -260,12 +243,59 @@ let declare t (env, accepted, events) (source : Syntax.item) =
   env, accepted, events
 ;;
 
+let column_index r name =
+  let names = Arrow_result.names r.arrow in
+  let rec find i =
+    if i >= Array.length names
+    then Diagnostic.fail Unknown_column ("!hist has no column " ^ name)
+    else if names.(i) = name
+    then i
+    else find (i + 1)
+  in
+  find 0
+;;
+
+let inspect t env (tap : Tap.t) =
+  let _, shown =
+    Elaborate.item env { declaration = Evaluate tap.subject; span = tap.subject.span }
+  in
+  match tap.kind, shown, tap.arguments with
+  | Print, [ Show { node = Table table; _ } ], [] ->
+    Table (preview t table ~offset:0 ~limit:20)
+  | Print, [ (Show e as item) ], [] ->
+    Value (String.trim (run (establish t) [ item ]), e.typ)
+  | View, [ Show { node = Table table; _ } ], [] ->
+    Viewed (Format.expression tap.subject, result t table)
+  | Schema, [ Show { node = Table table; _ } ], [] -> Schema table.schema
+  | Schema, [ Show e ], [] -> Typed e.typ
+  | Hist, [ Show { node = Table table; _ } ], [ (None, { form = Name (_, column); _ }) ]
+    ->
+    let r = result t table in
+    Histogram
+      (column, Arrow_result.histogram r.arrow ~column:(column_index r column) ~bins:20)
+  | (View | Hist), _, _ ->
+    Diagnostic.fail
+      ~span:tap.subject.span
+      Not_a_table
+      "!view and !hist(column) inspect a table"
+  | _ ->
+    Diagnostic.fail
+      ~span:tap.subject.span
+      Wrong_arguments
+      "Unexpected arguments to an inspection"
+;;
+
+let step t (env, accepted, events) item =
+  let item, taps = Tap.split item in
+  let events = List.rev_append (List.map (inspect t env) taps) events in
+  match item with
+  | Some item -> declare t (env, accepted, events) item
+  | None -> env, accepted, events
+;;
+
 let submit t declarations =
   let env, accepted, events =
-    List.fold_left
-      (declare t)
-      (t.current.env, List.rev t.current.accepted, [])
-      declarations
+    List.fold_left (step t) (t.current.env, List.rev t.current.accepted, []) declarations
   in
   t.counter <- t.counter + 1;
   commit t { number = t.counter; env; accepted = List.rev accepted };

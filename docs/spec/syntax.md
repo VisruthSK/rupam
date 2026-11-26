@@ -97,7 +97,8 @@ boolean_not   = "not" boolean_not | comparison ;
 comparison    = fallback [ compare_op fallback ] ;
 compare_op    = "==" | "!=" | "~=" | "≈" | "<" | "<=" | ">" | ">=" | "in" | "not" "in" ;
 fallback      = range [ "??" fallback ] ;
-range         = sum [ ( "..=" | "..<" | ":" ) sum ] ;
+range         = sum [ ( between | ":" ) sum ] ;
+between       = ( "=" | "<" ) ".." ( "=" | "<" ) ;
 sum           = product { ( "+" | "-" ) product } ;
 product       = negation { ( "*" | "/" | "%" ) negation } ;
 negation      = [ "-" ] power ;
@@ -108,7 +109,7 @@ arg           = arg_name "=" expr | expr | "_" ;
 arg_name      = bare_ident | quoted_ident ;
 (* Preserve quoting in named arguments until contextual argument
    classification; see Tables. *)
-index         = expr | "end" | [ index ] ( "..=" | "..<" ) index | index ".." ;
+index         = expr | "end" | ( "..=" | "..<" ) expr | expr ( "=.." | "<.." ) ;
 
 primary       = ident | Ident | "$" ident | "^" ident | literal
               | "(" expr ")"
@@ -118,8 +119,8 @@ field         = ident [ "=" expr ] ;
 
 pattern       = alternative { "|" alternative } ;
 alternative   = "_" | ident [ "@" alternative ] | literal | signed_number
-              | signed_number ( "..=" | "..<" ) signed_number
-              | ( "..=" | "..<" ) signed_number | signed_number ".."
+              | signed_number between signed_number
+              | ( "..=" | "..<" ) signed_number | signed_number ( "=.." | "<.." )
               | Ident [ "(" pattern { "," pattern } ")" ]
               | "[" [ pattern { "," pattern } [ "," ".." [ ident ] ]
                       | ".." [ ident ] ] "]"
@@ -129,8 +130,8 @@ signed_number = [ "-" ] numeric_literal ;
 
 type          = refined_type [ "->" type ] ;
 refined_type  = optional_type [ ( ">" | ">=" | "!=" ) "0" | "in" interval ] ;
-interval      = signed_number [ "<" ] ( "..=" | "..<" ) signed_number
-              | signed_number [ "<" ] ".."
+interval      = signed_number between signed_number
+              | signed_number ( "=.." | "<.." )
               | ( "..=" | "..<" ) signed_number ;
 optional_type = atom_type [ "?" ] ;
 atom_type     = Ident [ "<" type_arg { "," type_arg } ">" ] | ident
@@ -189,7 +190,7 @@ Tightest first:
 3. unary `-`
 4. `*` `/` `%`
 5. `+` `-`
-6. `..=` `..<`, and `:` in column selectors
+6. ranges (`=..=`, `=..<`, `<..=`, `<..<`), and `:` in column selectors
 7. `??`, right-associative
 8. comparisons, `~=`, `in` and `not in` (ordering comparisons chain; others are non-associative)
 9. `not`
@@ -210,15 +211,18 @@ recognises its token sequence; write `-(x^y)` or `(-x)^y`. `not x > 0` means
 
 ## Ranges and indexing
 
-- `a..=b` is the Int vector from `a` to `b` inclusive; `a..<b` excludes
-  `b`. There is no bare `a..b`. Ranges never count down: `5..=1` is empty, and
-  `1..=5 |> rev()` is `[5, 4, 3, 2, 1]`. `1..=n-1` is `1..=(n-1)`.
-- Open ranges (`a..`, `..=b`, `..<b`) appear only in patterns and indexing.
+- Interval notation is symmetric: each side of `..` says whether its bound
+  is included (`=`) or excluded (`<`). `a=..=b` is [a, b], `a=..<b` is
+  [a, b), `a<..=b` is (a, b] and `a<..<b` is (a, b). Open forms are `a=..`,
+  `a<..`, `..=b` and `..<b`. There is no bare `a..b`. As an expression, a
+  range is the Int vector it denotes. Ranges never count down: `5=..=1` is empty, and
+  `1=..=5 |> rev()` is `[5, 4, 3, 2, 1]`. `1=..=n-1` is `1=..=(n-1)`.
+- Open ranges (`a=..`, `a<..`, `..=b`, `..<b`) appear only in patterns, indexing and refinements.
 - In a column selector, `a:b` is the columns from `a` to `b` in schema order,
-  as in dplyr. Elsewhere `a:b` is an `r-range` error with the fix `a..=b`.
+  as in dplyr. Elsewhere `a:b` is an `r-range` error with the fix `a=..=b`.
 - Inside a string slot, `:` always starts a format spec.
-- Vectors index from 1. `x[end]` is the last element. `x[2..]`, `x[..<4]`
-  and `x[2..=end]` are slices. An index or slice outside the vector is an
+- Vectors index from 1. `x[end]` is the last element. `x[2=..]`, `x[..<4]`
+  and `x[2=..=end]` are slices. An index or slice outside the vector is an
   error. Tables have no positional indexing.
 
 ## Patterns
@@ -226,20 +230,20 @@ recognises its token sequence; write `-(x^y)` or `(-x)^y`. `not x > 0` means
 ```text
 let group = match age {
   ..<18 => Child,
-  18..<65 => Adult,
-  65.. => Senior,
+  18=..<65 => Adult,
+  65=.. => Senior,
 }
 
 let band = match bmi {
   ..<18.5 => Under,
-  18.5..<25.0 => Healthy,
-  25.0..<30.0 => Over,
-  30.0.. => Obese,
+  18.5=..<25.0 => Healthy,
+  25.0=..<30.0 => Over,
+  30.0=.. => Obese,
 }
 
 match reading {
   Measured(v) if v < 0.0 => Invalid,
-  Measured(v @ 0.0..=1.0) => Calibrated(v),
+  Measured(v @ 0.0=..=1.0) => Calibrated(v),
   Measured(v) => Raw(v),
   Offline | Fault(_) => Unavailable,
 }
@@ -247,10 +251,10 @@ match reading {
 
 - `match a, b { p, q => e }` matches several subjects at once; each arm has
   one pattern per subject.
-- Patterns: `_`, names, literals except floats, ranges (`a..=b` inclusive,
-  `a..<b` half-open, `..<b`, `..=b`, `a..` meaning `a` and above). A lower
-  bound is always inclusive; adjacent half-open arms such as `..<18`,
-  `18..<65`, `65..` cover a domain without gaps or overlap, constructors,
+- Patterns: `_`, names, literals except floats, ranges in interval notation
+  (`a=..=b`, `a=..<b`, `a<..=b`, `a<..<b`, `a=..`, `a<..`, `..=b`, `..<b`);
+  adjacent arms such as `..<18`,
+  `18=..<65`, `65=..` cover a domain without gaps or overlap, constructors,
   `Some(v)` and `None` for options, vector heads with `..rest`
   (including `[..rest]`), records with optional `..`,
   alternatives, `@` bindings, guards.

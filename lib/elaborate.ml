@@ -153,7 +153,41 @@ let rec expr ctx (x : Syntax.expr) : C.expr =
     let subject = here subject in
     match_ ctx span subject (present_arms span subject arms)
   | Fallback (a, b) -> fallback span (here a) (here b)
-  | Range _ -> fail span R_range "`a:b` selects columns. For integers write `a..=b`"
+  | Sequence r ->
+    let a = lower ctx (here r.first) r.first_closed in
+    let b = upper ctx (here r.last) r.last_closed in
+    make Scalar (T.List T.Int) (Sequence (a, b))
+  | Index (subject, selection) ->
+    let subject = here subject in
+    let element = T.fresh ctx.level in
+    expect span (T.List element) subject.typ;
+    let bound (x : Syntax.expr) inclusive =
+      match x.form with
+      | Last -> None
+      | _ -> Some (upper ctx (here x) inclusive)
+    in
+    (match selection with
+     | Element { form = Sequence r; _ } ->
+       let low =
+         match r.first.form with
+         | Last -> None
+         | _ -> Some (lower ctx (here r.first) r.first_closed)
+       in
+       make Scalar subject.typ (Slice (subject, low, bound r.last r.last_closed))
+     | Element { form = Last; _ } -> make Scalar element (Element (subject, None))
+     | Element i -> make Scalar element (Element (subject, Some (position ctx (here i))))
+     | From (i, closed) ->
+       make Scalar subject.typ (Slice (subject, Some (lower ctx (here i) closed), None))
+     | Upto (i, inclusive) ->
+       make Scalar subject.typ (Slice (subject, None, bound i inclusive)))
+  | Last -> fail span Wrong_arguments "end refers to the last position inside x[...]"
+  | Tap _ ->
+    fail
+      span
+      Unsupported_feature
+      "Inspections like !view() belong to interactive pipelines at the prompt, not to \
+       functions or scripts"
+  | Range _ -> fail span R_range "`a:b` selects columns. For integers write `a=..=b`"
   | Formula _ ->
     fail
       span
@@ -454,6 +488,33 @@ and coerce _ctx param (v : C.expr) =
     expect v.span param element;
     v
 
+and position ctx (x : C.expr) =
+  expect x.span T.Int x.typ;
+  ignore ctx;
+  x
+
+and lower ctx (x : C.expr) closed =
+  let x = position ctx x in
+  if closed
+  then x
+  else
+    make
+      x.span
+      Scalar
+      T.Int
+      (Binary (Add, x, make x.span Scalar T.Int (Constant (Int 1L))))
+
+and upper ctx (x : C.expr) inclusive =
+  let x = position ctx x in
+  if inclusive
+  then x
+  else
+    make
+      x.span
+      Scalar
+      T.Int
+      (Binary (Sub, x, make x.span Scalar T.Int (Constant (Int 1L))))
+
 and fallback span v alternative =
   let v, alternative, t = common span v alternative in
   make
@@ -608,15 +669,18 @@ and match_ ctx span (subject : C.expr) syntax_arms =
        | Bool _ -> expect span T.Bool (T.present t)
        | Int _ -> ());
       C.Equals c, []
-    | Prange { low; high; inclusive } ->
+    | Prange { low; high } ->
       expect span (T.fresh ~kind:Number ctx.level) (T.present t);
       List.iter
-        (function
-          | Syntax.Float _ -> expect span T.Float (T.present t)
-          | _ -> ())
+        (fun (b : Syntax.bound) ->
+           match b.value with
+           | Syntax.Float _ -> expect span T.Float (T.present t)
+           | _ -> ())
         (Option.to_list low @ Option.to_list high);
-      let bound = Option.map (constant span) in
-      C.Between (bound low, bound high, inclusive), []
+      let bound =
+        Option.map (fun (b : Syntax.bound) -> constant span b.value, b.closed)
+      in
+      C.Between (bound low, bound high), []
     | Precord names ->
       let fields = List.map (fun n -> n, T.fresh ctx.level) names in
       expect span (T.Record { fields; rest = Some (T.fresh ctx.level) }) t;
@@ -751,10 +815,14 @@ and decide _ctx span subject arms typ shape =
         (Some (make span subject.shape T.Bool (Builtin (Present, [ subject ]))))
         (test p)
     | Equals c -> Some (compare Equal c)
-    | Between (low, high, inclusive) ->
+    | Between (low, high) ->
       both
-        (Option.map (compare Greater_equal) low)
-        (Option.map (compare (if inclusive then Less_equal else Less)) high)
+        (Option.map
+           (fun (c, closed) -> compare (if closed then Greater_equal else Greater) c)
+           low)
+        (Option.map
+           (fun (c, closed) -> compare (if closed then Less_equal else Less) c)
+           high)
     | Either ps ->
       let tests = List.map test ps in
       if List.mem None tests
@@ -970,6 +1038,9 @@ let rec settle (e : C.expr) : C.expr =
     | Record fs -> Record (List.map (fun (n, x) -> n, settle x) fs)
     | Field (x, n) -> Field (settle x, n)
     | Member (x, set) -> Member (settle x, settle set)
+    | Sequence (a, b) -> Sequence (settle a, settle b)
+    | Element (x, i) -> Element (settle x, Option.map settle i)
+    | Slice (x, a, b) -> Slice (settle x, Option.map settle a, Option.map settle b)
     | Foreign (m, f, xs) -> Foreign (m, f, List.map settle xs)
     | Text pieces ->
       Text

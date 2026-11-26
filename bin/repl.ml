@@ -187,6 +187,24 @@ let present r (event : Session.event) =
   | Output text -> print_string text
   | Value (text, typ) -> Printf.printf "%s : %s\n" text (Types.display typ)
   | Table page -> r.show ~digits:(digits r) page
+  | Viewed (title, result) -> r.view ~title result
+  | Schema columns ->
+    let width = List.fold_left (fun w (n, _) -> max w (String.length n)) 0 columns in
+    List.iter (fun (n, t) -> Printf.printf "%-*s  %s\n" width n (Types.display t)) columns
+  | Typed t -> print_endline (Types.display t)
+  | Histogram (column, h) ->
+    let most = Array.fold_left max 1 h.counts in
+    let step = (h.high -. h.low) /. float_of_int (Array.length h.counts) in
+    Printf.printf "%s\n" column;
+    Array.iteri
+      (fun i count ->
+         Printf.printf
+           "%12.4g  %s %d\n"
+           (h.low +. (step *. float_of_int i))
+           (String.concat "" (List.init (count * 40 / most) (fun _ -> "\xe2\x96\x88")))
+           count)
+      h.counts;
+    if h.missing > 0 then Printf.printf "%12s  %d\n" "None" h.missing
 ;;
 
 let submit r declarations =

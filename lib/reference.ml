@@ -46,6 +46,11 @@ let rec display = function
   | Frame f -> Printf.sprintf "<table of %d rows>" f.rows
 ;;
 
+let integer = function
+  | Int i -> i
+  | _ -> invalid_arg "Expected an integer"
+;;
+
 let number = function
   | Int i -> Int64.to_float i
   | Float f -> f
@@ -216,18 +221,13 @@ let rec matches env (p : C.pattern) v =
   | Present _, Missing -> None
   | Present p, v -> matches env p v
   | Equals c, v -> if compare_values (constant c) v = 0 then Some env else None
-  | Between (low, high, inclusive), v when v <> Missing ->
-    let above =
-      Option.fold ~none:true ~some:(fun l -> compare_values v (constant l) >= 0) low
+  | Between (low, high), v when v <> Missing ->
+    let within side (c, closed) =
+      let d = side * compare_values v (constant c) in
+      if closed then d >= 0 else d > 0
     in
-    let below =
-      Option.fold
-        ~none:true
-        ~some:(fun h ->
-          let c = compare_values v (constant h) in
-          if inclusive then c <= 0 else c < 0)
-        high
-    in
+    let above = Option.fold ~none:true ~some:(within 1) low in
+    let below = Option.fold ~none:true ~some:(within (-1)) high in
     if above && below then Some env else None
   | Between _, _ -> None
   | Tag (n, ps), Variant (m, vs) when n = m -> all env ps vs
@@ -338,6 +338,33 @@ let rec eval env ?rows (e : C.expr) =
   | Let (id, v, body) -> eval ((id.stamp, here v) :: env) ?rows body
   | Tuple xs -> Tuple (List.map here xs)
   | List xs -> List (List.map here xs)
+  | Sequence (a, b) ->
+    (match here a, here b with
+     | Int a, Int b ->
+       List
+         (List.init
+            (max 0 (Int64.to_int (Int64.sub b a) + 1))
+            (fun k -> Int (Int64.add a (Int64.of_int k))))
+     | _ -> invalid_arg "Expected integers")
+  | Element (x, i) ->
+    (match here x with
+     | List items ->
+       let n = List.length items in
+       let i = Option.fold ~none:n ~some:(fun i -> Int64.to_int (integer (here i))) i in
+       if i < 1 || i > n
+       then fail e Wrong_arguments (Printf.sprintf "index %d is outside 1..%d" i n)
+       else List.nth items (i - 1)
+     | _ -> invalid_arg "Expected a list")
+  | Slice (x, a, b) ->
+    (match here x with
+     | List items ->
+       let n = List.length items in
+       let a = Option.fold ~none:1 ~some:(fun i -> Int64.to_int (integer (here i))) a in
+       let b = Option.fold ~none:n ~some:(fun i -> Int64.to_int (integer (here i))) b in
+       if a < 1 || b > n
+       then fail e Wrong_arguments (Printf.sprintf "slice %d..=%d is outside 1..%d" a b n)
+       else List (List.filteri (fun k _ -> k + 1 >= a && k + 1 <= b) items)
+     | _ -> invalid_arg "Expected a list")
   | Record fs -> Record (List.map (fun (n, x) -> n, here x) fs)
   | Field (x, n) ->
     (match here x with

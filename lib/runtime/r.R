@@ -37,4 +37,21 @@ rp_format <- function(v, shape) {
 
 rp_show <- function(v, shape) rp_format(v, jsonlite::fromJSON(shape, simplifyVector = FALSE))
 
+rp_seq <- function(a, b) if (a > b) list() else lapply(seq_len(as.integer(b - a + 1)), function(k) a + k - 1L)
+
+rp_element <- function(x, i) {
+  n <- length(x)
+  if (is.null(i)) i <- n
+  if (i < 1 || i > n) stop("index ", i, " is outside 1..", n, call. = FALSE)
+  x[[as.integer(i)]]
+}
+
+rp_slice <- function(x, a, b) {
+  n <- length(x)
+  a <- if (is.null(a)) 1L else as.integer(a)
+  b <- if (is.null(b)) n else as.integer(b)
+  if (a < 1 || b > n) stop("slice ", a, "..=", b, " is outside 1..", n, call. = FALSE)
+  if (a > b) list() else x[a:b]
+}
+
 rp_coalesce <- function(x, fallback) if (is.null(x)) fallback else x

@@ -15,6 +15,13 @@ type reference =
   | Column
 [@@deriving sexp_of]
 
+type tap =
+  | Print
+  | View
+  | Schema
+  | Hist
+[@@deriving sexp_of]
+
 type literal =
   | Int of string
   | Float of string
@@ -58,9 +65,13 @@ type pattern =
 [@@deriving sexp_of]
 
 and range =
-  { low : literal option
-  ; high : literal option
-  ; inclusive : bool
+  { low : bound option
+  ; high : bound option
+  }
+
+and bound =
+  { value : literal
+  ; closed : bool
   }
 
 type annotation =
@@ -78,6 +89,18 @@ type expr =
   ; span : span
   }
 [@@deriving sexp_of]
+
+and interval =
+  { first : expr
+  ; first_closed : bool
+  ; last : expr
+  ; last_closed : bool
+  }
+
+and index =
+  | Element of expr
+  | From of expr * bool
+  | Upto of expr * bool
 
 and arm =
   { pattern : pattern
@@ -114,6 +137,10 @@ and form =
   | Binary of binary * expr * expr
   | Chain of expr * (binary * expr) list
   | Fallback of expr * expr
+  | Sequence of interval
+  | Index of expr * index
+  | Last
+  | Tap of tap * (string option * expr) list
   | Match_present of expr * arm list
   | Unary of unary * expr
   | If of expr * expr * expr
@@ -190,6 +217,12 @@ let map f x =
     | Range (a, b) -> Range (f a, f b)
     | Binary (op, a, b) -> Binary (op, f a, f b)
     | Fallback (a, b) -> Fallback (f a, f b)
+    | Sequence r -> Sequence { r with first = f r.first; last = f r.last }
+    | Index (x, Element i) -> Index (f x, Element (f i))
+    | Index (x, From (i, closed)) -> Index (f x, From (f i, closed))
+    | Index (x, Upto (i, inclusive)) -> Index (f x, Upto (f i, inclusive))
+    | Last -> Last
+    | Tap (t, args) -> Tap (t, List.map (fun (n, x) -> n, f x) args)
     | Match_present (x, arms) ->
       Match_present
         ( f x
