@@ -55,17 +55,13 @@ let relative root path =
 let load root =
   let path = Filename.concat root file_name in
   if not (Sys.file_exists path)
-  then []
+  then Some []
   else (
-    let file = file_of_yojson (Yojson.Safe.from_file path) in
-    if file.version <> version
-    then
-      Diagnostic.fail
-        Stale_lock
-        (Printf.sprintf
-           "%s was written by an older rupam. Run rupam lock again to replace it."
-           path);
-    file.entries)
+    match file_of_yojson (Yojson.Safe.from_file path) with
+    | { version = v; entries } when v = version -> Some entries
+    | _ -> None
+    | exception (Yojson.Json_error _ | Ppx_yojson_conv_lib.Yojson_conv.Of_yojson_error _) ->
+      None)
 ;;
 
 let save root entries =
@@ -133,7 +129,7 @@ let write root entry =
   let others =
     List.filter
       (fun e -> not (e.source = entry.source && e.target = entry.target))
-      (load root)
+      (Option.value (load root) ~default:[])
   in
   save root (others @ [ entry ])
 ;;
@@ -160,10 +156,19 @@ let differences locked current =
 
 let require ~project ~source items =
   let root, current, contracts = analysis ~project ~source items in
+  let entries =
+    match load root with
+    | Some entries -> entries
+    | None ->
+      Diagnostic.fail
+        Stale_lock
+        (Printf.sprintf
+           "%s was written by another rupam version. Run rupam lock %s to replace it."
+           (Filename.concat root file_name)
+           source)
+  in
   match
-    List.find_opt
-      (fun e -> e.source = current.source && e.target = current.target)
-      (load root)
+    List.find_opt (fun e -> e.source = current.source && e.target = current.target) entries
   with
   | Some locked ->
     (match differences locked current with
