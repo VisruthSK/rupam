@@ -40,6 +40,7 @@ class Terminal:
             os.chdir(directory)
             os.environ.update(
                 TERM="xterm-256color",
+                COLORTERM="truecolor",
                 XDG_CONFIG_HOME=str(directory / "config"),
                 XDG_STATE_HOME=str(directory / "state"),
             )
@@ -99,6 +100,13 @@ class Terminal:
         x, y = self.point(text)
         return self.screen.buffer[y - 1][x - 1]
 
+    def highlighted(self, text):
+        return any(
+            self.screen.buffer[y][x].bg == "4f3e30"
+            for y, line in enumerate(self.lines)
+            for x in range(len(line)) if line.startswith(text, x)
+        )
+
     def click(self, text):
         x, y = self.point(text)
         self.send(f"\x1b[<0;{x};{y}M\x1b[<0;{x};{y}m".encode())
@@ -134,61 +142,74 @@ class InteractiveRepl(unittest.TestCase):
             with Terminal(directory, "repl", "--target", "python-polars", "shop.rp") as terminal:
                 terminal.until("rupam ❯")
                 terminal.submit(":view orders")
-                terminal.until("Rupam pipeline")
-                terminal.until("customer_id = 1")
+                terminal.until("Edit [i]")
                 terminal.send(RIGHT)
-                terminal.until('region = "North"')
+                terminal.until(lambda _: terminal.highlighted("North"))
                 terminal.send(b"SSS")
-                terminal.until("Preview 1")
+                terminal.until("ordered by (region desc)")
                 terminal.send(LEFT)
                 terminal.send(b"S")
-                terminal.until("Preview 2")
+                terminal.until("ordered by (region desc, customer_id desc)")
                 terminal.until("South")
                 terminal.click("South")
-                terminal.until('region = "South"')
+                terminal.until(lambda _: terminal.highlighted("South"))
+                terminal.click("Details [d]")
+                terminal.until("2 distinct")
+                terminal.until("n = 4")
+                terminal.until('████████████  2  "South"')
                 terminal.send(RIGHT * 2)
-                terminal.until("cost = 1.0")
+                terminal.until(lambda _: terminal.highlighted("1.00"))
                 header = next(line for line in terminal.lines if "customer_id" in line and "revenue" in line)
                 header_line = terminal.lines.index(header)
                 self.assertIn("│", header)
                 self.assertIn("cost", header)
-                terminal.click("d Details")
+                terminal.click("Details [d]")
                 terminal.until("Skewness")
-                terminal.until("Q1 0.5   Median 1   Q3 1.5")
-                terminal.until("Mean 1   SD 1")
+                terminal.until("Min 0.00   Q1 0.50")
+                terminal.until("Median 1.00   Q3 1.50")
+                terminal.until("Max 2.00")
+                terminal.until("Mean 1.00   SD 1.00")
+                terminal.until("n = 3")
                 self.assertEqual(terminal.lines[header_line], header)
                 self.assertTrue(any("South" in line and "1.00" in line for line in terminal.lines))
                 self.assertNotEqual(terminal.painted_cell("None").fg,
                                     terminal.painted_cell("1.00").fg)
                 terminal.send(b"fj")
-                terminal.until("cost = 0.0")
+                terminal.until(lambda _: terminal.highlighted("0.00"))
                 self.assertFalse(any("1 Skip" in line for line in terminal.lines))
                 terminal.send(b"k")
-                terminal.until("cost = 1.0")
+                terminal.until(lambda _: terminal.highlighted("1.00"))
                 terminal.send(b"=")
                 terminal.until("1 Skip")
-                terminal.send(b"1" + ENTER)
-                terminal.until("let view_result")
+                terminal.send(b"1")
+                terminal.until("1 row × 4 columns")
+                terminal.send(ENTER)
+                terminal.until("name ❯")
+                terminal.send(b"\x7f" * len("view_result"))
+                terminal.paste("kept_orders")
+                terminal.send(ENTER)
+                terminal.until("rupam ❯")
+                terminal.until(lambda lines: not any("Edit [i]" in line for line in lines))
                 terminal.submit(":save saved.rp")
-                terminal.until("saved.rp")
+                terminal.until("Saved saved.rp")
                 saved = directory / "saved.rp"
                 self.assertTrue(saved.exists(), "\n".join(terminal.lines))
                 terminal.submit(":quit")
             source = saved.read_text(encoding="utf-8")
-            viewer = source.split("let view_result", 1)[1]
+            viewer = source.split("let kept_orders", 1)[1]
             self.assertEqual(viewer.count("arrange("), 1, viewer)
             self.assertIn("desc($region), desc($customer_id)", viewer)
             self.assertIn("filter($cost == 1.0, missing = skip)", viewer)
             checked = subprocess.run([RUPAM, "check", saved],
                                      cwd=directory, capture_output=True, text=True, timeout=60)
             self.assertEqual(checked.returncode, 0, checked.stderr)
-            ir = subprocess.run([DEV, "transform-ir", "--binding", "view_result", saved],
+            ir = subprocess.run([DEV, "transform-ir", "--binding", "kept_orders", saved],
                                 cwd=directory, capture_output=True, text=True, timeout=60)
             self.assertEqual(ir.returncode, 0, ir.stderr)
             self.assertEqual(ir.stdout.count("(Arrange"), 1, ir.stdout)
             self.assertEqual(ir.stdout.count("(Filter"), 1, ir.stdout)
             with saved.open("a", encoding="utf-8") as file:
-                file.write('\nwrite_parquet(view_result, "viewer-result.parquet")\n')
+                file.write('\nwrite_parquet(kept_orders, "viewer-result.parquet")\n')
             for target in ("python-polars", "r-dplyr"):
                 with self.subTest(target=target):
                     for command in ("lock", "run"):
@@ -218,21 +239,21 @@ class InteractiveRepl(unittest.TestCase):
                 terminal.until("39.10")
                 terminal.wheel_down("39.10")
                 terminal.until(lambda lines: any(line.startswith("│  4 ") for line in lines))
-                terminal.send(b"e")
-                terminal.until("Tab Complete")
-                terminal.paste("\n    |> ")
+                terminal.send(b"i")
+                terminal.until("Grid [Esc]")
+                terminal.send(b"\x1b[27;2;13~")
+                terminal.send(b"\x1b[109;6u")
                 terminal.until("incomplete-input")
                 self.assertTrue(any("344 rows" in line for line in terminal.lines))
                 terminal.paste("filter(body_mass > 4000, missing = skip)")
-                terminal.until("Preview 2")
-                self.assertFalse(any("344 rows" in line for line in terminal.lines))
+                terminal.until(lambda lines: any("rows × 8 columns" in line and "344 rows" not in line for line in lines))
                 terminal.paste('\n    |> write_parquet("unapproved.parquet")')
                 terminal.until("not-a-table")
                 self.assertFalse((directory / "unapproved.parquet").exists())
                 terminal.send(b"\x1b")
-                terminal.until("Enter Save")
+                terminal.until("Close [q]")
                 terminal.send(b"\x1b")
-                terminal.until(lambda lines: not any("Rupam pipeline" in line for line in lines))
+                terminal.until(lambda lines: not any("Edit [i]" in line for line in lines))
                 terminal.submit(":bindings")
                 terminal.until("penguins :")
                 self.assertFalse(any("view_result" in line for line in terminal.lines))
@@ -240,6 +261,7 @@ class InteractiveRepl(unittest.TestCase):
     def test_value_filter_uses_exact_typed_cell(self):
         with tempfile.TemporaryDirectory() as tmp:
             directory = Path(tmp)
+            (directory / "rupam.toml").write_text("[preview]\ndigits = 3\n", encoding="utf-8")
             (directory / "exact.csv").write_text(
                 "measurement\n0.30000000000000004\n0.3\n", encoding="utf-8"
             )
@@ -247,11 +269,17 @@ class InteractiveRepl(unittest.TestCase):
                 terminal.until("rupam ❯")
                 terminal.submit('let exact = read_csv("exact.csv")')
                 terminal.submit(":view exact")
-                terminal.until("measurement = 0.30000000000000004")
-                self.assertEqual(sum("0.30" in line and "│" in line for line in terminal.lines), 2)
+                terminal.until(lambda _: terminal.highlighted("0.300"))
+                self.assertEqual(sum("0.300" in line and "│" in line for line in terminal.lines), 2)
+                terminal.send(b"d")
+                terminal.until("Min 0.300   Q1 0.300")
                 terminal.send(b"=")
                 terminal.until("1 row × 1 column")
                 terminal.until("$measurement == 0.30000000000000004")
+                terminal.send(ENTER)
+                terminal.until("name ❯")
+                terminal.send(ENTER)
+                terminal.until("let view_result")
 
     def test_escape_cancels_preview_without_killing_repl_worker(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -280,7 +308,7 @@ class InteractiveRepl(unittest.TestCase):
                           "viewer-penguins.rp", env=env) as terminal:
                 terminal.until("rupam ❯")
                 terminal.submit(":view penguins")
-                terminal.until("Rupam pipeline")
+                terminal.until("Edit [i]")
                 slow.touch()
                 terminal.send(b"s")
                 terminal.until(lambda _: started.exists() and started.stat().st_size > 0)
@@ -288,20 +316,20 @@ class InteractiveRepl(unittest.TestCase):
                 try:
                     slow.unlink()
                     terminal.send(b"S")
-                    terminal.until("Preview 2")
+                    terminal.until("ordered by (species desc)")
                     with self.assertRaises(ProcessLookupError):
                         os.kill(pid, 0)
                     terminal.send(b"q")
-                    terminal.until(lambda lines: not any("Rupam pipeline" in line for line in lines))
+                    terminal.until(lambda lines: not any("Edit [i]" in line for line in lines))
                     terminal.submit(":view penguins")
-                    terminal.until("Rupam pipeline")
+                    terminal.until("Edit [i]")
                     started.unlink()
                     slow.touch()
                     terminal.send(b"s")
                     terminal.until(lambda _: started.exists() and started.stat().st_size > 0)
                     pid = int(started.read_text(encoding="utf-8"))
                     terminal.send(b"\x1b")
-                    terminal.until(lambda lines: not any("Rupam pipeline" in line for line in lines))
+                    terminal.until(lambda lines: not any("Edit [i]" in line for line in lines))
                     with self.assertRaises(ProcessLookupError):
                         os.kill(pid, 0)
                     terminal.submit(":preview penguins")

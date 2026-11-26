@@ -15,11 +15,14 @@ type msg =
   | Act of Viewer.action
   | Return
   | Close
-  | Focus_draft
-  | Focus_editor
+  | Focus_prompt
+  | Focus_grid
+  | Newline
+  | Insert_pipe
   | Ignore
-  | Draft_edit of Editor.t
-  | Draft_complete
+  | Name_edit of Editor.t
+  | Name_confirm
+  | Name_cancel
   | Draft_tick
   | Draft_ready of int * (Rupam.Session.result, Rupam.Diagnostic.t) result
   | Column_ready of int * string * (Rupam.Arrow_result.profile, Rupam.Diagnostic.t) result
@@ -34,13 +37,18 @@ type model =
   ; pages : Rupam.Page.t list ref
   ; opened : (Rupam.Syntax.expr * Rupam.Session.result) option ref
   ; viewer : Viewer.t option
-  ; draft_menu : menu option
   ; editing : bool
+  ; naming : Editor.t option
+  ; placement : placement
   ; working : work option
   ; closing : bool
   ; save_requested : int option
   ; size : int * int
   }
+
+and placement =
+  | Below
+  | Beside
 
 and work =
   | Preview_work
@@ -52,13 +60,12 @@ and menu =
   ; selected : int option
   }
 
-let accent = Color.of_rgb 120 180 255
-let subtle = Color.grayscale ~level:12
+let accent = Color.of_rgb 235 200 142
+let subtle = Color.grayscale ~level:17
 let faint = Color.grayscale ~level:8
-let success = Color.of_rgb 125 211 160
 let failure = Color.of_rgb 240 113 120
 let missing = Color.of_rgb 218 137 145
-let typed = Color.of_rgb 130 200 220
+let typed = Color.of_rgb 232 225 215
 let style ?bold ?dim fg = Style.make ?bold ?dim ~fg ()
 let prompt = "rupam \xe2\x9d\xaf "
 let continuation = "    \xe2\x80\xa6 "
@@ -230,7 +237,7 @@ let grid_table ~digits (v : Viewer.t) (page : Rupam.Page.t) =
                     (Style.make
                        ~bold:true
                        ~fg:(if value = None then missing else accent)
-                       ~bg:(Color.of_rgb 43 60 84)
+                       ~bg:(Color.of_rgb 79 62 48)
                        ())
                 else if value = None
                 then Some (style missing)
@@ -269,7 +276,7 @@ let grid_table ~digits (v : Viewer.t) (page : Rupam.Page.t) =
   in
   table
     ~key:"viewer-grid"
-    ~size:{ width = pct 100; height = px (Viewer.rows v + 5) }
+    ~size:{ width = pct 100; height = px (count + 5) }
     ~border:true
     ~border_style:Border.rounded
     ~cell_padding:0
@@ -295,23 +302,101 @@ let controls actions =
        (fun (label, action) ->
           button
             ~border:false
-            ~margin:(margin_lrtb 0 1 0 0)
+            ~margin:(margin_lrtb 0 2 0 0)
             ~text_style:(style typed)
             ~on_activate:action
             label)
        actions)
 ;;
 
+let prompt_editor ?key ?on_focus_request ~focused ~label ~state ~on_change () =
+  box
+    ~flex_direction:Row
+    ~size:full
+    [ text ~style:(style ~bold:true accent) label
+    ; textarea
+        ?key
+        ?on_focus_request
+        ~size:full
+        ~focused
+        ~show_cursor:focused
+        ~text_color:typed
+        ~focused_text_color:(Color.of_rgb 244 231 213)
+        ~state
+        ~on_change
+        ()
+    ]
+;;
+
+let input_pane model ~focused =
+  let lines = List.length (String.split_on_char '\n' (Editor.text model.input)) in
+  box
+    ~flex_direction:Row
+    ~size:{ width = pct 100; height = px (max 1 (min 8 lines)) }
+    [ prompt_editor
+        ~label:(if model.pending = [] then prompt else continuation)
+        ~focused
+        ~on_focus_request:Focus_prompt
+        ~state:model.input
+        ~on_change:(fun e -> Edit e)
+        ()
+    ]
+;;
+
+let suggestions model =
+  match model.menu with
+  | None -> []
+  | Some menu ->
+    let width =
+      List.fold_left
+        (fun w (s : Repl.suggestion) -> max w (String.length s.text))
+        0
+        menu.items
+    in
+    let first =
+      match menu.selected with
+      | Some i when i >= 8 -> i - 7
+      | _ -> 0
+    in
+    let shown = List.filteri (fun i _ -> i >= first && i < first + 8) menu.items in
+    List.mapi
+      (fun i (s : Repl.suggestion) ->
+         let chosen = menu.selected = Some (first + i) in
+         box
+           ~flex_direction:Row
+           [ text
+               ~style:(if chosen then style ~bold:true accent else style typed)
+               (Printf.sprintf
+                  "  %s %-*s"
+                  (if chosen then "\xe2\x80\xba" else " ")
+                  width
+                  s.text)
+           ; text ~style:(style faint) ("  " ^ s.detail)
+           ])
+      shown
+    @
+    let rest = List.length menu.items - first - List.length shown in
+    if rest > 0
+    then [ text ~style:(style faint) (Printf.sprintf "    \xe2\x80\xa6 %d more" rest) ]
+    else []
+;;
+
 let grid model (v : Viewer.t) =
   let page = Viewer.visible v in
+  let digits = Repl.digits model.session in
+  let ordering = Viewer.ordering model.session.session v in
+  let width, height = model.size in
   let body =
-    [ text ~style:(style subtle) (Rupam.Page.summary page)
-    ; grid_table ~digits:(Repl.digits model.session) v page
-    ]
+    box
+      ~flex_direction:Column
+      ~size:{ width = pct 100; height = px (max 1 (height - Viewer.panel_height)) }
+      [ text ~style:(style subtle) (Rupam.Page.summary ~ordering page)
+      ; grid_table ~digits v page
+      ]
   in
   let notice =
     if model.closing
-    then text ~style:(style subtle) "Closing preview…"
+    then text ~style:(style subtle) "Closing preview\xe2\x80\xa6"
     else (
       match v.policy, v.diagnostic with
       | Some _, _ ->
@@ -320,87 +405,77 @@ let grid model (v : Viewer.t) =
           ; "2 Keep", Act (Missing_policy Keep)
           ; "3 Error", Act (Missing_policy Fail)
           ]
-      | None, Some d ->
-        text
-          ~style:(style failure)
-          (Printf.sprintf "Grid %d · %s" v.displayed (Rupam.Diagnostic.render d))
+      | None, Some diagnostic ->
+        text ~style:(style failure) (Rupam.Diagnostic.render diagnostic)
       | None, None when v.displayed <> v.generation ->
         text
           ~style:(style subtle)
-          (Printf.sprintf
-             "Grid %d · %s draft %d…"
-             v.displayed
-             (if model.save_requested = Some v.generation then "saving" else "checking")
-             v.generation)
-      | None, None ->
-        text ~style:(style success) (Printf.sprintf "Preview %d" v.displayed))
+          (if model.save_requested = Some v.generation
+           then "Saving\xe2\x80\xa6"
+           else "Updating preview\xe2\x80\xa6")
+      | None, None -> text "")
+  in
+  let toolbar =
+    if model.editing
+    then
+      controls
+        [ "Run [Enter]", Return
+        ; "Newline [Shift+Enter]", Newline
+        ; "Pipe [Ctrl+Shift+M]", Insert_pipe
+        ; "Grid [Esc]", Focus_grid
+        ]
+    else
+      controls
+        [ "Sort \xe2\x86\x91 [s]", Act (Sort Ascending)
+        ; "Sort \xe2\x86\x93 [S]", Act (Sort Descending)
+        ; "Keep value [=]", Act Keep_value
+        ; "Details [d]", Act Distribution
+        ; "Undo [u]", Act Undo
+        ; "Edit [i]", Focus_prompt
+        ; "Run [Enter]", Return
+        ; "Close [q]", Close
+        ]
+  in
+  let details = List.map (text ~style:(style typed)) (Viewer.bars ~digits v) in
+  let naming =
+    match model.naming with
+    | None -> []
+    | Some state ->
+      [ box
+          ~flex_direction:Row
+          ~size:{ width = pct 100; height = px 1 }
+          [ prompt_editor
+              ~label:"name \xe2\x9d\xaf "
+              ~focused:true
+              ~state
+              ~on_change:(fun e -> Name_edit e)
+              ()
+          ]
+      ]
   in
   let editor =
-    textarea
-      ~key:"viewer-source"
-      ~size:{ width = pct 100; height = px 4 }
-      ~focused:model.editing
-      ~show_cursor:model.editing
-      ~on_focus_request:Focus_editor
-      ~state:v.draft
-      ~on_change:(fun draft -> Draft_edit draft)
-      ()
+    (input_pane model ~focused:(model.editing && model.naming = None) :: naming)
+    @ suggestions model
   in
-  let controls =
-    controls
-      (if model.editing
-       then [ "Tab Complete", Draft_complete; "F2 Grid", Focus_draft; "F5 Save", Return ]
-       else
-         [ "s Sort ↑", Act (Sort Ascending)
-         ; "S Sort ↓", Act (Sort Descending)
-         ; "= Keep", Act Keep_value
-         ; "d Details", Act Distribution
-         ; "u Undo", Act Undo
-         ; "F2 Edit", Focus_draft
-         ; "Enter Save", Return
-         ; "Esc Close", Close
-         ])
-  in
-  let details = List.map (text ~style:(style typed)) (Viewer.bars v) in
-  let completion =
-    match model.draft_menu with
-    | Some { items; _ } ->
-      [ text
-          ~style:(style typed)
-          (String.concat
-             "   "
-             (List.map (fun (s : Repl.suggestion) -> s.text) (Viewer.take 5 items)))
-      ]
-    | None -> []
-  in
-  let body =
+  let table =
     box
       ~flex_direction:Column
-      ~size:
-        { width = pct 100; height = px (max 1 (snd model.size - Viewer.panel_height)) }
-      body
+      ~size:{ width = pct 100; height = auto }
+      ([ body; notice ] @ details @ [ toolbar ])
   in
-  let editor_panel =
+  match model.placement with
+  | Below ->
     box
       ~flex_direction:Column
-      ~size:{ width = pct (if details = [] then 100 else 56); height = px 5 }
-      [ text ~style:(style ~bold:true accent) ("Rupam pipeline   →   " ^ v.binding)
-      ; editor
-      ]
-  in
-  let panels =
+      ~size:{ width = pct 100; height = px height }
+      (table :: editor)
+  | Beside ->
     box
       ~flex_direction:Row
-      ~size:{ width = pct 100; height = px 5 }
-      [ editor_panel; box ~flex_direction:Column details ]
-  in
-  box
-    ~flex_direction:Column
-    ~size:{ width = pct 100; height = px (snd model.size) }
-    ([ body; text ~style:(style subtle) (Viewer.selected_text v) ]
-     @ [ panels; notice ]
-     @ completion
-     @ [ controls ])
+      ~size:{ width = px width; height = px height }
+      [ box ~flex_direction:Column ~size:{ width = pct 40; height = pct 100 } editor
+      ; box ~flex_direction:Column ~size:{ width = pct 60; height = pct 100 } [ table ]
+      ]
 ;;
 
 let view model =
@@ -417,68 +492,11 @@ let view model =
              ])
         (List.rev model.pending)
     in
-    let editor =
-      box
-        ~flex_direction:Row
-        ~align_items:Center
-        ~size:
-          { width = pct 100
-          ; height =
-              px
-                (max
-                   1
-                   (min
-                      6
-                      (List.length (String.split_on_char '\n' (Editor.text model.input)))))
-          }
-        [ text
-            ~style:(style ~bold:true accent)
-            (if model.pending = [] then prompt else continuation)
-        ; textarea
-            ~size:full
-            ~focused:true
-            ~state:model.input
-            ~on_change:(fun e -> Edit e)
-            ()
-        ]
-    in
-    let suggestions =
-      match model.menu with
-      | None -> []
-      | Some menu ->
-        let width =
-          List.fold_left
-            (fun w (s : Repl.suggestion) -> max w (String.length s.text))
-            0
-            menu.items
-        in
-        let first =
-          match menu.selected with
-          | Some i when i >= 8 -> i - 7
-          | _ -> 0
-        in
-        let shown = List.filteri (fun i _ -> i >= first && i < first + 8) menu.items in
-        List.mapi
-          (fun i (s : Repl.suggestion) ->
-             let chosen = menu.selected = Some (first + i) in
-             box
-               ~flex_direction:Row
-               [ text
-                   ~style:(if chosen then style ~bold:true accent else style typed)
-                   (Printf.sprintf "  %s %-*s" (if chosen then "›" else " ") width s.text)
-               ; text ~style:(style faint) ("  " ^ s.detail)
-               ])
-          shown
-        @
-        let rest = List.length menu.items - first - List.length shown in
-        if rest > 0
-        then [ text ~style:(style faint) (Printf.sprintf "    … %d more" rest) ]
-        else []
-    in
+    let editor = input_pane model ~focused:true in
     box
       ~flex_direction:Column
       ~size:full
-      (pending @ [ editor ] @ suggestions @ [ status model.session ])
+      (pending @ [ editor ] @ suggestions model @ [ status model.session ])
 ;;
 
 let banner session =
@@ -527,21 +545,28 @@ let evaluate model source =
     then (
       Rupam.Session.close model.session.session;
       model, Cmd.batch [ committed; Cmd.quit ])
-    else
+    else (
+      let viewer =
+        Option.map
+          (fun (subject, result) ->
+             let width, height = model.size in
+             Viewer.open_ model.session.session subject result ~width ~height)
+          !(model.opened)
+      in
       ( { model with
-          input = Editor.empty
-        ; pending = []
+          pending = []
         ; history
         ; recalled = None
         ; menu = None
-        ; viewer =
-            Option.map
-              (fun (subject, result) ->
-                 let width, height = model.size in
-                 Viewer.open_ model.session.session subject result ~width ~height)
-              !(model.opened)
+        ; viewer
+        ; input =
+            Option.fold
+              ~none:Editor.empty
+              ~some:(fun v -> Editor.of_string (Viewer.source v))
+              viewer
+        ; editing = false
         }
-      , committed ))
+      , committed )))
 ;;
 
 let recall model step =
@@ -629,15 +654,32 @@ let close_viewer model =
   { model with
     viewer = None
   ; editing = false
-  ; draft_menu = None
+  ; naming = None
   ; closing = false
   ; save_requested = None
+  ; input = Editor.empty
+  ; menu = None
   }
 ;;
 
-let save_viewer model v =
-  let source = Viewer.submission v in
-  evaluate (close_viewer { model with pending = [] }) source
+let submit_viewer model v name =
+  match Viewer.submission v name with
+  | source -> evaluate (close_viewer { model with pending = [] }) source
+  | exception Rupam.Diagnostic.Error diagnostic ->
+    ( { model with
+        viewer = Some { v with diagnostic = Some diagnostic }
+      ; save_requested = None
+      ; naming = None
+      }
+    , Cmd.none )
+;;
+
+let save_viewer model (v : Viewer.t) =
+  if Viewer.named v
+  then submit_viewer model v ""
+  else
+    ( { model with naming = Some (Editor.of_string v.binding); save_requested = None }
+    , Cmd.none )
 ;;
 
 let finish_viewer_work model =
@@ -654,11 +696,16 @@ let change_draft model f =
   | None -> model
   | Some v ->
     let (next : Viewer.t) = f v in
+    let input =
+      if Viewer.source next = Editor.text model.input
+      then model.input
+      else Editor.of_string (Viewer.source next)
+    in
     if next.generation = v.generation
-    then { model with viewer = Some next }
+    then { model with viewer = Some next; input }
     else (
       if model.working = Some Preview_work then Rupam.Session.cancel_draft v.context;
-      { model with viewer = Some next; save_requested = None })
+      { model with viewer = Some next; input; save_requested = None })
 ;;
 
 let result_of f =
@@ -671,12 +718,34 @@ let update msg model =
   match msg with
   | Ignore -> model, Cmd.none
   | Edit input ->
-    { model with input; menu = filter_menu model.session input model.menu }, Cmd.none
+    let model = { model with input; menu = filter_menu model.session input model.menu } in
+    change_draft model (fun v -> Viewer.edit v (Editor.text input)), Cmd.none
+  | Newline ->
+    let input = Editor.insert "\n" model.input in
+    ( change_draft { model with input; menu = None } (fun v ->
+        Viewer.edit v (Editor.text input))
+    , Cmd.none )
+  | Insert_pipe ->
+    let input = Editor.insert " |> " model.input in
+    ( change_draft { model with input; menu = None } (fun v ->
+        Viewer.edit v (Editor.text input))
+    , Cmd.none )
+  | Name_edit state -> { model with naming = Some state }, Cmd.none
+  | Name_confirm ->
+    (match model.viewer, model.naming with
+     | Some v, Some state ->
+       let name = String.trim (Editor.text state) in
+       if Rupam.Identifier.valid name && name <> ""
+       then submit_viewer { model with naming = None } v name
+       else model, Cmd.none
+     | _ -> model, Cmd.none)
+  | Name_cancel -> { model with naming = None }, Cmd.none
   | Submit source -> evaluate model source
   | Recall step -> { (recall model step) with menu = None }, Cmd.none
   | Complete ->
     let input, menu = complete_editor model.session model.input model.menu in
-    { model with input; menu }, Cmd.none
+    ( change_draft { model with input; menu } (fun v -> Viewer.edit v (Editor.text input))
+    , Cmd.none )
   | Clear -> { model with input = Editor.empty; pending = [] }, Cmd.static_clear
   | Quit ->
     Rupam.Session.close model.session.session;
@@ -695,7 +764,6 @@ let update msg model =
     ( { model with
         viewer = Option.map (fun v -> Viewer.move v (Cell (row, column))) model.viewer
       ; editing = false
-      ; draft_menu = None
       }
     , Cmd.none )
   | Act Distribution ->
@@ -731,21 +799,8 @@ let update msg model =
         model.viewer;
       { model with closing = true }, Cmd.none)
     else close_viewer model, Cmd.none
-  | Focus_draft -> { model with editing = not model.editing; draft_menu = None }, Cmd.none
-  | Focus_editor -> { model with editing = true; draft_menu = None }, Cmd.none
-  | Draft_edit draft ->
-    let draft_menu =
-      if model.working = Some Preview_work
-      then None
-      else filter_menu model.session draft model.draft_menu
-    in
-    change_draft { model with draft_menu } (fun v -> Viewer.edit v draft), Cmd.none
-  | Draft_complete ->
-    (match model.viewer with
-     | Some v when model.working <> Some Preview_work ->
-       let draft, draft_menu = complete_editor model.session v.draft model.draft_menu in
-       change_draft { model with draft_menu } (fun v -> Viewer.edit v draft), Cmd.none
-     | _ -> model, Cmd.none)
+  | Focus_prompt -> { model with editing = true }, Cmd.none
+  | Focus_grid -> { model with editing = false; menu = None }, Cmd.none
   | Draft_tick ->
     (match model.viewer with
      | Some v
@@ -793,6 +848,22 @@ let update msg model =
       finish_viewer_work { model with viewer })
 ;;
 
+let editing_keys =
+  Sub.on_key ~phase:Capture (fun event ->
+    let key = Event.Key.data event in
+    let only_shift =
+      not (key.mods.alt || key.mods.super || key.mods.hyper || key.mods.meta)
+    in
+    match key.key with
+    | Enter when key.mods.shift && (not key.mods.ctrl) && only_shift -> Some Newline
+    | Char c
+      when (Uchar.to_int c = Char.code 'm' || Uchar.to_int c = Char.code 'M')
+           && key.mods.ctrl
+           && key.mods.shift
+           && only_shift -> Some Insert_pipe
+    | _ -> None)
+;;
+
 let subscriptions model =
   let resize = Sub.on_resize (fun ~width ~height -> Resize (width, height)) in
   match model.viewer with
@@ -800,6 +871,7 @@ let subscriptions model =
     let page = Viewer.rows v in
     Sub.batch
       [ resize
+      ; (if model.editing && model.naming = None then editing_keys else Sub.none)
       ; (if model.working <> None || v.generation = v.settled
          then Sub.none
          else Sub.every ~id:"viewer-preview" 0.05 (fun _ -> Draft_tick))
@@ -808,12 +880,13 @@ let subscriptions model =
          else
            Sub.on_keys
              ~phase:Capture
-             (if model.editing
+             (if model.naming <> None
+              then [ Shortcut.enter, Name_confirm; Shortcut.escape, Name_cancel ]
+              else if model.editing
               then
-                [ Shortcut.key (F 2), Focus_draft
-                ; Shortcut.escape, Focus_draft
-                ; Shortcut.key (F 5), Return
-                ; Shortcut.tab, Draft_complete
+                [ Shortcut.enter, Return
+                ; Shortcut.tab, Complete
+                ; Shortcut.escape, Focus_grid
                 ]
               else
                 [ Shortcut.up, Scroll (Rows (-1))
@@ -834,9 +907,8 @@ let subscriptions model =
                 ; Shortcut.char '=', Act Keep_value
                 ; Shortcut.char 'u', Act Undo
                 ; Shortcut.char 'd', Act Distribution
-                ; Shortcut.key (F 2), Focus_draft
-                ; Shortcut.char 'e', Focus_draft
-                ; Shortcut.key (F 5), Return
+                ; Shortcut.char 'i', Focus_prompt
+                ; Shortcut.tab, Focus_prompt
                 ; Shortcut.enter, Return
                 ; Shortcut.char 'q', Close
                 ; Shortcut.escape, Close
@@ -853,6 +925,7 @@ let subscriptions model =
   | None ->
     Sub.batch
       [ resize
+      ; editing_keys
       ; Sub.on_keys
           ~phase:Capture
           ([ Shortcut.up, Recall (-1)
@@ -877,7 +950,9 @@ let start ~project ?path () =
       ; view = (fun subject result -> opened := Some (subject, result))
       }
     in
-    let config = Matrix.config ~mode:`Primary ~mouse:`Sgr_normal () in
+    let config =
+      Matrix.config ~mode:`Primary ~mouse:`Sgr_normal ~kitty_keyboard:`Auto ()
+    in
     run
       ~config
       { init =
@@ -891,8 +966,9 @@ let start ~project ?path () =
               ; pages
               ; opened
               ; viewer = None
-              ; draft_menu = None
               ; editing = false
+              ; naming = None
+              ; placement = Below
               ; working = None
               ; closing = false
               ; save_requested = None

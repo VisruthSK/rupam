@@ -24,18 +24,20 @@ let element (c : column) = Types.repr (Types.present c.typ)
 
 let format_cell ~digits typ =
   match Types.repr (Types.present typ) with
-  | Float -> Option.map (fun s -> Printf.sprintf "%.*f" digits (float_of_string s))
+  | Float -> Option.map (fun s -> Display.rounded ~digits (float_of_string s))
   | _ -> Fun.id
 ;;
 
-let summary page =
+let summary ?ordering page =
   Printf.sprintf
     "%d %s × %d %s, %s"
     page.total
     (if page.total = 1 then "row" else "rows")
     page.width
     (if page.width = 1 then "column" else "columns")
-    (if page.ordered then "ordered" else "unordered")
+    (match ordering with
+     | Some ordering -> ordering
+     | None -> if page.ordered then "ordered" else "unordered")
 ;;
 
 let cell t = function

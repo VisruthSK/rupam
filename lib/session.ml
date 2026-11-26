@@ -419,12 +419,10 @@ let preview_draft draft source =
       raise Sys.Break)
   in
   let env = { t.current.env with supply = ref !(t.current.env.supply) } in
-  match Frontend.read source with
-  | [ ({ declaration = Evaluate _; _ } as item) ] ->
-    (match snd (Elaborate.item env item) with
-     | [ Show { node = Table table; _ } ] -> materialize (establish ~started t) table
-     | _ -> Diagnostic.fail ~span:item.span Not_a_table "Expected a table expression")
-  | _ -> Diagnostic.fail Not_a_table "Expected a single table expression"
+  let _, expr = Frontend.table_draft source in
+  match snd (Elaborate.item env { declaration = Evaluate expr; span = expr.span }) with
+  | [ Show { node = Table table; _ } ] -> materialize (establish ~started t) table
+  | _ -> Diagnostic.fail ~span:expr.span Not_a_table "Expected a table expression"
 ;;
 
 let release_draft = discard

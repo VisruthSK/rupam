@@ -34,6 +34,7 @@ let float x =
     sign ^ whole ^ "." ^ if fraction = "" then "0" else fraction)
 ;;
 
+let rounded ~digits value = Printf.sprintf "%.*f" digits value
 let bool b = if b then "TRUE" else "FALSE"
 
 let width text =

@@ -17,7 +17,7 @@ type action =
   | Missing_policy of TransformIR.policy
 
 type t =
-  { draft : Mosaic.Editor.t
+  { text : string
   ; generation : int
   ; displayed : int
   ; settled : int
@@ -42,10 +42,10 @@ type t =
   ; binding : string
   }
 
-let source t = Mosaic.Editor.text t.draft
-let panel_height = 9
+let source t = t.text
+let panel_height = 12
 let grid_width t = t.width
-let rows t = max 1 (t.height - panel_height - 8)
+let rows t = max 1 (t.height - panel_height - 6)
 let index_width t = String.length (string_of_int (Session.total t.result))
 let capacity t = max 1 ((grid_width t - index_width t - 5) / 16)
 let cell_width t = max 1 (((grid_width t - index_width t - 5) / capacity t) - 1)
@@ -136,7 +136,7 @@ let open_ session base result ~width ~height =
   in
   refresh
     ~force:true
-    { draft = Mosaic.Editor.of_string (String.trim (Format.expression base))
+    { text = String.trim (Format.expression base)
     ; generation = 0
     ; displayed = 0
     ; settled = 0
@@ -227,12 +227,12 @@ let publish t generation = function
     next
 ;;
 
-let edit t draft =
-  if Mosaic.Editor.text draft = source t
-  then { t with draft }
+let edit t text =
+  if text = source t
+  then t
   else
     { t with
-      draft
+      text
     ; generation = t.generation + 1
     ; edited_at = Unix.gettimeofday ()
     ; diagnostic = None
@@ -240,10 +240,16 @@ let edit t draft =
     }
 ;;
 
-let replace t expression =
-  let next =
-    edit t (Mosaic.Editor.of_string (String.trim (Format.expression expression)))
+let replace t (expression : Syntax.expr) =
+  let binding, _ = Frontend.table_draft (source t) in
+  let text =
+    match binding with
+    | None -> String.trim (Format.expression expression)
+    | Some name ->
+      Format.program
+        [ { declaration = Let (name, None, expression); span = expression.span } ]
   in
+  let next = edit t text in
   if next.generation = t.generation
   then t
   else { next with history = source t :: t.history }
@@ -255,16 +261,14 @@ let column n = node (Syntax.Name (Column, n))
 let call f args = node (Syntax.Call (name f, args))
 let arg value = None, value
 let pipe left right = node (Syntax.Pipe (left, right))
+let expression t = snd (Frontend.table_draft (source t))
+let named t = fst (Frontend.table_draft (source t)) <> None
 
-let expression t =
-  match Frontend.read (source t) with
-  | [ { declaration = Evaluate expr; _ } ] -> expr
-  | _ -> Diagnostic.fail Not_a_table "Expected a single table expression"
-;;
-
-let submission t =
-  let expr = expression t in
-  Format.program [ { declaration = Let (t.binding, None, expr); span = expr.span } ]
+let submission t name =
+  let binding, expr = Frontend.table_draft (source t) in
+  match binding with
+  | Some _ -> source t
+  | None -> Format.program [ { declaration = Let (name, None, expr); span = expr.span } ]
 ;;
 
 let cell_literal typ value =
@@ -287,16 +291,53 @@ let selected t =
   | _ -> None
 ;;
 
-let selected_text t =
-  match selected t with
-  | None -> ""
-  | Some (name, typ, value) ->
-    let text =
-      match cell_literal typ value with
-      | expr -> Format.expression expr
-      | exception Diagnostic.Error _ -> "Unavailable"
+let ordering session t =
+  let open TransformIR in
+  let rec directions table =
+    match
+      List.find_map
+        (function
+          | { step = Arrange keys; _ } -> Some (List.map snd keys)
+          | _ -> None)
+        (List.rev table.stages)
+    with
+    | Some keys -> keys
+    | None ->
+      (match table.source with
+       | Bound source ->
+         List.find_map
+           (function
+             | Define (id, { node = Table table; _ }) when id = source ->
+               Some (directions table)
+             | _ -> None)
+           (Session.items session)
+         |> Option.value ~default:[]
+       | Read _ | Load _ | Join _ -> [])
+  in
+  let table = Session.table_of_result t.result in
+  match table.order with
+  | None -> "unordered"
+  | Some names ->
+    let order = directions table in
+    let keys =
+      List.map2
+        (fun name direction ->
+           if List.mem name table.restricted
+           then None
+           else
+             Some
+               (Identifier.quote name
+                ^
+                match direction with
+                | Ascending -> " asc"
+                | Descending -> " desc"))
+        (take (List.length order) names)
+        (take (List.length names) order)
+      |> List.filter_map Fun.id
     in
-    name ^ " = " ^ text
+    (match keys with
+     | [] -> "ordered"
+     | _ -> "ordered by (" ^ String.concat ", " keys ^ ")")
 ;;
 
 let filter t condition policy =
@@ -368,8 +409,7 @@ let act t action =
         t.policy
     | Undo, _ ->
       (match t.history with
-       | previous :: history ->
-         { (edit t (Mosaic.Editor.of_string previous)) with history }
+       | previous :: history -> { (edit t previous) with history }
        | [] -> t)
     | Distribution, _ | Sort _, None -> t
   in
@@ -392,14 +432,25 @@ let visible t =
   { t.window with columns; offset = t.top }
 ;;
 
-let bars t =
+let bars ~digits t =
   match t.distribution with
   | None -> []
   | Some (name, Frequencies profile) ->
+    let most = List.fold_left (fun best (_, n) -> max best n) 1 profile.top in
     [ name ^ " · Top values"
-    ; Printf.sprintf "%d distinct   %d missing" profile.distinct profile.missing
+    ; Printf.sprintf "%d distinct" profile.distinct
+    ; Printf.sprintf
+        "n = %d   Missing %d"
+        (Session.total t.result - profile.missing)
+        profile.missing
     ]
-    @ List.map (fun (value, n) -> Printf.sprintf "%S   %d" value n) profile.top
+    @ List.map
+        (fun (value, n) ->
+           let bar =
+             String.concat "" (List.init (max 1 (12 * n / most)) (fun _ -> "█"))
+           in
+           Printf.sprintf "%s  %d  %S" bar n value)
+        profile.top
   | Some (name, Numeric summary) ->
     let h = summary.histogram in
     let most = Array.fold_left max 1 h.counts in
@@ -411,24 +462,15 @@ let bars t =
     in
     let number = function
       | None -> "None"
-      | Some n -> Printf.sprintf "%.6g" n
+      | Some n -> Display.rounded ~digits n
     in
     let range n = if summary.mean = None then None else Some n in
-    [ Printf.sprintf
-        "%s  %s  %d distinct"
-        name
-        (String.concat "" (Array.to_list chart))
-        summary.distinct
-    ; Printf.sprintf
-        "Min %s   Max %s   Missing %d"
-        (number (range h.low))
-        (number (range h.high))
-        h.missing
-    ; Printf.sprintf
-        "Q1 %s   Median %s   Q3 %s"
-        (number summary.q1)
-        (number summary.median)
-        (number summary.q3)
+    [ name ^ "  " ^ String.concat "" (Array.to_list chart)
+    ; Printf.sprintf "%d distinct" summary.distinct
+    ; Printf.sprintf "n = %d   Missing %d" (Session.total t.result - h.missing) h.missing
+    ; Printf.sprintf "Min %s   Q1 %s" (number (range h.low)) (number summary.q1)
+    ; Printf.sprintf "Median %s   Q3 %s" (number summary.median) (number summary.q3)
+    ; "Max " ^ number (range h.high)
     ; Printf.sprintf "Mean %s   SD %s" (number summary.mean) (number summary.sd)
     ; "Skewness " ^ number summary.skewness
     ]

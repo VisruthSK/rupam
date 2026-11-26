@@ -19,7 +19,8 @@ strict = true
 - `check.strict`: defaults to `true`.
 
 `[preview] digits = 2` sets decimal places for Float grid and preview cells
-(0 through 17, default 2). Calculations, exports and locks retain full precision.
+and numeric column summaries (0 through 17, default 2). Calculations,
+exports and locks retain full precision.
 
 Resolve each key independently in this order, with later values taking precedence:
 

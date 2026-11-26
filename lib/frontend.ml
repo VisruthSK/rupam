@@ -244,6 +244,13 @@ let read ?(file = "") source =
     raise (Diagnostic.Error { d with span = Some (span ()) })
 ;;
 
+let table_draft source =
+  match read source with
+  | [ { Syntax.declaration = Evaluate expr; _ } ] -> None, expr
+  | [ { Syntax.declaration = Let (name, None, expr); _ } ] -> Some name, expr
+  | _ -> Diagnostic.fail Not_a_table "Expected a table expression or a let binding"
+;;
+
 let incomplete source =
   match read source with
   | _ -> false

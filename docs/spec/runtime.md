@@ -53,9 +53,9 @@ freely, and every file and schema format stays at version 1.
 | arrow (R) | current CRAN release | ingestion and Parquet; requires R ≥ 4.2 |
 | bit64 | 4.0 | exact `Int` |
 | R | 4.2 | arrow's `Depends`; dplyr 1.1.0 alone needs 3.5 |
-| Polars | 1.0 | stable 1.x expression API |
+| Polars | 2.2 | 2.x expression API; the locked development environment |
 | pyarrow | 20 | Arrow transfer |
-| Python | 3.9 | Polars 1.0; generated code needs 3.8 (`:=`) |
+| Python | 3.10 | Polars 2.x; generated code needs 3.8 (`:=`) |
 | OCaml | 5.5 | build only |
 
 The R and Python floors are derived, not yet tested; they become supported

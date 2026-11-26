@@ -201,8 +201,8 @@ let present r (event : Session.event) =
     Array.iteri
       (fun i count ->
          Printf.printf
-           "%12.4g  %s %d\n"
-           (h.low +. (step *. float_of_int i))
+           "%12s  %s %d\n"
+           (Display.rounded ~digits:(digits r) (h.low +. (step *. float_of_int i)))
            (String.concat "" (List.init (count * 40 / most) (fun _ -> "\xe2\x96\x88")))
            count)
       h.counts;

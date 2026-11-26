@@ -64,17 +64,25 @@ and columns not shown.
 
 ## Viewer
 
-`:view` opens a full-screen object viewer on a completed binding, expression or
-pipeline stage. Keys: arrows or `hjkl` move, PgUp/PgDn and space page, `g`/`G` jump to
-the ends, `s`/`S` sort by the current column, `=` keeps rows equal to the
-current cell, `u` undoes the last grid edit, and `d` shows column details
-alongside the pipeline editor while leaving the grid visible. Enter saves
-the valid pipeline as a fresh REPL binding. `q` and Esc close the viewer.
-Sorts and filters are Rupam steps run through the target; key columns stay
-pinned while scrolling sideways. Tables open in the grid, vectors by index and records by field.
-Drill into a value and return to the same selection. Closing the viewer restores
-the REPL draft and cursor. Pin the viewed revision until the analyst switches
-inputs, including when a binding is shadowed.
+`:view` and `!view()` open a full-screen grid on a completed binding,
+expression or pipeline stage, with the REPL prompt beneath it holding that
+expression. The prompt is the only editor: the same input, history,
+completion and multiline editing as everywhere else. Enter runs the draft,
+Shift+Enter inserts a newline, Ctrl+Shift+M inserts ` |> ` (also at the plain
+REPL prompt), and the grid live-updates from every complete,
+checked, pure draft about 150 ms after typing stops; stale runs are
+cancelled and an invalid draft keeps the last good grid with its diagnostic.
+
+The grid has focus on opening. Arrows or `hjkl` move the selected cell,
+PgUp/PgDn and space page, `g`/`G` jump to the ends, `s`/`S` sort by the
+current column, `=` keeps rows equal to the selected cell (asking for a
+missing policy only when one is unresolved), `u` undoes the last edit and `d`
+shows column details beside the grid. Each grid action rewrites the prompt's
+pipeline as typed Rupam syntax. `i` or Tab moves to the prompt and Esc moves
+back; `q` or Esc on the grid closes it and restores the REPL. Enter on a
+`let name = …` draft binds it; a bare pipeline first asks for a name. The
+binding joins the accepted source saved by `:save`. The grid and prompt are
+placed by a layout parameter, so the prompt can sit below or beside the grid.
 
 - **Grid:** virtualised rows and columns over the Arrow snapshot; only visible pages
   are materialised. Frozen key columns. Column widths fit content.
@@ -92,14 +100,6 @@ inputs, including when a binding is shadowed.
 - **Navigation:** keyboard-first with arrow and vi bindings, plus mouse.
 - **Restricted columns** are not shown.
 - Runs in the terminal on Windows, macOS and Linux.
-
-### Live Rupam preview
-
-Open a table with its binding or completed pipeline in an editable Rupam buffer below the grid. For example, edit `birds |> filter(body_mass > 4000, missing = skip)`. F2 switches between the grid and the editor. Enter inserts a newline while editing and F5 saves. The viewer uses the REPL's parser, name resolver, checker, completion and compiler. A grid action edits that same expression. The worker evaluates each complete, checked, pure draft against the pinned bindings in the selected dialect. A draft requiring an effect waits for explicit submission at the prompt.
-
-Keep the last successful grid visible while input is incomplete, invalid or running. Identify the displayed revision and show the current draft's diagnostic at its Rupam span. Coalesce edits and discard stale replies. Publish the new typed result when ready. Render visible Arrow cells on demand. Scrolling reuses the completed result.
-
-Save a checked pipeline as a named binding in the REPL. It becomes part of the accepted source saved by `:save` and compiled by the ordinary compiler. Closing the viewer restores the original draft and cursor.
 
 ## Probes
 
