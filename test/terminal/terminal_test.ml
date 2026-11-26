@@ -27,7 +27,13 @@ let fresh files =
 
 let lines term = String.split_on_char '\n' (S.text (T.screen term))
 let shows text term = List.exists (contains ~affix:text) (lines term)
-let until c ready = C.wait c ~within:20. ready
+let screen = ref None
+
+let until c ready =
+  match !screen with
+  | Some term when ready term -> ()
+  | _ -> C.wait c ~within:20. ready
+;;
 
 let poll c ready =
   let deadline = Unix.gettimeofday () +. 20. in
@@ -100,6 +106,7 @@ let session ?(env = []) ~dir args f =
     |> List.filter (fun (key, _) -> not (List.mem_assoc key env))
     |> fun base -> base @ env
   in
+  screen := Some term;
   C.with_spawn term ~env ~cwd:dir ~prog:rupam ~args (fun c ->
     see c "rupam ❯";
     f c term)
@@ -364,8 +371,28 @@ let paste_formats () =
            (lines term)))
 ;;
 
+let target_menu () =
+  let dir = fresh [ "viewer-penguins.rp"; "penguins.csv" ] in
+  session
+    ~dir
+    [ "repl"; "--target"; "python-polars"; "viewer-penguins.rp" ]
+    (fun c term ->
+       type_ c term ":target ";
+       press c term K.Tab;
+       see c "python-polars";
+       check
+         "no tables offered"
+         (not (List.exists (contains ~affix:"  penguins") (lines term)));
+       check "no kind label" (not (shows "target" term && shows "r-dplyr  target" term));
+       press c term K.Down;
+       see c ":target r-dplyr";
+       press c term K.Enter;
+       see c "r-dplyr · :help")
+;;
+
 let tests =
-  [ "paste formats a complete pipeline", paste_formats
+  [ ":target completes, chooses and runs like typed input", target_menu
+  ; "paste formats a complete pipeline", paste_formats
   ; "escape cancels a preview without killing the REPL worker", cancellation
   ; "completion menu filters while typing", completion
   ; "grid pipeline and saved source", grid_pipeline

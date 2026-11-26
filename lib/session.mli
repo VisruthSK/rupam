@@ -11,6 +11,7 @@ type event =
   | Schema of (string * Types.t) list
   | Typed of Types.t
   | Histogram of string * Arrow_result.histogram
+  | Bars of string * Arrow_result.frequencies
   | Inspection_failed of Diagnostic.t
 
 val create : project:Project.t -> directory:string -> t

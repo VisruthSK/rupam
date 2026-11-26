@@ -144,8 +144,8 @@ expr: MATCH_PRESENT expr LC arms RC { at $startpos $endpos (Match_present ($2,Li
  | LAST { at $startpos $endpos Last }
  | TAP LP args RP
    { let tap = match $1 with
-       | "print" -> Print | "view" -> View | "schema" -> Schema | "hist" -> Hist
-       | name -> Diagnostic.fail ~span:($startpos, $endpos) Syntax_error ("Unknown inspection !" ^ name ^ ". Use !print, !view, !schema or !hist")
+       | "print" -> Print | "view" -> View | "schema" -> Schema | "hist" -> Hist | "bar" -> Bar
+       | name -> Diagnostic.fail ~span:($startpos, $endpos) Syntax_error ("Unknown inspection !" ^ name ^ ". Use !print, !view, !schema, !hist or !bar")
      in
      at $startpos $endpos (Tap (tap,$3)) }
  | IF LP expr RP expr ELSE expr { at $startpos $endpos (If ($3,$5,$7)) }

@@ -257,3 +257,19 @@ let incomplete source =
   | exception Diagnostic.Error { code = Incomplete_input; _ } -> true
   | exception Diagnostic.Error _ -> false
 ;;
+
+let has_comment source =
+  let n = String.length source in
+  let rec scan i quote =
+    if i >= n
+    then false
+    else (
+      match quote, source.[i] with
+      | None, '#' -> true
+      | None, (('"' | '`') as q) -> scan (i + 1) (Some q)
+      | Some '"', '\\' -> scan (i + 2) quote
+      | Some q, c when c = q -> scan (i + 1) None
+      | _ -> scan (i + 1) quote)
+  in
+  scan 0 None
+;;

@@ -50,6 +50,7 @@ type event =
   | Schema of (string * Types.t) list
   | Typed of Types.t
   | Histogram of string * Arrow_result.histogram
+  | Bars of string * Arrow_result.frequencies
   | Inspection_failed of Diagnostic.t
 
 let history_limit = 100
@@ -228,8 +229,28 @@ let column_summary r name =
        | _ -> Diagnostic.fail Unsupported_column_type "This column has no scalar summary")
 ;;
 
+let bins r column =
+  let summary = Arrow_result.summary r.arrow ~column in
+  let h = summary.histogram in
+  let present = Array.fold_left ( + ) 0 h.counts in
+  let range = h.high -. h.low in
+  if present < 2 || range <= 0.
+  then 1
+  else (
+    let n = float_of_int present in
+    let sturges = int_of_float (Float.ceil (Float.log2 n)) + 1 in
+    let freedman =
+      match summary.q1, summary.q3 with
+      | Some q1, Some q3 when q3 > q1 ->
+        int_of_float (Float.ceil (range /. (2. *. (q3 -. q1) /. Float.cbrt n)))
+      | _ -> 0
+    in
+    max 1 (min 200 (max sturges freedman)))
+;;
+
 let histogram r name =
-  Arrow_result.histogram r.arrow ~column:(column_index r name) ~bins:20
+  let column = column_index r name in
+  Arrow_result.histogram r.arrow ~column ~bins:(bins r column)
 ;;
 
 let cell r ~row name =
@@ -324,13 +345,15 @@ let inspect t env (tap : Tap.t) =
   | Hist, [ Show { node = Table table; _ } ], [ (None, { form = Name (_, column); _ }) ]
     ->
     let r = result t table in
-    Histogram
-      (column, Arrow_result.histogram r.arrow ~column:(column_index r column) ~bins:20)
-  | (View | Hist), _, _ ->
+    Histogram (column, histogram r column)
+  | Bar, [ Show { node = Table table; _ } ], [ (None, { form = Name (_, column); _ }) ] ->
+    let r = result t table in
+    Bars (column, Arrow_result.frequencies r.arrow ~column:(column_index r column))
+  | (View | Hist | Bar), _, _ ->
     Diagnostic.fail
       ~span:tap.subject.span
       Not_a_table
-      "!view and !hist(column) inspect a table"
+      "!view, !hist(column) and !bar(column) inspect a table"
   | _ ->
     Diagnostic.fail
       ~span:tap.subject.span

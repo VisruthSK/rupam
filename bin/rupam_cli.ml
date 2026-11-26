@@ -292,5 +292,6 @@ let () =
       ~version:Version.version
       ~doc:"A typed language for interactive data analysis."
   in
-  exit (Cmd.eval' (Cmd.group ~default info commands))
+  let argv = Array.map (fun arg -> if arg = "-h" then "--help" else arg) Sys.argv in
+  exit (Cmd.eval' ~argv (Cmd.group ~default info commands))
 ;;

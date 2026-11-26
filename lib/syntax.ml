@@ -20,6 +20,7 @@ type tap =
   | View
   | Schema
   | Hist
+  | Bar
 [@@deriving sexp_of]
 
 type literal =

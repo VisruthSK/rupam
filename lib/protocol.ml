@@ -199,6 +199,14 @@ let event : Session.event -> Yojson.Safe.t = function
   | Typed t -> `Assoc [ "kind", `String "type"; "type", typ t ]
   | Inspection_failed d ->
     `Assoc [ "kind", `String "inspection-failed"; "diagnostic", snd (diagnostic d) ]
+  | Bars (column, f) ->
+    `Assoc
+      [ "kind", `String "bars"
+      ; "column", `String column
+      ; "missing", `Int f.missing
+      ; "distinct", `Int f.distinct
+      ; "top", `List (List.map (fun (v, n) -> `List [ `String v; `Int n ]) f.top)
+      ]
   | Histogram (column, h) ->
     `Assoc
       [ "kind", `String "histogram"

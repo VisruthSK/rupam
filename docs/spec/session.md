@@ -81,7 +81,8 @@ let regional = sales
 | `!print()` | the value; bounded rows and columns for tables |
 | `!view()` | the viewer on the value |
 | `!schema()` | the schema with refinements and evidence |
-| `!hist(column)` | a quick histogram, independent of any grammar of graphics |
+| `!hist(column)` | a histogram of a numeric column, binned by the larger of the Freedman–Diaconis and Sturges counts |
+| `!bar(column)` | a bar chart of a categorical column's value counts, missing included |
 
 - Each tap has type `T -> T` with a presentation effect. It observes the exact
   immutable revision it receives and returns it unchanged: schema,

@@ -116,7 +116,8 @@ and expr x =
        | Print -> "print"
        | View -> "view"
        | Schema -> "schema"
-       | Hist -> "hist")
+       | Hist -> "hist"
+       | Bar -> "bar")
     ^ "("
     ^ comma
         (fun (label, x) ->

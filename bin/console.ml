@@ -6,6 +6,7 @@ type msg =
   | Edit of Editor.t
   | Submit of string
   | Recall of int
+  | Choose of int
   | Complete
   | Clear
   | Quit
@@ -123,7 +124,18 @@ let output_line line =
         ; text ~style:(style subtle) " : "
         ; text ~style:(style typed) (String.sub line (i + 2) (String.length line - i - 2))
         ]
-    | _ -> if line = "None" then text ~style:(style missing) line else text line)
+    | _ ->
+      (match Astring.String.cuts ~sep:"None" line with
+       | [ _ ] -> text line
+       | parts ->
+         box
+           ~flex_direction:Row
+           (List.concat
+              (List.mapi
+                 (fun i part ->
+                    (if i = 0 then [] else [ text ~style:(style missing) "None" ])
+                    @ if part = "" then [] else [ text part ])
+                 parts))))
 ;;
 
 let page_view ~digits page =
@@ -765,7 +777,11 @@ let step msg model =
   | Pasted text ->
     let input = Editor.insert text model.input in
     let input =
-      match Rupam.Frontend.read (Editor.text input) with
+      match
+        if Rupam.Frontend.has_comment (Editor.text input)
+        then []
+        else Rupam.Frontend.read (Editor.text input)
+      with
       | [ item ] -> Editor.of_string (Rupam.Format.program [ item ])
       | _ | (exception _) -> input
     in
@@ -789,6 +805,22 @@ let step msg model =
   | Name_cancel -> { model with naming = None }, Cmd.none
   | Submit source -> evaluate model source
   | Recall step -> { (recall model step) with menu = None }, Cmd.none
+  | Choose step ->
+    (match model.menu with
+     | Some ({ items; _ } as menu) when items <> [] ->
+       let count = List.length items in
+       let next =
+         match menu.selected with
+         | None -> if step > 0 then 0 else count - 1
+         | Some i -> (i + step + count) mod count
+       in
+       let item = List.nth items next in
+       let input = insert_completion model.input menu.before item.text in
+       ( change_draft
+           { model with input; menu = Some { menu with selected = Some next } }
+           (fun v -> Viewer.edit v (Editor.text input))
+       , Cmd.none )
+     | _ -> model, Cmd.none)
   | Complete ->
     let input, menu = complete_editor model.session model.input model.menu in
     ( change_draft { model with input; menu } (fun v -> Viewer.edit v (Editor.text input))
@@ -852,7 +884,7 @@ let step msg model =
            Edited (String.trim edited)) ))
   | Edited text ->
     let input =
-      match Rupam.Frontend.read text with
+      match if Rupam.Frontend.has_comment text then [] else Rupam.Frontend.read text with
       | [ item ] -> Editor.of_string (String.trim (Rupam.Format.program [ item ]))
       | _ | (exception _) -> Editor.of_string text
     in
@@ -971,7 +1003,14 @@ let fit model =
 ;;
 
 let update msg model =
+  let opened = model.viewer <> None in
   let model, cmd = step msg model in
+  let cmd =
+    match opened, model.viewer <> None with
+    | false, true -> Cmd.batch [ cmd; Cmd.set_mouse `Sgr_normal ]
+    | true, false -> Cmd.batch [ cmd; Cmd.set_mouse `Off ]
+    | _ -> cmd
+  in
   let model =
     match msg with
     | Scroll _ | Select_cell _ | Act _ | Focus_prompt | Return | Close ->
@@ -1048,12 +1087,13 @@ let subscriptions model =
       ; paste_formatting
       ; Sub.on_keys
           ~phase:Capture
-          ([ Shortcut.up, Recall (-1)
-           ; Shortcut.down, Recall 1
-           ; Shortcut.tab, Complete
-           ; Shortcut.enter, Submit (Editor.text model.input)
-           ; Shortcut.ctrl 'l', Clear
-           ]
+          ((if model.menu = None
+            then [ Shortcut.up, Recall (-1); Shortcut.down, Recall 1 ]
+            else [ Shortcut.up, Choose (-1); Shortcut.down, Choose 1 ])
+           @ [ Shortcut.tab, Complete
+             ; Shortcut.enter, Submit (Editor.text model.input)
+             ; Shortcut.ctrl 'l', Clear
+             ]
            @ if Editor.text model.input = "" then [ Shortcut.ctrl 'd', Quit ] else [])
       ]
 ;;
@@ -1070,9 +1110,7 @@ let start ~project ?path () =
       ; view = (fun subject result -> opened := Some (subject, result))
       }
     in
-    let config =
-      Matrix.config ~mode:`Primary ~mouse:`Sgr_normal ~kitty_keyboard:`Auto ()
-    in
+    let config = Matrix.config ~mode:`Primary ~mouse:`Off ~kitty_keyboard:`Auto () in
     run
       ~config
       { init =

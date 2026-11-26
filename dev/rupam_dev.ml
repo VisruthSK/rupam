@@ -296,8 +296,10 @@ let dialect =
 ;;
 
 let () =
+  let argv = Array.map (fun arg -> if arg = "-h" then "--help" else arg) Sys.argv in
   exit
     (Cmd.eval'
+       ~argv
        (Cmd.group
           (Cmd.info "rupam-dev" ~doc:"Internal tools for developing Rupam.")
           [ Cmd.v

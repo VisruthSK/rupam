@@ -271,3 +271,10 @@ as-of joins; dplyr inequality, rolling and overlap joins.
 column or type, as R's `?`, from the same declarations that drive completion
 and `rupam explain`. `??term` searches names and descriptions. In the viewer,
 `?` on its own shows the key bindings.
+
+## Comment-preserving formatting
+
+The parser keeps comments as trivia attached to the nearest item or pipeline
+stage, so `rupam fmt`, `:save`, pasted drafts and Ctrl+G edits reformat code
+without losing them. Until then, drafts containing comments are left as
+written.

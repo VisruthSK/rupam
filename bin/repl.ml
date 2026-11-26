@@ -182,6 +182,65 @@ let observe r (d : Syntax.declaration) =
   | _ -> false
 ;;
 
+let histogram ~digits column (h : Arrow_result.histogram) =
+  let blocks =
+    [| " "
+     ; "\xe2\x96\x81"
+     ; "\xe2\x96\x82"
+     ; "\xe2\x96\x83"
+     ; "\xe2\x96\x84"
+     ; "\xe2\x96\x85"
+     ; "\xe2\x96\x86"
+     ; "\xe2\x96\x87"
+     ; "\xe2\x96\x88"
+    |]
+  in
+  let height = 8 in
+  let bins = Array.length h.counts in
+  let width = max 1 (min 3 (72 / max 1 bins)) in
+  let most = Array.fold_left max 1 h.counts in
+  let row level =
+    String.concat
+      ""
+      (Array.to_list
+         (Array.map
+            (fun count ->
+               let eighths = count * height * 8 / most in
+               let cell = max 0 (min 8 (eighths - ((level - 1) * 8))) in
+               String.concat "" (List.init width (fun _ -> blocks.(cell))))
+            h.counts))
+  in
+  let low = Display.rounded ~digits h.low
+  and high = Display.rounded ~digits h.high in
+  let span = bins * width in
+  let axis =
+    low ^ String.make (max 1 (span - String.length low - String.length high)) ' ' ^ high
+  in
+  (Printf.sprintf "%s  %d bins, most %d" column bins most
+   :: List.init height (fun i -> row (height - i)))
+  @ [ axis ]
+  @ if h.missing > 0 then [ Printf.sprintf "None %d" h.missing ] else []
+;;
+
+let bars column (f : Arrow_result.frequencies) =
+  let rows = f.top @ if f.missing > 0 then [ "None", f.missing ] else [] in
+  let most = List.fold_left (fun m (_, n) -> max m n) 1 rows in
+  let label = List.fold_left (fun w (v, _) -> max w (Display.width v)) 0 rows in
+  Printf.sprintf "%s  %d distinct" column f.distinct
+  :: List.map
+       (fun (value, count) ->
+          let pad = String.make (label - Display.width value) ' ' in
+          Printf.sprintf
+            "%s%s  %s %d"
+            value
+            pad
+            (String.concat
+               ""
+               (List.init (max 1 (count * 48 / most)) (fun _ -> "\xe2\x96\x88")))
+            count)
+       rows
+;;
+
 let present r (event : Session.event) =
   match event with
   | Bound (name, description) -> Printf.printf "%s : %s\n" name description
@@ -194,19 +253,9 @@ let present r (event : Session.event) =
     let width = List.fold_left (fun w (n, _) -> max w (String.length n)) 0 columns in
     List.iter (fun (n, t) -> Printf.printf "%-*s  %s\n" width n (Types.display t)) columns
   | Typed t -> print_endline (Types.display t)
+  | Bars (column, f) -> List.iter print_endline (bars column f)
   | Histogram (column, h) ->
-    let most = Array.fold_left max 1 h.counts in
-    let step = (h.high -. h.low) /. float_of_int (Array.length h.counts) in
-    Printf.printf "%s\n" column;
-    Array.iteri
-      (fun i count ->
-         Printf.printf
-           "%12s  %s %d\n"
-           (Display.rounded ~digits:(digits r) (h.low +. (step *. float_of_int i)))
-           (String.concat "" (List.init (count * 40 / most) (fun _ -> "\xe2\x96\x88")))
-           count)
-      h.counts;
-    if h.missing > 0 then Printf.printf "%12s  %d\n" "None" h.missing
+    List.iter print_endline (histogram ~digits:(digits r) column h)
 ;;
 
 let submit r declarations =
@@ -223,17 +272,17 @@ type suggestion = Completion.suggestion =
 let command_candidates line =
   let words = String.split_on_char ' ' line |> List.filter (( <> ) "") in
   let fresh = String.ends_with ~suffix:" " line in
-  let named kind names = List.map (fun (text, _) -> { text; detail = kind }) names in
+  let named names = List.map (fun (text, _) -> { text; detail = "" }) names in
   match words, fresh with
   | ([] | [ _ ]), false ->
     List.map
       (fun (usage, text) ->
          { text = List.hd (String.split_on_char ' ' usage); detail = text })
       help
-  | [ ":target" ], true | [ ":target"; _ ], false -> named "target" Target.targets
-  | [ ":language" ], true | [ ":language"; _ ], false -> named "language" Target.languages
-  | [ ":dialect" ], true | [ ":dialect"; _ ], false -> named "dialect" Target.dialects
-  | [ ":code" ], true | [ ":code"; _ ], false -> named "target" Target.targets
+  | [ ":target" ], true | [ ":target"; _ ], false -> named Target.targets
+  | [ ":language" ], true | [ ":language"; _ ], false -> named Target.languages
+  | [ ":dialect" ], true | [ ":dialect"; _ ], false -> named Target.dialects
+  | [ ":code" ], true | [ ":code"; _ ], false -> named Target.targets
   | _ -> []
 ;;
 
@@ -252,7 +301,18 @@ let complete r line =
     let candidates =
       match argument with
       | None -> command_candidates line
-      | Some _ -> command_candidates line @ Completion.tables r.session
+      | Some _ ->
+        let command = List.hd (String.split_on_char ' ' (String.trim line)) in
+        let takes_table =
+          List.exists
+            (fun (usage, _) ->
+               match String.split_on_char ' ' usage with
+               | name :: argument :: _ ->
+                 name = command && Astring.String.is_infix ~affix:"TABLE" argument
+               | _ -> false)
+            help
+        in
+        command_candidates line @ if takes_table then Completion.tables r.session else []
     in
     ( start
     , List.filter
