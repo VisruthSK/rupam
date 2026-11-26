@@ -1,3 +1,5 @@
+open Rupam
+
 type value
 
 val display : value -> string

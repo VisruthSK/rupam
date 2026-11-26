@@ -75,6 +75,11 @@ assert codes, spans and resolution kinds; message wording may change freely.
 
 ## Conformance runner
 
+The reference evaluator is the `reference` library: a direct interpreter of
+typed TransformIR that defines each rule executably. Conformance, differential
+tests and `rupam-dev` use it; it is never a target and is not linked into
+`rupam`.
+
 `scripts/dev conformance [ID...]` runs the fixtures
 in `test/conformance/`. A fixture contains source, public inputs, targets and
 the expected logical type, value or diagnostic code, and a status:

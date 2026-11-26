@@ -1,6 +1,6 @@
 (library
  (name rupam_unit)
  (inline_tests)
- (libraries rupam)
+ (libraries rupam reference)
  (preprocess
   (pps ppx_expect)))
