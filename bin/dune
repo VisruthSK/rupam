@@ -1,4 +1,5 @@
 (executable
  (name rupam_cli)
  (public_name rupam)
+ (package rupam)
  (libraries rupam cmdliner unix mosaic matrix.tty))

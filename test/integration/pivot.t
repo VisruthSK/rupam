@@ -8,15 +8,15 @@ Grouped windows and a pivot round trip agree across dialects.
   > let wide = tall |> pivot_wider(names_from = metric, values_from = reading, levels = [revenue, center]) |> rename(centered = center) |> arrange(customer_id)
   > write_parquet(wide, "result.parquet")
   > RP
-  $ rupam compile --target python-polars pivot.rp > pivot.py && python pivot.py && python show.py result.parquet
-  customer_id: Int64, revenue: Float64, centered: Float64
-  (1, 3.0, -3.0)
-  (2, 5.0, 2.5)
-  (3, 9.0, 3.0)
-  (4, 0.0, -2.5)
-  $ rupam compile --target r-dplyr pivot.rp > pivot.R && Rscript pivot.R && python show.py result.parquet
-  customer_id: Int64, revenue: Float64, centered: Float64
-  (1, 3.0, -3.0)
-  (2, 5.0, 2.5)
-  (3, 9.0, 3.0)
-  (4, 0.0, -2.5)
+  $ rupam compile --target python-polars pivot.rp > pivot.py && python pivot.py && rupam-dev show result.parquet
+  customer_id: Int, revenue: Float, centered: Float
+  1 | 3.0 | -3.0
+  2 | 5.0 | 2.5
+  3 | 9.0 | 3.0
+  4 | 0.0 | -2.5
+  $ rupam compile --target r-dplyr pivot.rp > pivot.R && Rscript pivot.R && rupam-dev show result.parquet
+  customer_id: Int, revenue: Float, centered: Float
+  1 | 3.0 | -3.0
+  2 | 5.0 | 2.5
+  3 | 9.0 | 3.0
+  4 | 0.0 | -2.5

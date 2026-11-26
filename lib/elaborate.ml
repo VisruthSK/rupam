@@ -63,6 +63,9 @@ let rec expr ctx (x : Syntax.expr) : C.expr =
     lift ctx.env span v.shape [ v ] (function
       | [ v ] -> make v.shape (T.present v.typ) (Unary (op, v))
       | _ -> assert false)
+  | Binary (And, a, b) ->
+    let a = here a in
+    binary ctx span And a (expr (present_after ctx a) b)
   | Binary (op, a, b) -> binary ctx span op (here a) (here b)
   | Chain (first, links) ->
     chain ctx span (here first) (List.map (fun (op, x) -> op, here x) links)
@@ -282,6 +285,23 @@ and chain ctx span first links =
        | Some (id, value) -> make span body.C.shape body.typ (Let (id, value, body)))
     bound
     conjunction
+
+and established (e : C.expr) =
+  match e.node with
+  | Builtin (Present, [ { node = Column name; _ } ]) -> [ name ]
+  | Binary (And, a, b) -> established a @ established b
+  | _ -> []
+
+and present_after ctx condition =
+  match ctx.columns, established condition with
+  | Some row, (_ :: _ as names) ->
+    let fields =
+      List.map
+        (fun (name, t) -> name, if List.mem name names then T.present t else t)
+        row.fields
+    in
+    { ctx with columns = Some { row with fields } }
+  | _ -> ctx
 
 and binary ctx span op a b =
   let make = make span in

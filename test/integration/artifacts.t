@@ -9,12 +9,12 @@ a source map that points back to the program.
   > write_parquet(result, "checked.parquet")
   > RP
   $ rupam compile --target python-polars checked.rp -o checked.py
-  $ python checked.py && python show.py checked.parquet
-  x: Int64
-  (1,)
-  (2,)
-  (3,)
-  (4,)
+  $ python checked.py && rupam-dev show checked.parquet
+  x: Int
+  1
+  2
+  3
+  4
   $ grep -c map_elements checked.py
   0
   [1]

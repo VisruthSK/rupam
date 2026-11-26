@@ -221,6 +221,61 @@ let guarded f path =
 ;;
 
 let file = Arg.(required & pos 0 (some file) None & info [] ~docv:"FILE")
+
+let show path keys =
+  let order =
+    match keys with
+    | [] -> ""
+    | keys ->
+      " ORDER BY "
+      ^ String.concat ", " (List.map (fun k -> Printf.sprintf "%S NULLS LAST" k) keys)
+  in
+  let names, rows =
+    Data_file.query ("SELECT * FROM read_parquet(" ^ Data_file.literal path ^ ")" ^ order)
+  in
+  let typed (c : Data_file.column) =
+    c.name
+    ^ ": "
+    ^
+    match c.typ with
+    | Supported t -> Types.display (if c.nullable then Types.optional t else t)
+    | Unsupported raw -> raw
+  in
+  print_endline (String.concat ", " (List.map typed (Data_file.columns path)));
+  ignore names;
+  Array.iter
+    (fun row ->
+       print_endline
+         (String.concat
+            " | "
+            (Array.to_list (Array.map (Option.value ~default:"None") row))))
+    rows
+;;
+
+let frame () =
+  In_channel.input_lines stdin
+  |> List.iter (fun line ->
+    Printf.printf "Content-Length: %d\r\n\r\n%s" (String.length line) line)
+;;
+
+let unframe () =
+  let rec go () =
+    match In_channel.input_line stdin with
+    | None -> ()
+    | Some header when String.trim header = "" -> go ()
+    | Some header ->
+      let size =
+        int_of_string (String.trim (List.nth (String.split_on_char ':' header) 1))
+      in
+      ignore (In_channel.input_line stdin);
+      let body = really_input_string stdin size in
+      print_endline
+        (Yojson.Safe.to_string (Yojson.Safe.sort (Yojson.Safe.from_string body)));
+      go ()
+  in
+  go ()
+;;
+
 let stage name doc f = Cmd.v (Cmd.info name ~doc) Term.(const (guarded f) $ file)
 
 let binding =
@@ -245,7 +300,23 @@ let () =
     (Cmd.eval'
        (Cmd.group
           (Cmd.info "rupam-dev" ~doc:"Internal tools for developing Rupam.")
-          [ stage "tokens" "Tokens with spans." tokens
+          [ Cmd.v
+              (Cmd.info
+                 "show"
+                 ~doc:"Print a Parquet file's schema and rows, sorted by KEYs.")
+              Term.(
+                const (fun path keys -> guarded (fun () -> show path keys) ())
+                $ file
+                $ Arg.(value & pos_right 0 string [] & info [] ~docv:"KEY"))
+          ; Cmd.v
+              (Cmd.info "frame" ~doc:"Frame JSON lines from stdin as LSP messages.")
+              Term.(const (guarded frame) $ const ())
+          ; Cmd.v
+              (Cmd.info
+                 "unframe"
+                 ~doc:"Print LSP messages from stdin as sorted JSON lines.")
+              Term.(const (guarded unframe) $ const ())
+          ; stage "tokens" "Tokens with spans." tokens
           ; stage "syntax" "Syntax tree with spans." syntax
           ; stage "typed" "Inferred types or table schemas." typed
           ; Cmd.v

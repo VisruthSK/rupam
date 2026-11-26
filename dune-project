@@ -24,3 +24,9 @@
   (cmdliner (>= 2.0))
   mosaic
   (ocamlformat (and :with-dev-setup (= 0.29.0)))))
+
+(package
+ (name rupam-dev)
+ (synopsis "Internal tools for developing Rupam")
+ (allow_empty)
+ (depends rupam))

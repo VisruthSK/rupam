@@ -1,0 +1,22 @@
+(executable
+ (name terminal_test)
+ (libraries matrix matrix.test astring unix))
+
+(rule
+ (alias integration)
+ (enabled_if
+  (<> %{os_type} Win32))
+ (deps
+  %{bin:rupam}
+  (source_tree ../../examples))
+ (action
+  (setenv
+   RUPAM_TEST_BIN
+   %{exe:../../bin/rupam_cli.exe}
+   (setenv
+    RUPAM_DEV_TEST_BIN
+    %{exe:../../dev/rupam_dev.exe}
+    (setenv
+     RUPAM_EXAMPLES
+     ../../examples
+     (run %{exe:terminal_test.exe}))))))

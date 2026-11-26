@@ -3,7 +3,7 @@ set -euo pipefail
 
 root=$(cd "$(dirname "$0")/.." && pwd)
 switch=${RUPAM_SWITCH:-rupam-552}
-build=${RUPAM_BUILD_DIR:-/root/rupam-build}
+build=${RUPAM_BUILD_DIR:-/opt/rupam-build}
 venv=${RUPAM_VENV:-/root/rupam-python}
 cd "$root"
 

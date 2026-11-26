@@ -405,8 +405,14 @@ let grid model (v : Viewer.t) =
           ; "2 Keep", Act (Missing_policy Keep)
           ; "3 Error", Act (Missing_policy Fail)
           ]
+      | None, Some { code = Incomplete_input; _ } -> text ""
       | None, Some diagnostic ->
-        text ~style:(style failure) (Rupam.Diagnostic.render diagnostic)
+        box
+          ~flex_direction:Column
+          ~size:{ width = pct 100; height = auto }
+          (List.map
+             (text ~wrap:`Word ~style:(style failure))
+             (String.split_on_char '\n' (Rupam.Diagnostic.render diagnostic)))
       | None, None when v.displayed <> v.generation ->
         text
           ~style:(style subtle)
@@ -415,26 +421,15 @@ let grid model (v : Viewer.t) =
            else "Updating preview\xe2\x80\xa6")
       | None, None -> text "")
   in
-  let toolbar =
+  let hint =
     if model.editing
-    then
-      controls
-        [ "Run [Enter]", Return
-        ; "Newline [Shift+Enter]", Newline
-        ; "Pipe [Ctrl+Shift+M]", Insert_pipe
-        ; "Grid [Esc]", Focus_grid
-        ]
+    then []
     else
-      controls
-        [ "Sort \xe2\x86\x91 [s]", Act (Sort Ascending)
-        ; "Sort \xe2\x86\x93 [S]", Act (Sort Descending)
-        ; "Keep value [=]", Act Keep_value
-        ; "Details [d]", Act Distribution
-        ; "Undo [u]", Act Undo
-        ; "Edit [i]", Focus_prompt
-        ; "Run [Enter]", Return
-        ; "Close [q]", Close
-        ]
+      [ text
+          ~style:(style faint)
+          "s/S sort \xc2\xb7 = keep \xc2\xb7 d details \xc2\xb7 u undo \xc2\xb7 i edit \
+           \xc2\xb7 q close"
+      ]
   in
   let details = List.map (text ~style:(style typed)) (Viewer.bars ~digits v) in
   let naming =
@@ -455,13 +450,14 @@ let grid model (v : Viewer.t) =
   in
   let editor =
     (input_pane model ~focused:(model.editing && model.naming = None) :: naming)
-    @ suggestions model
+    @ (if model.naming = None then suggestions model else [])
+    @ [ notice ]
   in
   let table =
     box
       ~flex_direction:Column
       ~size:{ width = pct 100; height = auto }
-      ([ body; notice ] @ details @ [ toolbar ])
+      ((body :: details) @ hint)
   in
   match model.placement with
   | Below ->
@@ -678,7 +674,11 @@ let save_viewer model (v : Viewer.t) =
   if Viewer.named v
   then submit_viewer model v ""
   else
-    ( { model with naming = Some (Editor.of_string v.binding); save_requested = None }
+    ( { model with
+        naming = Some (Editor.of_string v.binding)
+      ; save_requested = None
+      ; menu = None
+      }
     , Cmd.none )
 ;;
 

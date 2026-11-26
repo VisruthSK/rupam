@@ -7,15 +7,15 @@ Restricted columns and values derived from them never reach an output.
   > let orders = load(shop.orders) |> mutate(discount = cost * 0.5)
   > write_parquet(orders, "result.parquet")
   > RP
-  $ rupam compile --target python-polars private.rp > private.py && python private.py && python show.py result.parquet
-  customer_id: Int64, region: String, revenue: Float64
-  (1, 'North', 3.0)
-  (2, 'South', 5.0)
-  (3, 'North', 9.0)
-  (4, 'South', 0.0)
-  $ rupam compile --target r-dplyr private.rp > private.R && Rscript private.R && python show.py result.parquet
-  customer_id: Int64, region: String, revenue: Float64
-  (1, 'North', 3.0)
-  (2, 'South', 5.0)
-  (3, 'North', 9.0)
-  (4, 'South', 0.0)
+  $ rupam compile --target python-polars private.rp > private.py && python private.py && rupam-dev show result.parquet
+  customer_id: Int, region: String, revenue: Float
+  1 | North | 3.0
+  2 | South | 5.0
+  3 | North | 9.0
+  4 | South | 0.0
+  $ rupam compile --target r-dplyr private.rp > private.R && Rscript private.R && rupam-dev show result.parquet
+  customer_id: Int, region: String, revenue: Float
+  1 | North | 3.0
+  2 | South | 5.0
+  3 | North | 9.0
+  4 | South | 0.0

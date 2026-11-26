@@ -7,9 +7,9 @@ NaN in a source reads as a missing value.
   > let t = load(shop.orders) |> summarize(n = n(), by = cost, group_missing = keep)
   > write_parquet(t, "groups.parquet")
   > RP
-  $ rupam compile --target r-dplyr groups.rp > groups.R && Rscript groups.R && python show.py groups.parquet
-  cost: Float64, n: Int64
-  (None, 4)
-  $ rupam compile --target python-polars groups.rp > groups.py && python groups.py && python show.py groups.parquet
-  cost: Float64, n: Int64
-  (None, 4)
+  $ rupam compile --target r-dplyr groups.rp > groups.R && Rscript groups.R && rupam-dev show groups.parquet
+  cost: Float?, n: Int
+  None | 4
+  $ rupam compile --target python-polars groups.rp > groups.py && python groups.py && rupam-dev show groups.parquet
+  cost: Float?, n: Int
+  None | 4

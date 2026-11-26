@@ -46,6 +46,12 @@ developer MCP (`scripts/dev mcp`) is maintained alongside as infrastructure.
 Native releases for Linux, macOS and Windows; documentation; `rupam env`
 environment setup; realistic end-to-end examples on both targets.
 
+The last step before release is a whole-codebase audit: every algorithm is
+log-linear at worst with small constants, accidental complexity and spec
+deviations are removed, systems are simplified, hand-written infrastructure
+moves to maintained dependencies where one fits, and tests stay native OCaml,
+with R and Python only as reference backends.
+
 ## 5. Reusable analytical ecosystem
 
 Modules, package export, test blocks, Lean 4 proofs of the

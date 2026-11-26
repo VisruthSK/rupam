@@ -15,12 +15,12 @@ as nonportable, and is rejected by other dialects.
   sqrt.rp:1:1  dialect-capability
     import polars is target-specific. Set strict = false under [check] in rupam.toml, or pass --no-strict
   [123]
-  $ rupam compile --no-strict --target python-polars sqrt.rp -o sqrt.py && python sqrt.py && python show.py sqrt.parquet
-  root: Float64
-  (1.732050807569,)
-  (2.2360679775,)
-  (3.0,)
-  (0.0,)
+  $ rupam compile --no-strict --target python-polars sqrt.rp -o sqrt.py && python sqrt.py && rupam-dev show sqrt.parquet
+  root: Float
+  1.7320508075688772
+  2.23606797749979
+  3.0
+  0.0
   $ python -c "import json; print(json.load(open('sqrt.py.manifest.json'))['nonportable'])"
   ['polars.sqrt']
   $ rupam compile --no-strict --target r-dplyr sqrt.rp

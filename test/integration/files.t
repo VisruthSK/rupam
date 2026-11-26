@@ -11,19 +11,19 @@ as missing, in both dialects.
   > RP
   $ for target in python-polars r-dplyr; do
   >   rupam lock --target $target files.rp > /dev/null && rupam run --target $target files.rp > /dev/null &&
-  >   python show.py ids.parquet id && python show.py scores_out.parquet
+  >   rupam-dev show ids.parquet id && rupam-dev show scores_out.parquet
   > done
-  id: Int64, site: String
-  (2, 'North')
-  (3, 'South')
-  (9007199254740993, 'North')
-  id: Int64, score: Float64
-  (9007199254740993, None)
-  (2, 1.5)
-  id: Int64, site: String
-  (2, 'North')
-  (3, 'South')
-  (9007199254740993, 'North')
-  id: Int64, score: Float64
-  (9007199254740993, None)
-  (2, 1.5)
+  id: Int, site: String
+  2 | North
+  3 | South
+  9007199254740993 | North
+  id: Int, score: Float?
+  9007199254740993 | None
+  2 | 1.5
+  id: Int, site: String
+  2 | North
+  3 | South
+  9007199254740993 | North
+  id: Int, score: Float?
+  9007199254740993 | None
+  2 | 1.5
