@@ -69,7 +69,8 @@ checked operations are errors, not silent fallback values.
   reanalysis, relocking and recompilation. Contract and schema obligations
   are checked before relying on their properties.
 - Proven obligations emit no redundant checks; necessary checks are never
-  disabled. A standalone script is valid for its locked snapshot; Rupam, not the script, verifies inputs ([Runtime](runtime.md#adapters)).
+  disabled. Rupam verifies inputs before export. A standalone script assumes
+  the supplied inputs are the locked snapshot ([Runtime](runtime.md#adapters)).
 - A check removed on the strength of a numerical proof stays removed only if
   the proof holds for every execution the locked environment permits,
   including any accumulation order of floating-point reductions.

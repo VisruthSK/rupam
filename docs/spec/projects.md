@@ -115,20 +115,18 @@ in `:schema` and `:explain`. A failed or incomplete discovery never becomes a
 production schema. Cache fingerprints and proofs by content and dependency
 identity; avoid repeating unaffected computations when downstream code changes.
 
-Generated scripts embed or accompany an immutable manifest containing their
-required input hashes and target environment fingerprint. A compact host
-preamble verifies required data and dependencies once before reading or
-writing; no rupam executable is required. Source/compiler fingerprints are
-provenance for the compiled script, not a requirement to install rupam on the
-execution machine. If the original source is present, a changed source does
-not update the old script. Read the exact verified bytes (immutable snapshot
-or equivalent consistency protection), so a file cannot change between
-verification and analysis. Reject a mismatch with a clear instruction to
-reanalyse, relock and recompile. The preamble is not a security sandbox or a
-claim of resistance to malicious modification. Reuse cached validation only
-for the exact snapshot and environment. Clock/random effects are documented
-exceptions to fixed values; lock their explicit seeds/configuration and
-runtime dependencies, not future draws or timestamps.
+Rupam checks the input and environment fingerprints during development, before
+compilation or a Rupam-managed run. Analysis and validation use the same
+immutable input snapshot or equivalent consistency protection. Reuse cached
+validation only for the exact snapshot and environment.
+
+Standalone scripts execute on inputs supplied by the caller. The caller
+supplies the locked snapshot and target environment, using pinned artifacts
+where needed. Generated code performs no lock, hash, environment, contract
+or snapshot verification. The manifest records input and environment
+fingerprints for provenance. Changed inputs require reanalysis, relocking
+and recompilation to restore the guarantees. Clock and random effects lock
+their explicit seeds or configuration and runtime dependencies.
 
 ## Command line
 
@@ -152,6 +150,6 @@ runtime dependencies, not future draws or timestamps.
 
 Self-contained binaries for Linux and macOS (x86-64, ARM) and Windows
 (x86-64), with DuckDB linked statically. Generated scripts need their locked
-interpreter and packages, including any host lock-verification dependency.
+interpreter and packages.
 The data-dict CLI is needed for rupam validation/relocking, not for executing
 a script whose contract obligations were discharged against the lock.

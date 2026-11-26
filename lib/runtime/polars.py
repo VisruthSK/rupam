@@ -1,7 +1,3 @@
-import hashlib
-import io
-from pathlib import Path
-
 import polars as pl
 import pyarrow as pa
 import pyarrow.csv as pacsv
@@ -10,15 +6,12 @@ import pyarrow.parquet as pq
 ARROW_TYPES = {"Int64": pa.int64(), "Float64": pa.float64(), "Bool": pa.bool_(), "String": pa.string(), "Date": pa.date32()}
 
 
-def read_locked(path, digest, format, columns):
-    data = Path(path).read_bytes()
-    if hashlib.sha256(data).hexdigest() != digest:
-        raise ValueError(f"{path} changed since rupam lock: run rupam lock, then recompile")
+def rp_read(path, format, columns):
     if format == "parquet":
-        table = pq.read_table(io.BytesIO(data), columns=list(columns))
+        table = pq.read_table(path, columns=list(columns))
     else:
         table = pacsv.read_csv(
-            io.BytesIO(data),
+            path,
             parse_options=pacsv.ParseOptions(ignore_empty_lines=False, delimiter="\t" if format == "tsv" else ","),
             convert_options=pacsv.ConvertOptions(
                 column_types={name: ARROW_TYPES[kind] for name, kind in columns.items()},

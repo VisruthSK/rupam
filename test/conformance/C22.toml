@@ -1,4 +1,4 @@
 id = "C22"
 status = "pending"
-case = '''source changed after validation'''
-expected = '''stale lock; old script rejects; relock validates and recompile'''
+case = '''input changed after validation'''
+expected = '''Rupam refuses to compile or run under the stale lock; standalone code performs no verification; relock and recompile'''

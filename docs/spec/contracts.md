@@ -79,8 +79,8 @@ distinct enum domains is explicit. No additional data-dict keys are needed.
 - Cache success against the resolved contract, source content, normalisation
   rules and validator/environment versions. Validation and execution use the
   same immutable content. A changed input invalidates the lock; relock and
-  reanalyse before compilation. Generated scripts verify the lock instead of
-  repeating successful contract validation (see [Projects](projects.md#locks)).
+  reanalyse before compilation. Rupam verifies the lock before export
+  (see [Projects](projects.md#locks)).
 - `display: restricted` follows renames, copies and derived values, including
   aggregates and keys. Do not expose restricted values in error excerpts,
   profiles, previews or output files. This is accidental-disclosure protection,

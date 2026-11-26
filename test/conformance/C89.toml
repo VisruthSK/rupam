@@ -1,4 +1,4 @@
 id = "C89"
 status = "pending"
-case = '''change source, input data, contract, dependency or compiler fingerprint'''
-expected = '''each invalidates the lock; old artifact remains bound to original lock and rejects changed runtime inputs'''
+case = '''change input data, contract, dependency or compiler fingerprint; edit program text without changing lock requirements'''
+expected = '''Rupam rejects the changed lock fingerprint; text-only edits keep the lock; the old manifest retains its original fingerprints'''

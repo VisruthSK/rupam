@@ -1,4 +1,4 @@
 id = "C90"
 status = "pending"
-case = '''source changed between verification and reading'''
-expected = '''verified snapshot used or consistency error; never unverified bytes'''
+case = '''input changes between verification and reading during Rupam analysis'''
+expected = '''use the pinned snapshot or report a consistency error before export'''

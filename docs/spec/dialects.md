@@ -78,7 +78,6 @@ emit it only when used. Keep adapter bodies separate from the analysis.
 
 | Adapter category | Required behavior |
 | --- | --- |
-| lock verification | verify content and environment before analysis, without rupam |
 | numeric representation | exact Int, checked promotion/overflow, finite floats, guarded domains |
 | reductions | undefined statistics and empty/all-missing sums return `None`; exact integer accumulation; explicit policies |
 | table semantics | exact join, ordering, pivot, grouping and schema rules where host defaults differ |
@@ -154,9 +153,9 @@ this import mechanism. Record imports and dependencies in the manifest.
 ## Generated scripts
 
 - Run without rupam, with the locked target interpreter and dependencies.
-- Deterministic generation and formatter-friendly code. The lock verification
-  preamble is separate from the analysis; no repeated successful data-dict
-  validation or defensive checks proven redundant on the locked inputs.
+- Deterministic generation and formatter-friendly code. Rupam verifies the lock
+  before export. Generated scripts contain no verification preamble, input
+  hashing or repeated contract and snapshot validation.
 - Accompanied by a source map to `.rp` spans and JSON manifest of lock digest,
   compiler version, dialect, packages, discharged obligations, remaining
   checks, and non-portable calls.

@@ -15,9 +15,10 @@ using fixed effect inputs or same-target reproducibility, not cross-target
 streams. Foreign fixtures run only in their declared dialect.
 
 Test REPL/script agreement on the same lock, checking full data rather than
-only preview rows. Test that failed relocking leaves previous proofs stale
-and that generated scripts reject stale inputs. Code-generation tests also
-check that proved obligations emit no redundant runtime assertions.
+only preview rows. Test that Rupam refuses stale locks and that failed
+relocking leaves previous proofs stale. Code-generation tests check that
+standalone scripts perform no lock or snapshot verification and that proved
+obligations emit no redundant runtime assertions.
 
 ## Required cases
 
@@ -44,7 +45,7 @@ check that proved obligations emit no redundant runtime assertions.
 | C19 | `slice_head(n = 5)` on an unordered table | type error |
 | C20 | contracted source with `None` in a required column | validation fails before output |
 | C21 | `range: [0, 100]` with a value of 101 | no failure |
-| C22 | source changed after validation | stale lock; old script rejects; relock validates and recompile |
+| C22 | input changed after validation | Rupam refuses to compile or run under the stale lock; standalone code performs no verification; relock and recompile |
 | C23 | restricted column | absent from previews, viewer, diagnostics, output |
 | C24 | unfinished `mutate(z = fn(` | prefix checks and previews; unfinished stage never runs |
 | C25 | `if (x > 0.0) log(x) else None` | type-checks; `log` receives only positive values |
@@ -116,14 +117,14 @@ check that proved obligations emit no redundant runtime assertions.
 | C86 | malformed numeric CSV field; quoted empty text; unquoted empty field; large exact integer | schema error; present empty string; None; exact integer |
 | C87 | `let x = 1; let f() = x; let x = 2; f()` in script and REPL | 1; failed subsequent binding leaves session unchanged |
 | C88 | inferred CSV in strict REPL; strict standalone export | exploration succeeds; export needs explicit schema or explicit full-snapshot schema commitment |
-| C89 | change source, input data, contract, dependency or compiler fingerprint | each invalidates the lock; old artifact remains bound to original lock and rejects changed runtime inputs |
-| C90 | source changed between verification and reading | verified snapshot used or consistency error; never unverified bytes |
+| C89 | change input data, contract, dependency or compiler fingerprint; edit program text without changing lock requirements | Rupam rejects the changed lock fingerprint; text-only edits keep the lock; the old manifest retains its original fingerprints |
+| C90 | input changes between verification and reading during Rupam analysis | use the pinned snapshot or report a consistency error before export |
 | C91 | `set_seed(0)` then random draws in strict mode | no warning; repeated same-target locked run reproduces draws; cross-target stream equality not required |
 | C92 | `map([1,2,3], fn(x) => x * 2)`; `reduce([1,2,3],0,fn(a,x) => a+x)` | `[2,4,6]`; 6; ordinary host higher-order lowering permitted |
 | C93 | `1_00_000`, `1.234_56`, `1e1_0`; `not x > 0`; `[..rest]` | valid literals, Boolean negation of comparison, valid rest-only pattern |
 | C94 | source with unsupported formula or module import | unsupported-feature or parse error, not silent acceptance |
 | C95 | nominal Usd used in `log` without explicit unwrapping | type error; explicit base conversion works with positive refinement |
-| C96 | a proved key, bounds, promotion or overflow obligation in deterministic locked analysis | no redundant assertion in emitted analysis; lock verification remains |
+| C96 | a proved key, bounds, promotion or overflow obligation in deterministic locked analysis | no redundant assertion or lock verification in emitted analysis |
 | C97 | floating reduction `[1e16, 1.0, -1e16]` followed by sign-based branch | document native rounding dependence; do not require cross-dialect discrete equality |
 | C98 | foreign declaration in strict mode; non-strict foreign return of incompatible representation | strict rejection; return-boundary error in non-strict mode |
 

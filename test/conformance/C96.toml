@@ -1,4 +1,4 @@
 id = "C96"
 status = "pending"
 case = '''a proved key, bounds, promotion or overflow obligation in deterministic locked analysis'''
-expected = '''no redundant assertion in emitted analysis; lock verification remains'''
+expected = '''no redundant assertion or lock verification in emitted analysis'''

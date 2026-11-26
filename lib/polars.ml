@@ -313,9 +313,8 @@ let step ~scalar span : C.step -> P.link list =
 
 let file (f : C.file) =
   P.call
-    "read_locked"
+    "rp_read"
     [ P.Str f.path
-    ; P.Str f.digest
     ; P.Str (Data_file.format_name f.format)
     ; P.Dict
         (List.map

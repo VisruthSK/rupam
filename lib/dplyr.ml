@@ -300,7 +300,6 @@ let file (f : C.file) =
   R.call
     "rp_read"
     [ R.String f.path
-    ; R.String f.digest
     ; R.String (Data_file.format_name f.format)
     ; R.Call
         ( R.Name "c"

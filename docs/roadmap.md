@@ -22,12 +22,9 @@ Quiet, reusable tooling so routine work costs little:
 
 ## 1. Semantic foundations
 
-- Settle the locked export contract. Projects and Dialects require a
-  standalone script to verify its inputs; Runtime and Guarantees say
-  generated code carries no snapshot checks; C22 and C90 expect rejection of
-  changed inputs. Decide whether an export consumes pinned artifacts or
-  verifies external inputs at startup, then keep one canonical input
-  snapshot shared by preview, proof checking and export.
+- Share one canonical input snapshot across preview, proof checking and
+  export. Rupam verifies it during development. Standalone scripts consume
+  the supplied inputs without lock or snapshot verification (C22, C90, C96).
 - One inference model for helpers: a single scheme carrying parameter roles,
   scope, alignment and missing-policy requirements through higher-order
   calls, replacing the ordinary-then-contextual retry in `function_` and the

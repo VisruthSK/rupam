@@ -23,10 +23,10 @@ not establish them.
 
 Generated R and Python are readable and contain only what implements Rupam
 semantics: conversions, missingness, guarded evaluation, key and order
-behaviour. Rupam verifies and locks; generated code carries no second
-verifier, revalidation mode or snapshot checks. A native export is valid for
-the locked snapshot and backend; changed inputs need a fresh Rupam check and
-lock. A format whose standalone reader cannot reproduce canonical ingestion is
+behaviour. Rupam verifies and locks during development. Standalone code
+performs no input hashing, lock, contract, environment or snapshot verification.
+Supply the locked snapshot and backend when running a native export. Changed
+inputs need a fresh Rupam check, lock and export. A format whose standalone reader cannot reproduce canonical ingestion is
 exported through a canonical typed input artifact or rejected. Helpers are
 emitted only when used; lowering goes through the host ASTs and printers;
 process boundaries return structured errors.
