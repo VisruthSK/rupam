@@ -8,3 +8,5 @@ import Rupam.Deferred
 import Rupam.HigherOrder
 import Rupam.Pointwise
 import Rupam.Substitution
+import Rupam.Alignment
+import Rupam.Restriction

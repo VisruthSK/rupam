@@ -35,11 +35,11 @@ private def fixtureMean (values : List Float) : Outcome (Option Float) :=
   if values.isEmpty then .ok none
   else .ok (some (values.sum / values.length.toFloat))
 
-private def renderFloatColumn (cells : List (Option Float)) : String :=
+private def renderFloatColumn (header : String) (cells : List (Option Float)) : String :=
   let render (value : Float) :=
     let text := toString value
     if text.endsWith ".000000" then (text.dropEnd 5).toString else text
-  String.intercalate "\n" ("r" :: cells.map (renderOption render))
+  String.intercalate "\n" (header :: cells.map (renderOption render))
 
 private def c119 : Outcome String := do
   let group : Group ⟨0, 2⟩ := ⟨[0, 1], by decide⟩
@@ -49,7 +49,7 @@ private def c119 : Outcome String := do
   let values : ScopedCalculation scope Float := .pointwise (fun row => .ok (x.get row))
   let zero : ScopedCalculation scope (Option Float) := .broadcast (fun _ => .ok (some 0.0))
   let result ← (flags.ifThenElse (values.reduce fixtureMean) zero).run scope.members
-  pure (renderFloatColumn result.toList)
+  pure (renderFloatColumn "r" result.toList)
 
 private def c123 : Outcome String := do
   let x : Vector (Option Float) 3 := #v[none, some 5.0, some 2.0]
@@ -65,7 +65,35 @@ private def c123 : Outcome String := do
     pure cells.toList
   let a ← evaluate groupA
   let b ← evaluate groupB
-  pure (renderFloatColumn (a ++ b))
+  pure (renderFloatColumn "r" (a ++ b))
+
+private def floatType : ContextType Unit := .calculation ()
+private def centerNeeds := [Requirement.collection .group, .missing (.fixed .skip)]
+
+private def centerHelper :
+    ContextTerm (fun _ : Unit => Float) [floatType] (.function centerNeeds floatType floatType) [] :=
+  .lambda (.combine (fun value mean => .ok (value - mean))
+    (.variable .first)
+    (.apply (.reducer (output := ()) .group (.fixed .skip) fun _ values =>
+      if values.isEmpty then .error .missingValue else .ok (values.sum / values.length.toFloat))
+      (.variable .first)))
+
+private def c124 : Outcome String := do
+  let cells : Vector Float 3 := #v[1.0, 3.0, 5.0]
+  let groupA : Group ⟨2, 3⟩ := ⟨[0, 1], by decide⟩
+  let groupB : Group ⟨2, 3⟩ := ⟨[2], by decide⟩
+  let applyCenter : ContextTerm (fun _ : Unit => Float) [floatType] floatType centerNeeds :=
+    .apply (.apply (.forward centerNeeds floatType floatType) centerHelper) (.variable .first)
+  let evaluate (group : Group ⟨2, 3⟩) : Outcome (List Float) := do
+    let context : ConsumptionContext := { scope := .group group }
+    let environment : ContextEnvironment (fun _ : Unit => Float) context [floatType]
+      | _, .first => .pointwise (fun row => .ok (cells.get row))
+    match applyCenter.run context environment with
+    | .error _ => .error .missingValue
+    | .ok calculation => ValuesAt.toList <$> calculation.run context.scope.members
+  let a ← evaluate groupA
+  let b ← evaluate groupB
+  pure (renderFloatColumn "z" ((a ++ b).map some))
 
 -- C110 exercises both paths with the same overflowing group.
 private def group : Group ⟨0, 2⟩ := ⟨[0, 1], by decide⟩
@@ -128,6 +156,8 @@ example : vectorAdd.eval 1 = .error .arithmeticOverflow := rfl
 example : Align.infer (.vector 1) (.vector 2) = none := rfl
 example : Align.infer (.vector 2) (.column ⟨0, 2⟩) = none := rfl
 example : Align.infer (.column ⟨0, 2⟩) (.column ⟨1, 2⟩) = none := rfl
+example : AlignArguments.infer [.vector 2, .scalar, .vector 3] = none := rfl
+example : AlignArguments.infer [.column ⟨0, 2⟩, .scalar, .column ⟨1, 2⟩] = none := rfl
 
 private def groupScope := EvaluationScope.group group
 
@@ -174,6 +204,12 @@ example :
       .error .arithmeticOverflow := rfl
 
 example :
+    let body : ScalarBody [.required .int] (.required .int) := .literal (integer 0)
+    let arguments : OrdinaryArguments (.vector 0) [.required .int] :=
+      .cons (fun _ => .error .arithmeticOverflow) .nil
+    (body.callOrdinary arguments []) = .error .arithmeticOverflow := rfl
+
+example :
     let left : ScopedCalculation vectorScope (Option Bool) :=
       .pointwise (fun _ => .ok (some false))
     let right : ScopedCalculation vectorScope (Option Bool) :=
@@ -207,6 +243,17 @@ example :
     (addCapturedOffset.lower (amountStage 3 #v[integer 30, integer 40])).map
       (fun expression => expression.eval (0 : Fin 2)) = .ok (.ok (integer 31)) := rfl
 
+example :
+    let source := amountStage 2 #v[integer 10, integer 20]
+    let inclusion : RowInclusion source.domain ⟨4, 1⟩ :=
+      ⟨fun _ => (1 : Fin 2), by
+        intro a b order
+        have oneRow := b.isLt
+        change b.val < 1 at oneRow
+        omega, by decide⟩
+    (addCapturedOffset.lower (source.restrict inclusion)).map
+      (fun expression => expression.eval (0 : Fin 1)) = .ok (.ok (integer 21)) := rfl
+
 private def optionalInt := ContextType.calculation (Ty.optional .int)
 private def sumNeeds := [Requirement.collection .group, .missing .unresolved]
 
@@ -235,7 +282,8 @@ example :
     forwardedSum.run context (sumEnvironment context) = .error (.collection .group) := rfl
 
 def main : IO Unit := do
-  for (id, result) in [("C52", c52), ("C56", c56), ("C119", c119), ("C123", c123)] do
+  for (id, result) in [("C52", c52), ("C56", c56), ("C119", c119), ("C123", c123),
+      ("C124", c124)] do
     match result with
     | .ok value => IO.println (Lean.Json.arr #[.str id, .str value]).compress
     | .error failure => throw (IO.userError s!"{id}: {repr failure}")

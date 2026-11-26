@@ -39,6 +39,15 @@ inductive ContextTerm (payload : atom → Type) :
       (MissingPolicy → List (payload input) → Outcome (payload output)) →
       ContextTerm payload locals
         (.function [.collection kind, .missing policy] (.calculation input) (.calculation output)) []
+  | combine : (payload left → payload right → Outcome (payload result)) →
+      ContextTerm payload locals (.calculation left) leftNeeds →
+      ContextTerm payload locals (.calculation right) rightNeeds →
+      ContextTerm payload locals (.calculation result) (leftNeeds ++ rightNeeds)
+  | conditional : (payload predicate → Bool) →
+      ContextTerm payload locals (.calculation predicate) conditionNeeds →
+      ContextTerm payload locals (.calculation result) yesNeeds →
+      ContextTerm payload locals (.calculation result) noNeeds →
+      ContextTerm payload locals (.calculation result) (conditionNeeds ++ (yesNeeds ++ noNeeds))
   | lambda : ContextTerm payload (input :: locals) output latent →
       ContextTerm payload locals (.function latent input output) []
   | apply : ContextTerm payload locals (.function latent input output) functionNeeds →
@@ -55,6 +64,14 @@ def ContextTerm.eval (context : ConsumptionContext)
     match evidence with
     | .cons _ (.cons policy .nil) =>
       input.reduce (operation (Requirement.policyValue demand context policy))
+  | .combine (leftNeeds := leftNeeds) operation left right, supplies =>
+    let (forLeft, forRight) := supplies.split leftNeeds
+    (left.eval context environment forLeft).zipWith (right.eval context environment forRight) operation
+  | .conditional (conditionNeeds := conditionNeeds) (yesNeeds := yesNeeds) test condition yes no, supplies =>
+    let (forCondition, forBranches) := supplies.split conditionNeeds
+    let (forYes, forNo) := forBranches.split yesNeeds
+    ((condition.eval context environment forCondition).map (fun flag => .ok (test flag))).ifThenElse
+      (yes.eval context environment forYes) (no.eval context environment forNo)
   | .lambda body, _ =>
     fun latent argument => body.eval context (environment.push argument) latent
   | .apply (functionNeeds := functionNeeds) (argumentNeeds := argumentNeeds) fn argument, supplies =>

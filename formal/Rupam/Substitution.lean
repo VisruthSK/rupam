@@ -16,6 +16,9 @@ def ContextTerm.rename (rename : Renaming source target) :
   | .scalar value => .scalar value
   | .pointwise operation => .pointwise operation
   | .reducer kind policy operation => .reducer kind policy operation
+  | .combine operation left right => .combine operation (left.rename rename) (right.rename rename)
+  | .conditional test condition yes no =>
+    .conditional test (condition.rename rename) (yes.rename rename) (no.rename rename)
   | .lambda body => .lambda (body.rename rename.under)
   | .apply fn argument => .apply (fn.rename rename) (argument.rename rename)
 
@@ -29,6 +32,12 @@ theorem ContextTerm.eval_rename (term : ContextTerm payload source t needs)
   | scalar value => rfl
   | pointwise operation => rfl
   | reducer kind policy operation => rfl
+  | combine operation left right leftAgrees rightAgrees =>
+    simp only [ContextTerm.rename, ContextTerm.eval, leftAgrees, rightAgrees]
+    rfl
+  | conditional test condition yes no conditionAgrees yesAgrees noAgrees =>
+    simp only [ContextTerm.rename, ContextTerm.eval, conditionAgrees, yesAgrees, noAgrees]
+    rfl
   | lambda body bodyAgrees =>
     funext forCall argument
     simp only [ContextTerm.rename, ContextTerm.eval, bodyAgrees]
@@ -52,6 +61,9 @@ def ContextTerm.substitute (replace : Substitution payload source target) :
   | .scalar value => .scalar value
   | .pointwise operation => .pointwise operation
   | .reducer kind policy operation => .reducer kind policy operation
+  | .combine operation left right => .combine operation (left.substitute replace) (right.substitute replace)
+  | .conditional test condition yes no =>
+    .conditional test (condition.substitute replace) (yes.substitute replace) (no.substitute replace)
   | .lambda body => .lambda (body.substitute replace.under)
   | .apply fn argument => .apply (fn.substitute replace) (argument.substitute replace)
 
@@ -67,6 +79,12 @@ theorem ContextTerm.eval_substitute (term : ContextTerm payload source t needs)
   | scalar value => rfl
   | pointwise operation => rfl
   | reducer kind policy operation => rfl
+  | combine operation left right leftAgrees rightAgrees =>
+    simp only [ContextTerm.substitute, ContextTerm.eval, leftAgrees, rightAgrees]
+    rfl
+  | conditional test condition yes no conditionAgrees yesAgrees noAgrees =>
+    simp only [ContextTerm.substitute, ContextTerm.eval, conditionAgrees, yesAgrees, noAgrees]
+    rfl
   | lambda body bodyAgrees =>
     funext forCall argument
     simp only [ContextTerm.substitute, ContextTerm.eval, bodyAgrees]

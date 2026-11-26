@@ -64,4 +64,33 @@ theorem ScopedCalculation.call_argument_failure (body : ScalarBody parameters t)
   rw [failed]
   rfl
 
+-- Source-level ordinary arguments are evaluated before choosing positions
+-- at which to run the lifted body. Each yields a materialised value.
+inductive OrdinaryArguments (scope : EvaluationScope) : List Ty → Type where
+  | nil : OrdinaryArguments scope []
+  | cons : (Unit → Outcome (LiftArgument t scope.shape)) → OrdinaryArguments scope rest →
+      OrdinaryArguments scope (t :: rest)
+
+def OrdinaryArguments.evaluate :
+    OrdinaryArguments scope parameters → Outcome (ScopedArguments scope parameters)
+  | .nil => .ok .nil
+  | .cons head tail => do
+    let value ← head ()
+    let rest ← tail.evaluate
+    pure (.cons (ScopedCalculation.ofCore value.toCore) rest)
+
+def ScalarBody.callOrdinary (body : ScalarBody parameters t)
+    (arguments : OrdinaryArguments scope parameters) (positions : List scope.Member) :
+    Outcome (ValuesAt positions t.denote) := do
+  let values ← arguments.evaluate
+  (ScopedCalculation.call body values).run positions
+
+theorem ScalarBody.callOrdinary_argument_failure (body : ScalarBody parameters t)
+    (arguments : OrdinaryArguments scope parameters) (positions : List scope.Member)
+    {failure : Failure} (failed : arguments.evaluate = .error failure) :
+    body.callOrdinary arguments positions = .error failure := by
+  unfold callOrdinary
+  rw [failed]
+  rfl
+
 end Rupam

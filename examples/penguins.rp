@@ -1,56 +1,61 @@
 # Data: datasets::penguins, exported from R 4.6.2 (344 observations).
 let penguins = read_csv("penguins.csv")
+let species_info = read_csv("species.csv")
 
 let standardize(x) = (x - mean(x)) / sd(x)
 
+let size_class(mass) = match mass {
+  ..<3500 => "small",
+  3500=..<4500 => "medium",
+  4500=.. => "large",
+}
+
+# Individual morphology
 let measured = penguins
-  |> filter(some(body_mass) and some(bill_len))
+  |> filter(some(body_mass) and some(bill_len) and some(bill_dep))
   |> mutate(
        mass_kg = body_mass / 1000.0,
        bill_ratio = bill_len / bill_dep,
-       size = match body_mass {
-         ..<3500 => "small",
-         3500=..<4500 => "medium",
-         _ => "large",
-       },
+       size = size_class(body_mass),
+       sex_label = sex ?? "unrecorded",
        mass_z = standardize(body_mass),
        by = species
      )
 
-let by_species = measured
+# Species profiles
+let profiles = measured
   |> summarize(
        n = n(),
        mean_mass = mean(mass_kg),
        sd_mass = sd(mass_kg),
        median_bill = median(bill_len),
-       islands = n_distinct(island, missing = skip),
+       islands = n_distinct(island),
        by = species
      )
-  |> arrange(desc(mean_mass))
+  |> left_join(species_info, by = species,
+               relationship = many_to_one, unmatched = error)
+  |> arrange(desc(mean_mass), species)
 
-print(by_species)
+# Population composition
+let composition = measured
+  |> count(species, sex_label, size)
+  |> mutate(pct = 100.0 * n / sum(n), by = species)
+  |> arrange(species, sex_label, size)
 
-let heavy = measured
-  |> filter(mass_z > 1.0, missing = skip)
-  |> select(species, island, sex, mass_kg, mass_z)
-  |> arrange(species, desc(mass_kg))
+# Morphological outliers
+let unusual = measured
+  |> filter(abs(mass_z) > 2.0, missing = skip)
+  |> select(species, island, sex_label, mass_kg, mass_z)
+  |> arrange(species, desc(abs(mass_z)))
 
-print(heavy)
-write_parquet(by_species, "penguins-by-species.parquet")
-
-let species = read_csv("species.csv")
-
-let described = by_species
-  |> left_join(species, by = species, relationship = many_to_one)
-  |> select(species, habitat, n, mean_mass)
-
-print(described)
-
-let long = measured
-  |> mutate(group_size = n(), by = species)
+# Tidy measurements for visualization
+let bill_measurements = measured
   |> select(species, island, bill_len, bill_dep)
-  |> pivot_longer(cols = [bill_len, bill_dep], names_to = measure, values_to = mm)
-  |> filter(island == "Biscoe")
+  |> pivot_longer(cols = [bill_len, bill_dep],
+                  names_to = measure, values_to = mm)
   |> arrange(species, island, measure, mm)
 
-print(long)
+print(profiles)
+print(composition)
+print(unusual)
+write_parquet(bill_measurements, "penguin-bills.parquet")
