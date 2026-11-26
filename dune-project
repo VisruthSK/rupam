@@ -18,6 +18,7 @@
   astring
   re
   digestif
+  ptime
   uucp
   toml
   (ppx_expect :with-test)

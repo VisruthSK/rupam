@@ -10,7 +10,7 @@ work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 
 fetch() {
-  curl -fsSL -o "$2" "$1"
+  curl -fsSL --retry 5 --retry-all-errors --retry-delay 2 -o "$2" "$1"
   local actual
   if command -v sha256sum >/dev/null; then
     actual=$(sha256sum "$2" | cut -d' ' -f1)
@@ -38,12 +38,15 @@ find "$root/vendor/duckdb" -mindepth 1 ! -name dune -delete
 tar xzf "$work/duckdb.tar.gz" -C "$root/vendor/duckdb" \
   duckdb.h duckdb_static_extension.h \
   libduckdb_static.a libparquet_extension.a libjson_extension.a libcore_functions_extension.a
-curl -fsSL -o "$root/vendor/duckdb/LICENSE" "https://raw.githubusercontent.com/duckdb/duckdb/v$duckdb/LICENSE"
+curl -fsSL --retry 5 --retry-all-errors --retry-delay 2 \
+  -o "$root/vendor/duckdb/LICENSE" "https://raw.githubusercontent.com/duckdb/duckdb/v$duckdb/LICENSE"
 
 fetch "https://github.com/apache/arrow-nanoarrow/archive/refs/tags/apache-arrow-nanoarrow-$nanoarrow.tar.gz" \
   "$work/nanoarrow.tar.gz" "$nanoarrow_sha"
-tar xzf "$work/nanoarrow.tar.gz" -C "$work"
-source="$work/arrow-nanoarrow-apache-arrow-nanoarrow-$nanoarrow"
+prefix="arrow-nanoarrow-apache-arrow-nanoarrow-$nanoarrow"
+tar xzf "$work/nanoarrow.tar.gz" -C "$work" \
+  "$prefix/LICENSE.txt" "$prefix/NOTICE.txt" "$prefix/src/nanoarrow" "$prefix/thirdparty/flatcc"
+source="$work/$prefix"
 src="$source/src/nanoarrow"
 flatcc="$source/thirdparty/flatcc"
 out="$root/vendor/nanoarrow"
