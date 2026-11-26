@@ -54,4 +54,4 @@ jobs:
         with:
           packages: any::dplyr, any::tidyr, any::bit64, any::jsonlite, any::arrow
 
-      - run: opam exec -- uv run --locked python -m unittest discover -s test -v
+      - run: opam exec -- uv run --locked python -m unittest discover -s test/integration -v

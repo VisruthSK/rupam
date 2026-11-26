@@ -22,6 +22,22 @@ type part =
 
 let element (c : column) = Types.repr (Types.present c.typ)
 
+let format_cell ~digits typ =
+  match Types.repr (Types.present typ) with
+  | Float -> Option.map (fun s -> Printf.sprintf "%.*f" digits (float_of_string s))
+  | _ -> Fun.id
+;;
+
+let summary page =
+  Printf.sprintf
+    "%d %s × %d %s, %s"
+    page.total
+    (if page.total = 1 then "row" else "rows")
+    page.width
+    (if page.width = 1 then "column" else "columns")
+    (if page.ordered then "ordered" else "unordered")
+;;
+
 let cell t = function
   | None -> None
   | Some text ->
@@ -100,9 +116,7 @@ let lines ?(limit = 100) ~digits page =
       else (
         let c =
           match element c with
-          | Float ->
-            let format s = Printf.sprintf "%.*f" digits (float_of_string s) in
-            { c with cells = Array.map (Option.map format) c.cells }
+          | Float -> { c with cells = Array.map (format_cell ~digits c.typ) c.cells }
           | _ -> c
         in
         let size =
@@ -144,15 +158,6 @@ let lines ?(limit = 100) ~digits page =
                  | Some s -> Plain, pad (numeric c) size s)
               visible))
   in
-  let summary =
-    Printf.sprintf
-      "%d %s × %d %s, %s"
-      page.total
-      (if page.total = 1 then "row" else "rows")
-      page.width
-      (if page.width = 1 then "column" else "columns")
-      (if page.ordered then "ordered" else "unordered")
-  in
   let remaining = page.total - page.offset - shown in
   let more =
     (if remaining > 0
@@ -177,7 +182,7 @@ let lines ?(limit = 100) ~digits page =
         ]
       ]
   in
-  ([ Note, summary ] :: header :: types :: body) @ more
+  ([ Note, summary page ] :: header :: types :: body) @ more
 ;;
 
 let plain ~digits page =

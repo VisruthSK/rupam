@@ -6,3 +6,8 @@ dependencies = ["data-dict-yaml", "polars>=1,<2", "pyarrow>=20"]
 
 [tool.uv]
 package = false
+
+[dependency-groups]
+dev = [
+    "pyte>=0.8,<1",
+]

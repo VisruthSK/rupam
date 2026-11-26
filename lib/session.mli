@@ -1,5 +1,6 @@
 type t
 type result
+type draft
 
 type event =
   | Bound of string * string
@@ -27,9 +28,17 @@ val submit : t -> Syntax.item list -> event list
 val check : t -> Syntax.item -> TransformIR.item list
 val table : t -> string -> TransformIR.table
 val table_of : t -> Syntax.expr -> TransformIR.table
+val open_draft : t -> draft
+val preview_draft : draft -> string -> result
+val cancel_draft : draft -> unit
+val reset_cancelled_draft : draft -> unit
+val close_draft : draft -> unit
+val release_draft : result -> unit
 val result : t -> TransformIR.table -> result
 val page : ?columns:string list -> result -> offset:int -> limit:int -> Page.t
 val histogram : result -> string -> Arrow_result.histogram
+val column_summary : result -> string -> Arrow_result.profile
+val cell : result -> row:int -> string -> Types.t * Arrow_result.value
 val total : result -> int
 val table_of_result : result -> TransformIR.table
 val preview : t -> TransformIR.table -> offset:int -> limit:int -> Page.t

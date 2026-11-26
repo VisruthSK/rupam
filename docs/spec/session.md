@@ -35,8 +35,10 @@ dialect = "dplyr"
 
 `--target r-dplyr` and `:target python-polars` choose a pair atomically.
 Every session runs against a target. `rupam repl` takes it from `--target`,
-then the project, then the user's `rupam.toml`; otherwise an interactive
-prompt asks for one and a non-interactive one fails with `missing-target`.
+then the project, then the user's `rupam.toml`. Without a configured target,
+the terminal REPL opens a numbered picker. Use the Up and Down arrows or
+a number key to move, Enter to select, or Esc to cancel. A non-interactive
+REPL without a target fails with `missing-target`.
 The chosen interpreter is checked before the prompt appears; the worker
 starts on first use.
 `:language` and `:dialect` change one part; a language change that leaves no

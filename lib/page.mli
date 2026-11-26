@@ -40,3 +40,5 @@ val of_arrow
 
 val lines : ?limit:int -> digits:int -> t -> (part * string) list list
 val plain : digits:int -> t -> string list
+val format_cell : digits:int -> Types.t -> string option -> string option
+val summary : t -> string

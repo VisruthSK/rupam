@@ -257,6 +257,59 @@ CAMLprim value rupam_arrow_cells(value handle, value v_offset, value v_limit, va
   CAMLreturn(columns);
 }
 
+CAMLprim value rupam_arrow_value(value handle, value v_row, value v_col) {
+  CAMLparam3(handle, v_row, v_col);
+  CAMLlocal2(payload, answer);
+  result *r = live(handle);
+  int64_t row = Long_val(v_row), col = Long_val(v_col);
+  if (row < 0 || row >= r->rows || col < 0 || col >= r->schema.n_children)
+    caml_invalid_argument("cell index");
+  int64_t low = 0, high = r->batches;
+  while (low < high) {
+    int64_t mid = low + (high - low) / 2;
+    if (r->starts[mid + 1] <= row) low = mid + 1; else high = mid;
+  }
+  struct ArrowError error;
+  struct ArrowArrayView *v = batch(r, low, &error);
+  if (!v) caml_failwith("The result file has an unreadable batch");
+  struct ArrowArrayView *column = v->children[col];
+  row -= r->starts[low];
+  if (ArrowArrayViewIsNull(column, row)) CAMLreturn(Val_int(0));
+  if (column->dictionary) {
+    row = ArrowArrayViewGetIntUnsafe(column, row);
+    column = column->dictionary;
+    if (ArrowArrayViewIsNull(column, row)) CAMLreturn(Val_int(0));
+  }
+  int tag;
+  switch (column->storage_type) {
+    case NANOARROW_TYPE_BOOL:
+      tag = 0;
+      payload = Val_bool(ArrowArrayViewGetIntUnsafe(column, row));
+      break;
+    case NANOARROW_TYPE_INT8: case NANOARROW_TYPE_INT16:
+    case NANOARROW_TYPE_INT32: case NANOARROW_TYPE_INT64:
+    case NANOARROW_TYPE_UINT8: case NANOARROW_TYPE_UINT16: case NANOARROW_TYPE_UINT32:
+      tag = 1;
+      payload = caml_copy_int64(ArrowArrayViewGetIntUnsafe(column, row));
+      break;
+    case NANOARROW_TYPE_HALF_FLOAT: case NANOARROW_TYPE_FLOAT: case NANOARROW_TYPE_DOUBLE:
+      tag = 2;
+      payload = caml_copy_double(ArrowArrayViewGetDoubleUnsafe(column, row));
+      break;
+    case NANOARROW_TYPE_STRING: case NANOARROW_TYPE_LARGE_STRING:
+    case NANOARROW_TYPE_STRING_VIEW: {
+      struct ArrowStringView s = ArrowArrayViewGetStringUnsafe(column, row);
+      tag = 3;
+      payload = caml_alloc_initialized_string(s.size_bytes, s.data);
+      break;
+    }
+    default: CAMLreturn(Val_int(1));
+  }
+  answer = caml_alloc(1, tag);
+  Store_field(answer, 0, payload);
+  CAMLreturn(answer);
+}
+
 CAMLprim value rupam_arrow_close(value handle) {
   result *r = Result_val(handle);
   if (r) release(r);
@@ -278,6 +331,27 @@ static int numeric(struct ArrowArrayView *c) {
     default:
       return 0;
   }
+}
+
+CAMLprim value rupam_arrow_numbers(value handle, value v_column, value v_size) {
+  CAMLparam3(handle, v_column, v_size);
+  CAMLlocal1(numbers);
+  struct ArrowError error;
+  result *r = live(handle);
+  int64_t j = Long_val(v_column);
+  int64_t count = 0;
+  numbers = caml_alloc_float_array(Long_val(v_size));
+  for (int64_t b = 0; b < r->batches; b++) {
+    struct ArrowArrayView *v = batch(r, b, &error);
+    if (!v) caml_failwith("The result file has an unreadable batch");
+    struct ArrowArrayView *c = v->children[j];
+    if (!numeric(c)) caml_failwith("Expected a numeric column");
+    for (int64_t i = 0; i < c->length; i++) {
+      if (ArrowArrayViewIsNull(c, i)) continue;
+      Store_double_field(numbers, count++, ArrowArrayViewGetDoubleUnsafe(c, i));
+    }
+  }
+  CAMLreturn(numbers);
 }
 
 CAMLprim value rupam_arrow_histogram(value handle, value v_column, value v_bins) {

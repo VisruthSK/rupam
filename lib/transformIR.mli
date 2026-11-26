@@ -180,6 +180,7 @@ val join_name : join_kind -> string
 val join_kinds : (string * join_kind) list
 val relationship_name : relationship -> string
 val relationships : (string * relationship) list
+val policy_name : policy -> string
 val policies : (string * policy) list
 val names : table -> string list
 val row : table -> Types.row

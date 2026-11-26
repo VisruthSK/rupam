@@ -52,6 +52,19 @@ dump to the innermost node at a position. `rupam compile FILE --emit
 transform-ir` prints the same TransformIR dump from the installed compiler
 without lowering or running anything.
 
+`scripts/dev stages transform-ir --binding view_result FILE.rp` isolates
+the latest emitted definition of a viewer result for reproduction.
+
+## Developer MCP
+
+`scripts/dev mcp` serves read-only development tools over stdio using the
+2026-07-28 revision. Tools accept explicit source, fixture IDs or spec topics
+and share the same implementation as the stage commands. The tool set
+includes `check`, `tokens`, `syntax`, `typed`, `transform_ir`, `code`,
+`evaluate_reference`, `conformance` for reference fixtures, and `describe`.
+Each request is independent. The analyst session tools are specified in
+[Agents](agent-interface.md#mcp-server).
+
 ## Diagnostic catalogue
 
 `Diagnostic.code` is one variant with a constructor per code. From it derive

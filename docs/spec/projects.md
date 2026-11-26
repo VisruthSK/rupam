@@ -143,7 +143,7 @@ runtime dependencies, not future draws or timestamps.
 | `rupam explain NAME` | explain a diagnostic |
 | `rupam session` | JSON-RPC session protocol over stdio ([Agents](agent-interface.md#session-protocol)) |
 | `rupam mcp [--attach]` | MCP server for the project ([Agents](agent-interface.md#mcp-server)) |
-| `rupam lsp` | language server (deferred) |
+| `rupam lsp` | language server (MVP) |
 
 `--target` and `--no-strict` override `rupam.toml` and are included in the lock.
 

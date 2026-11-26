@@ -205,6 +205,16 @@ rendering measurably cuts frame time and the frontend code shrinks enough to
 justify the Core/Async dependency cost, and it builds and runs natively on
 Windows; measure on wide grids and live editing.
 
+## Viewer column freezing and large-data summaries
+
+Allow analysts to freeze and unfreeze columns for presentation. The default
+freezes visible primary-key columns. A presentation change leaves the
+pipeline and its ordering unchanged.
+
+Offer named approximate summaries for large columns, with visible accuracy
+information. HyperLogLog is an option for distinct counts and quantile
+sketches are an option for quartiles.
+
 ## Unicode operators
 
 Unicode spellings of operators, as in Julia: `∈` for `in`, `∉` for

@@ -55,6 +55,7 @@ let help =
   ; ":redo", "go forward one revision"
   ; ":lock", "validate the saved analysis's inputs and record them in rupam.lock"
   ; ":version", "build identity"
+  ; ":help", "show REPL commands"
   ; ":quit", "leave (or Ctrl+D)"
   ]
 ;;
@@ -240,15 +241,19 @@ let complete r line =
   if not (String.starts_with ~prefix:":" (String.trim line))
   then Completion.complete r.session line
   else (
-    let start = Completion.word_start line in
-    let word = String.sub line start (String.length line - start) in
-    let commands = String.contains (String.trim line) ' ' in
-    let candidates =
-      if commands
-      then command_candidates line @ Completion.tables r.session
-      else command_candidates line
+    let colon = String.index line ':' in
+    let argument = String.index_from_opt line colon ' ' in
+    let start =
+      match argument with
+      | None -> colon
+      | Some _ -> 1 + String.rindex line ' '
     in
-    let start, word = if commands then start, word else start - 1, ":" ^ word in
+    let word = String.sub line start (String.length line - start) in
+    let candidates =
+      match argument with
+      | None -> command_candidates line
+      | Some _ -> command_candidates line @ Completion.tables r.session
+    in
     ( start
     , List.filter
         (fun c -> String.starts_with ~prefix:word c.text && c.text <> word)

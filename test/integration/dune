@@ -6,3 +6,31 @@
   show.py
   lsp.py
   (source_tree ../../examples)))
+
+(rule
+ (alias integration)
+ (enabled_if
+  (<> %{os_type} Win32))
+ (deps
+  test_terminal.py
+  (source_tree ../../examples))
+ (action
+  (setenv
+   RUPAM_TEST_BIN
+   %{exe:../../bin/rupam_cli.exe}
+   (setenv
+    RUPAM_DEV_TEST_BIN
+    %{exe:../../dev/rupam_dev.exe}
+    (run python test_terminal.py -v)))))
+
+(rule
+ (alias integration)
+ (deps
+  test_mcp.py
+  (source_tree ../../docs/spec)
+  (source_tree ../conformance))
+ (action
+  (setenv
+   RUPAM_DEV_TEST_BIN
+   %{exe:../../dev/rupam_dev.exe}
+   (run python test_mcp.py -v))))

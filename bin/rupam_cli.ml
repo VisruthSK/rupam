@@ -151,18 +151,17 @@ let choose (project : Project.t) =
     ignore (Project.require_target project);
     project
   | None ->
-    print_endline "Select an execution target:";
-    List.iteri (fun i (name, _) -> Printf.printf "  %d  %s\n" (i + 1) name) Target.targets;
-    print_string "> ";
-    flush stdout;
+    let label (target : Target.t) =
+      match target.dialect with
+      | Dplyr -> "R (dplyr)"
+      | Polars -> "Python (Polars)"
+    in
     let chosen =
       match
-        int_of_string_opt
-          (String.trim (In_channel.input_line stdin |> Option.value ~default:""))
+        Console.pick ~title:"Select an execution target" (List.map label Target.all)
       with
-      | Some i when i >= 1 && i <= List.length Target.targets ->
-        snd (List.nth Target.targets (i - 1))
-      | _ -> Diagnostic.fail Missing_target "No target chosen"
+      | Some i -> List.nth Target.all i
+      | None -> Diagnostic.fail Missing_target "No target chosen"
     in
     { project with target = { value = Some chosen; origin = Session "selection" } }
 ;;

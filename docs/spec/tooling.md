@@ -66,9 +66,10 @@ and columns not shown.
 
 `:view` opens a full-screen object viewer on a completed binding, expression or
 pipeline stage. Keys: arrows or `hjkl` move, PgUp/PgDn and space page, `g`/`G` jump to
-the ends, `s`/`S` sort by the current column, `f` keeps rows equal to the
-current cell, `u` undoes the last step, `d` shows the column's distribution,
-Enter returns the resulting Rupam expression to the prompt, `q`/Esc close.
+the ends, `s`/`S` sort by the current column, `=` keeps rows equal to the
+current cell, `u` undoes the last grid edit, and `d` shows column details
+alongside the pipeline editor while leaving the grid visible. Enter saves
+the valid pipeline as a fresh REPL binding. `q` and Esc close the viewer.
 Sorts and filters are Rupam steps run through the target; key columns stay
 pinned while scrolling sideways. Tables open in the grid, vectors by index and records by field.
 Drill into a value and return to the same selection. Closing the viewer restores
@@ -94,11 +95,11 @@ inputs, including when a binding is shadowed.
 
 ### Live Rupam preview
 
-Open a table with its binding or completed pipeline in an editable Rupam buffer beside the grid. For example, edit `birds |> filter(body_mass > 4000, missing = skip)`. The viewer uses the REPL's parser, name resolver, checker, completion and compiler. A grid action edits that same expression. The worker evaluates each complete, checked, pure draft against the pinned bindings in the selected dialect. A draft requiring an effect waits for explicit submission at the prompt.
+Open a table with its binding or completed pipeline in an editable Rupam buffer below the grid. For example, edit `birds |> filter(body_mass > 4000, missing = skip)`. F2 switches between the grid and the editor. Enter inserts a newline while editing and F5 saves. The viewer uses the REPL's parser, name resolver, checker, completion and compiler. A grid action edits that same expression. The worker evaluates each complete, checked, pure draft against the pinned bindings in the selected dialect. A draft requiring an effect waits for explicit submission at the prompt.
 
 Keep the last successful grid visible while input is incomplete, invalid or running. Identify the displayed revision and show the current draft's diagnostic at its Rupam span. Coalesce edits and discard stale replies. Publish the new typed result when ready. Render visible Arrow cells on demand. Scrolling reuses the completed result.
 
-Insert the expression at the prompt to continue or save it in an `.rp` script. Closing the viewer restores the original draft and cursor. Generated R is available through the ordinary compiler.
+Save a checked pipeline as a named binding in the REPL. It becomes part of the accepted source saved by `:save` and compiled by the ordinary compiler. Closing the viewer restores the original draft and cursor.
 
 ## Probes
 
@@ -146,7 +147,10 @@ rates.rp:8:28  zero-divisor
   required declaration. Missing-group counts may appear in summaries.
 - Lock errors identify changed inputs and request relocking/recompilation.
 
-## Editor support (deferred)
+## Editor support (MVP)
+
+Ship a TextMate grammar for `.rp` files with lexer-aligned scopes for syntax
+highlighting.
 
 `rupam lsp` provides diagnostics, hover with types, shapes, refinements,
 order, keys, lock status and lifting, schema-aware completion, and go-to-definition.

@@ -196,7 +196,7 @@ snapshot is never reused for a different one without valid shared evidence.
 
 ### Live viewer interaction
 
-Open a table and edit a Rupam filter without pressing Enter. Compare the full result and logical schema against the identical REPL expression and compiled script on the same snapshot. Leave a trailing pipe, misspell a column and correct it. Keep the previous grid labelled until the correction succeeds. Deliver a late reply and verify it cannot overwrite current rows or diagnostics. Verify an effectful draft performs no write, scrolling performs no evaluation, and inserting the filter at the prompt preserves its source.
+Open a table and edit a Rupam filter without submitting it. Compare the full result and logical schema against the identical REPL expression and compiled script on the same snapshot. Leave a trailing pipe, misspell a column and correct it. Keep the previous grid labelled until the correction succeeds. Deliver a late reply and verify it cannot overwrite current rows or diagnostics. Verify an effectful draft performs no write, scrolling performs no evaluation, and saving the filter adds the binding to the accepted source. Exercise completion while typing in a real terminal and check that horizontal cursor movement preserves all columns that already fit.
 
 ## Benchmarks
 

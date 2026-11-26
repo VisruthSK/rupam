@@ -35,6 +35,12 @@ type t =
   ; mutable counter : int
   }
 
+type draft =
+  { preview_session : t
+  ; active_worker : Worker.t option Atomic.t
+  ; cancelled : bool Atomic.t
+  }
+
 type event =
   | Bound of string * string
   | Output of string
@@ -92,10 +98,11 @@ let stop t =
   t.host <- None
 ;;
 
-let host t =
+let host ?(started = fun _ -> ()) t =
   let target = Project.require_target t.project in
   match t.host with
   | Some h when h.target.language = target.language ->
+    started h.worker;
     if h.target <> target
     then (
       ignore (Worker.evaluate h.worker (Dialect.preamble target));
@@ -114,6 +121,7 @@ let host t =
       }
     in
     t.host <- Some h;
+    started worker;
     ignore (Worker.evaluate worker (Dialect.preamble target));
     h
 ;;
@@ -129,8 +137,8 @@ let defined = function
   | _ -> None
 ;;
 
-let establish t =
-  let h = host t in
+let establish ?started t =
+  let h = host ?started t in
   let pending =
     List.filter
       (fun item ->
@@ -152,6 +160,18 @@ let commit t revision =
   t.current <- revision
 ;;
 
+let materialize h table =
+  let file = Filename.temp_file "rupam" ".arrow" in
+  match
+    ignore (Worker.evaluate h.worker (Dialect.result h.target h.names table ~path:file));
+    { table; file; arrow = Arrow_result.open_ipc file }
+  with
+  | result -> result
+  | exception exn ->
+    remove file;
+    raise exn
+;;
+
 let result t (table : TransformIR.table) =
   let h = establish t in
   let key =
@@ -162,9 +182,7 @@ let result t (table : TransformIR.table) =
   match List.assoc_opt key t.results with
   | Some r -> r
   | None ->
-    let file = Filename.temp_file "rupam" ".arrow" in
-    ignore (Worker.evaluate h.worker (Dialect.result h.target h.names table ~path:file));
-    let r = { table; file; arrow = Arrow_result.open_ipc file } in
+    let r = materialize h table in
     List.iteri (fun i (_, old) -> if i >= result_limit - 1 then discard old) t.results;
     t.results <- (key, r) :: List.filteri (fun i _ -> i < result_limit - 1) t.results;
     r
@@ -192,8 +210,32 @@ let page ?columns r ~offset ~limit =
     r.table.schema
 ;;
 
+let column_summary r name =
+  if List.mem name r.table.restricted
+  then Diagnostic.fail Restricted_output "This column is restricted";
+  let column = column_index r name in
+  let arrow = Arrow_result.open_ipc r.file in
+  Fun.protect
+    ~finally:(fun () -> Arrow_result.close arrow)
+    (fun () ->
+       match Types.repr (Types.present (List.assoc name r.table.schema)) with
+       | Float -> Arrow_result.Numeric (Arrow_result.summary arrow ~column)
+       | Int ->
+         let summary = Arrow_result.summary arrow ~column in
+         let counts = Arrow_result.frequencies arrow ~column in
+         Numeric { summary with distinct = counts.distinct }
+       | String | Bool | Variant _ -> Frequencies (Arrow_result.frequencies arrow ~column)
+       | _ -> Diagnostic.fail Unsupported_column_type "This column has no scalar summary")
+;;
+
 let histogram r name =
   Arrow_result.histogram r.arrow ~column:(column_index r name) ~bins:20
+;;
+
+let cell r ~row name =
+  if List.mem name r.table.restricted
+  then Diagnostic.fail Restricted_output "This column is restricted";
+  List.assoc name r.table.schema, Arrow_result.value r.arrow row (column_index r name)
 ;;
 
 let total r = Arrow_result.rows r.arrow
@@ -343,6 +385,49 @@ let table t source =
      | _ -> Diagnostic.fail Not_a_table "Expected a table expression")
   | _ -> Diagnostic.fail Not_a_table "Expected a table expression"
 ;;
+
+let open_draft t =
+  { preview_session = { t with host = None; results = []; past = []; future = [] }
+  ; active_worker = Atomic.make None
+  ; cancelled = Atomic.make false
+  }
+;;
+
+let cancel_draft draft =
+  Atomic.set draft.cancelled true;
+  Option.iter Worker.cancel (Atomic.get draft.active_worker)
+;;
+
+let close_draft draft = stop draft.preview_session
+
+let reset_cancelled_draft draft =
+  if Atomic.get draft.cancelled
+  then (
+    close_draft draft;
+    Atomic.set draft.active_worker None;
+    Atomic.set draft.cancelled false)
+;;
+
+let preview_draft draft source =
+  if Atomic.get draft.cancelled then raise Sys.Break;
+  let t = draft.preview_session in
+  let started worker =
+    Atomic.set draft.active_worker (Some worker);
+    if Atomic.get draft.cancelled
+    then (
+      Worker.cancel worker;
+      raise Sys.Break)
+  in
+  let env = { t.current.env with supply = ref !(t.current.env.supply) } in
+  match Frontend.read source with
+  | [ ({ declaration = Evaluate _; _ } as item) ] ->
+    (match snd (Elaborate.item env item) with
+     | [ Show { node = Table table; _ } ] -> materialize (establish ~started t) table
+     | _ -> Diagnostic.fail ~span:item.span Not_a_table "Expected a table expression")
+  | _ -> Diagnostic.fail Not_a_table "Expected a single table expression"
+;;
+
+let release_draft = discard
 
 let code t target table =
   let target = Option.value target ~default:(Project.require_target t.project) in

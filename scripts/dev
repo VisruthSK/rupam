@@ -24,8 +24,9 @@ scripts/dev watch               rebuild and rerun tests on every change
 scripts/dev promote             accept changed expect and cram output
 scripts/dev fmt                 format the code
 scripts/dev conformance         run conformance fixtures, showing why runnable pending ones fail
-scripts/dev stages STAGE FILE   print tokens, syntax, typed or code for a source file
+scripts/dev stages STAGE FILE   print tokens, syntax, typed, transform-ir or code
 scripts/dev fixture ID FILE     record FILE as a pending conformance fixture with its observed outcome
+scripts/dev mcp                 serve compiler inspection tools over stdio
 EOF
 }
 
@@ -57,6 +58,10 @@ case "${1:-}" in
   fixture)
     dune build dev/rupam_dev.exe
     "$build/default/dev/rupam_dev.exe" "$@"
+    ;;
+  mcp)
+    dune build dev/rupam_dev.exe
+    exec "$build/default/dev/rupam_dev.exe" mcp
     ;;
   *) usage; exit 2 ;;
 esac

@@ -19,6 +19,8 @@ type t =
   ; requests : out_channel
   ; replies : in_channel
   ; mutable revision : int
+  ; lifecycle : Mutex.t
+  ; mutable stopped : bool
   }
 
 let python =
@@ -82,13 +84,32 @@ let start (runtime : Runtime.t) (language : Target.language) =
   ; requests = Unix.out_channel_of_descr requests
   ; replies = Unix.in_channel_of_descr replies
   ; revision = 0
+  ; lifecycle = Mutex.create ()
+  ; stopped = false
   }
 ;;
 
 let stop w =
-  close_out_noerr w.requests;
-  close_in_noerr w.replies;
-  ignore (Unix.waitpid [] w.pid)
+  Mutex.lock w.lifecycle;
+  let stop = not w.stopped in
+  w.stopped <- true;
+  Mutex.unlock w.lifecycle;
+  if stop
+  then (
+    close_out_noerr w.requests;
+    close_in_noerr w.replies;
+    ignore (Unix.waitpid [] w.pid))
+;;
+
+let cancel w =
+  Mutex.lock w.lifecycle;
+  Fun.protect
+    ~finally:(fun () -> Mutex.unlock w.lifecycle)
+    (fun () ->
+       if not w.stopped
+       then (
+         try Unix.kill w.pid (if Sys.win32 then Sys.sigterm else Sys.sigkill) with
+         | Unix.Unix_error (Unix.ESRCH, _, _) -> ()))
 ;;
 
 let host_error message =

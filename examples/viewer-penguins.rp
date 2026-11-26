@@ -1,0 +1,2 @@
+# 344 observations from datasets::penguins, including missing measurements.
+let penguins = read_csv("penguins.csv")
