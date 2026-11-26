@@ -1,0 +1,4 @@
+id = "C135"
+status = "pending"
+case = '''`fork`, define in the fork, `context` on both'''
+expected = '''original session unchanged'''

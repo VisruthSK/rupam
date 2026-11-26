@@ -1,0 +1,4 @@
+id = "C136"
+status = "pending"
+case = '''`save` after defines, replacements and a removal'''
+expected = '''canonical `.rp` in dependency order that checks to the same schemas'''

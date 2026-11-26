@@ -1,0 +1,4 @@
+id = "C142"
+status = "pending"
+case = '''`x not in ys` and `not (x in ys)` over optional `x`, empty `ys` and `ys` containing `None`'''
+expected = '''identical results'''

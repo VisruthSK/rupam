@@ -1,4 +1,13 @@
 id = "C42"
-status = "pending"
+status = "active"
 case = '''`100 * 0.75`; `[1, 2.5]`; `if (TRUE) 1 else 2.5`'''
 expected = '''`75.0`; `[1.0, 2.5]`; `1.0`, all float elements/results'''
+
+[run]
+source = '''
+(100 * 0.75, [1, 2.5], if (TRUE) 1 else 2.5)
+'''
+
+[expect]
+type = "(Float, [Float], Float)"
+value = '''(75.0, [1.0, 2.5], 1.0)'''

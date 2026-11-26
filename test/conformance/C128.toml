@@ -1,0 +1,4 @@
+id = "C128"
+status = "pending"
+case = '''`penguins \|> summarize(m = todo, by = species)`'''
+expected = '''checks; hole reports numeric type, group scope and candidates including `mean(body_mass)`; `run` and `compile` refuse'''

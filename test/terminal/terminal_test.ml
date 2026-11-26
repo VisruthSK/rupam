@@ -141,9 +141,9 @@ let completion () =
   session ~dir [ "--target"; "python-polars" ] (fun c term ->
     type_ c term ":h";
     press c term K.Tab;
-    see c "show REPL commands";
+    see c "commands and keys";
     press c term ~mods:{ K.no_mods with ctrl = true } (char 'u');
-    gone c "show REPL commands";
+    gone c "commands and keys";
     type_ c term ":";
     press c term K.Tab;
     see c "first rows";
@@ -151,7 +151,26 @@ let completion () =
     until c (fun term ->
       shows "show or set the target" term
       && shows "inferred type" term
-      && not (shows "first rows" term)))
+      && not (shows "first rows" term));
+    press c term ~mods:{ K.no_mods with ctrl = true } (char 'u');
+    type_ c term ":ty";
+    press c term K.Tab;
+    press c term K.Enter;
+    press c term K.Enter;
+    see c ":type EXPR  inferred type";
+    check "waits for the argument" (not (shows "expects" term));
+    type_ c term "1 + 41";
+    press c term K.Enter;
+    see c "Int";
+    submit c term "40 + 2";
+    see c "42";
+    press c term ~mods:{ K.no_mods with ctrl = true } (char 'r');
+    type_ c term "41";
+    see c "reverse search: 41";
+    see c "1 + 41";
+    press c term K.Enter;
+    gone c "reverse search";
+    press c term ~mods:{ K.no_mods with ctrl = true } (char 'u'))
 ;;
 
 let grid_pipeline () =
@@ -386,6 +405,8 @@ let target_menu () =
        check "no kind label" (not (shows "target" term && shows "r-dplyr  target" term));
        press c term K.Down;
        see c ":target r-dplyr";
+       press c term K.Enter;
+       check "accepting does not run" (not (shows "r-dplyr · :help" term));
        press c term K.Enter;
        see c "r-dplyr · :help")
 ;;

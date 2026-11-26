@@ -1,0 +1,4 @@
+id = "C145"
+status = "pending"
+case = '''pipeline with `!view()` and `!hist(revenue)` taps, then `:save`'''
+expected = '''taps run once in pipeline order, leave the value unchanged and are absent from saved source'''

@@ -1,0 +1,4 @@
+id = "C140"
+status = "pending"
+case = '''`elevation` (four ranges over `[1, 3000]`) applied to a contract-bounded column, then to an unbounded one'''
+expected = '''first checks; second is `nonexhaustive-match` naming the uncovered intervals'''

@@ -1,0 +1,4 @@
+id = "C143"
+status = "pending"
+case = '''`match? score { 90=.. => "A", ..<90 => "B" }` over `[95, None, 10]`'''
+expected = '''`["A", None, "B"]`, type `String?`'''

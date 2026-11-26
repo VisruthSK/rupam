@@ -1,0 +1,4 @@
+id = "C138"
+status = "pending"
+case = '''`n_distinct([1, 2, None, None])` under `keep` and `skip`'''
+expected = '''3 and 2, both `Int`'''

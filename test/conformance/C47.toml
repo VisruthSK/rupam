@@ -1,4 +1,13 @@
 id = "C47"
-status = "pending"
+status = "active"
 case = '''`exp(-1000.0)`'''
 expected = '''`0.0`, no positive refinement'''
+
+[run]
+source = '''
+exp(-1000.0)
+'''
+
+[expect]
+type = "Float"
+value = '''0.0'''

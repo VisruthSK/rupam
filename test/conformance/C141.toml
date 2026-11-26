@@ -1,0 +1,4 @@
+id = "C141"
+status = "pending"
+case = '''`income ?? income2 ?? 0.0` with `income2` failing where `income` is present'''
+expected = '''no failure; result `Float`; `revenue ?? 0.0 > 1.0` parses as `(revenue ?? 0.0) > 1.0`'''

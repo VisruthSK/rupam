@@ -1,0 +1,4 @@
+id = "C132"
+status = "pending"
+case = '''`define` an item, redefine a dependency'''
+expected = '''dependant reported stale; old revision still served to an open result handle'''

@@ -1,0 +1,4 @@
+id = "C129"
+status = "pending"
+case = '''`filter(cost > 0.0)` with optional `cost` through the session protocol'''
+expected = '''`optional-condition` with a decision whose options are `missing = skip` and `missing = keep`, each with its schema consequence'''

@@ -79,7 +79,7 @@ let rec expr ctx (x : Syntax.expr) : C.expr =
         "This condition is missing where its inputs are missing. Wrap it in \
          coalesce(condition, FALSE) or coalesce(condition, TRUE)";
     expect c.span T.Bool c.typ;
-    let a, b, t = common span (here a) (here b) in
+    let a, b, t = common span (expr (present_after ctx c) a) (here b) in
     let optional = T.is_optional a.typ || T.is_optional b.typ in
     make (shape_of span [ c; a; b ]) (if optional then T.optional t else t) (If (c, a, b))
   | Member (v, set) ->
@@ -288,20 +288,27 @@ and chain ctx span first links =
 
 and established (e : C.expr) =
   match e.node with
-  | Builtin (Present, [ { node = Column name; _ } ]) -> [ name ]
+  | Builtin (Present, [ ({ node = Column _ | Variable _; _ } as x) ]) -> [ x ]
   | Binary (And, a, b) -> established a @ established b
   | _ -> []
 
 and present_after ctx condition =
-  match ctx.columns, established condition with
-  | Some row, (_ :: _ as names) ->
-    let fields =
-      List.map
-        (fun (name, t) -> name, if List.mem name names then T.present t else t)
-        row.fields
-    in
-    { ctx with columns = Some { row with fields } }
-  | _ -> ctx
+  List.fold_left
+    (fun ctx (x : C.expr) ->
+       match x.node, ctx.columns with
+       | Column name, Some row ->
+         let fields =
+           List.map
+             (fun (n, t) -> n, if n = name then T.present t else t)
+             row.fields
+         in
+         { ctx with columns = Some { row with fields } }
+       | Variable id, _ ->
+         let refined = Inline { x with typ = T.present x.typ } in
+         { ctx with env = { ctx.env with names = (id.name, refined) :: ctx.env.names } }
+       | _ -> ctx)
+    ctx
+    (established condition)
 
 and binary ctx span op a b =
   let make = make span in

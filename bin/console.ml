@@ -2,10 +2,19 @@ open Mosaic
 module Style = Ansi.Style
 module Color = Ansi.Color
 
+type search_key =
+  | Start
+  | Type of string
+  | Erase
+  | Keep
+  | Cancel
+
 type msg =
   | Edit of Editor.t
   | Submit of string
   | Recall of int
+  | Accept
+  | Search of search_key
   | Choose of int
   | Complete
   | Clear
@@ -44,6 +53,7 @@ type model =
   ; viewer : Viewer.t option
   ; editing : bool
   ; naming : Editor.t option
+  ; search : (string * int * Editor.t) option
   ; help : bool
   ; placement : placement
   ; working : work option
@@ -536,10 +546,17 @@ let view model =
         (List.rev model.pending)
     in
     let editor = input_pane model ~focused:true in
+    let hint =
+      match model.search, Repl.hint (Editor.text model.input) with
+      | Some (query, _, _), _ ->
+        [ text ~style:(style faint) (Printf.sprintf "  reverse search: %s" query) ]
+      | None, Some hint when model.menu = None -> [ text ~style:(style faint) ("  " ^ hint) ]
+      | None, _ -> []
+    in
     box
       ~flex_direction:Column
       ~size:full
-      (pending @ [ editor ] @ suggestions model @ [ status model.session ])
+      (pending @ [ editor ] @ hint @ suggestions model @ [ status model.session ])
 ;;
 
 let banner session =
@@ -803,7 +820,35 @@ let step msg model =
        else model, Cmd.none
      | _ -> model, Cmd.none)
   | Name_cancel -> { model with naming = None }, Cmd.none
+  | Submit source when Repl.missing_argument source ->
+    let input =
+      if String.ends_with ~suffix:" " source then model.input else Editor.insert " " model.input
+    in
+    { model with input; menu = None }, Cmd.none
   | Submit source -> evaluate model source
+  | Accept -> { model with menu = None }, Cmd.none
+  | Search key ->
+    let find query skip =
+      List.filter (fun entry -> query <> "" && Astring.String.is_infix ~affix:query entry) model.history
+      |> fun matches -> List.nth_opt matches skip
+    in
+    let show query skip original =
+      let input =
+        Option.fold ~none:original ~some:Editor.of_string (find query skip)
+      in
+      { model with search = Some (query, skip, original); input; menu = None }, Cmd.none
+    in
+    (match key, model.search with
+     | Start, None -> show "" 0 model.input
+     | Start, Some (query, skip, original) ->
+       if find query (skip + 1) = None then model, Cmd.none else show query (skip + 1) original
+     | Type text, Some (query, _, original) -> show (query ^ text) 0 original
+     | Erase, Some (query, _, original) ->
+       let query = if query = "" then "" else String.sub query 0 (String.length query - 1) in
+       show query 0 original
+     | Keep, Some _ -> { model with search = None }, Cmd.none
+     | Cancel, Some (_, _, original) -> { model with search = None; input = original }, Cmd.none
+     | _, None -> model, Cmd.none)
   | Recall step -> { (recall model step) with menu = None }, Cmd.none
   | Choose step ->
     (match model.menu with
@@ -971,6 +1016,23 @@ let paste_formatting =
     Some (Pasted (Event.Paste.text event)))
 ;;
 
+let searching =
+  Sub.on_key ~phase:Capture (fun event ->
+    let key = Event.Key.data event in
+    Event.Key.prevent_default event;
+    match key.key with
+    | Char c when key.mods.ctrl && Uchar.to_int c = Char.code 'r' -> Some (Search Start)
+    | Char c when key.mods.ctrl && Uchar.to_int c = Char.code 'g' -> Some (Search Cancel)
+    | Char c when not (key.mods.ctrl || key.mods.alt) ->
+      let buffer = Buffer.create 4 in
+      Buffer.add_utf_8_uchar buffer c;
+      Some (Search (Type (Buffer.contents buffer)))
+    | Backspace -> Some (Search Erase)
+    | Enter -> Some (Search Keep)
+    | Escape -> Some (Search Cancel)
+    | _ -> Some (Search Keep))
+;;
+
 let editing_keys =
   Sub.on_key ~phase:Capture (fun event ->
     let key = Event.Key.data event in
@@ -1083,7 +1145,7 @@ let subscriptions model =
   | None ->
     Sub.batch
       [ resize
-      ; editing_keys
+      ; (if model.search <> None then searching else editing_keys)
       ; paste_formatting
       ; Sub.on_keys
           ~phase:Capture
@@ -1091,7 +1153,11 @@ let subscriptions model =
             then [ Shortcut.up, Recall (-1); Shortcut.down, Recall 1 ]
             else [ Shortcut.up, Choose (-1); Shortcut.down, Choose 1 ])
            @ [ Shortcut.tab, Complete
-             ; Shortcut.enter, Submit (Editor.text model.input)
+           ; Shortcut.ctrl 'r', Search Start
+           ; ( Shortcut.enter
+             , match model.menu with
+               | Some { selected = Some _; _ } -> Accept
+               | _ -> Submit (Editor.text model.input) )
              ; Shortcut.ctrl 'l', Clear
              ]
            @ if Editor.text model.input = "" then [ Shortcut.ctrl 'd', Quit ] else [])
@@ -1126,6 +1192,7 @@ let start ~project ?path () =
               ; viewer = None
               ; editing = false
               ; naming = None
+              ; search = None
               ; help = false
               ; placement = Below
               ; working = None

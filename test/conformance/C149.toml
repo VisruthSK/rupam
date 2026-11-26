@@ -1,0 +1,4 @@
+id = "C149"
+status = "pending"
+case = '''`as_enum(island)` over values Torgersen, Biscoe, Dream, `None`'''
+expected = '''enum levels Biscoe, Dream, Torgersen; `None` kept; provisional until `:lock`'''

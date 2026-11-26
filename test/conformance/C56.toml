@@ -2,3 +2,12 @@ id = "C56"
 status = "pending"
 case = '''`let empty: [Int] = []; sum(empty)`; `sum([None,None], missing = skip)` with Int? elements; `sum([0,0])`'''
 expected = '''None, None, 0; nonempty known-present sum is present'''
+
+[run]
+source = '''
+let empty: [Int] = []
+(sum(empty), sum([0, 0]))
+'''
+
+[expect]
+value = '''(None, 0)'''

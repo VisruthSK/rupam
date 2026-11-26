@@ -49,7 +49,7 @@ type event =
   | Viewed of Syntax.expr * result
   | Schema of (string * Types.t) list
   | Typed of Types.t
-  | Histogram of string * Arrow_result.histogram
+  | Histogram of string * Arrow_result.summary
   | Bars of string * Arrow_result.frequencies
   | Inspection_failed of Diagnostic.t
 
@@ -229,8 +229,7 @@ let column_summary r name =
        | _ -> Diagnostic.fail Unsupported_column_type "This column has no scalar summary")
 ;;
 
-let bins r column =
-  let summary = Arrow_result.summary r.arrow ~column in
+let bins (summary : Arrow_result.summary) =
   let h = summary.histogram in
   let present = Array.fold_left ( + ) 0 h.counts in
   let range = h.high -. h.low in
@@ -250,7 +249,10 @@ let bins r column =
 
 let histogram r name =
   let column = column_index r name in
-  Arrow_result.histogram r.arrow ~column ~bins:(bins r column)
+  let summary = Arrow_result.summary r.arrow ~column in
+  { summary with
+    histogram = Arrow_result.histogram r.arrow ~column ~bins:(bins summary)
+  }
 ;;
 
 let cell r ~row name =

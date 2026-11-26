@@ -1,4 +1,12 @@
 id = "C93"
-status = "pending"
+status = "active"
 case = '''`1_00_000`, `1.234_56`, `1e1_0`; `not x > 0`; `[..rest]`'''
 expected = '''valid literals, Boolean negation of comparison, valid rest-only pattern'''
+
+[run]
+source = '''
+(1_00_000, 1.234_56, 1e1_0, not 1 > 0)
+'''
+
+[expect]
+value = '''(100000, 1.23456, 10000000000.0, FALSE)'''

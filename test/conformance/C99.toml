@@ -1,4 +1,14 @@
 id = "C99"
-status = "pending"
+status = "active"
 case = '''`let zero = 0.0; x == zero` versus `x == 0.0`, including signed zero and tiny nonzero'''
 expected = '''identical exact results and refinements'''
+
+[run]
+source = '''
+let zero = 0.0
+let x = -0.0
+(x == zero, x == 0.0, 1e-300 == zero, 1e-300 == 0.0)
+'''
+
+[expect]
+value = '''(TRUE, TRUE, FALSE, FALSE)'''

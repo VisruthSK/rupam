@@ -1,0 +1,4 @@
+id = "C150"
+status = "pending"
+case = '''`as_enum(x)` over 51 distinct values'''
+expected = '''enum of 51 levels with the `many-levels` warning'''

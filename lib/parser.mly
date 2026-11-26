@@ -132,7 +132,11 @@ expr: MATCH_PRESENT expr LC arms RC { at $startpos $endpos (Match_present ($2,Li
  | NAME { at $startpos $endpos (Name (Bare,$1)) } | DOLLAR NAME { at $startpos $endpos (Name (Column,$2)) }
  | CARET NAME { at $startpos $endpos (Name (Lexical,$2)) } | literal { at $startpos $endpos (Literal $1) }
  | LP expr RP { $2 } | expr DOT NAME { at $startpos $endpos (Field ($1,$3)) }
- | expr LP args RP { at $startpos $endpos (Call ($1,$3)) }
+ | expr LP args RP {
+     let callee = match $1.form with
+       | Name (r, n) -> { $1 with form = Name (r, american n) }
+       | _ -> $1 in
+     at $startpos $endpos (Call (callee,$3)) }
  | expr LB expr RB { at $startpos $endpos (Index ($1,Element $3)) }
  | expr LB expr from RB { at $startpos $endpos (Index ($1,From ($3,$4))) }
  | expr LB DOTDOTEQ expr RB { at $startpos $endpos (Index ($1,Upto ($4,true))) }

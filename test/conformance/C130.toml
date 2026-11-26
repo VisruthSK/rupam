@@ -1,0 +1,4 @@
+id = "C130"
+status = "pending"
+case = '''`select(body_mas)`'''
+expected = '''`unknown-column` with a fix to `body_mass`'''

@@ -81,7 +81,7 @@ let regional = sales
 | `!print()` | the value; bounded rows and columns for tables |
 | `!view()` | the viewer on the value |
 | `!schema()` | the schema with refinements and evidence |
-| `!hist(column)` | a histogram of a numeric column, binned by the larger of the Freedman–Diaconis and Sturges counts |
+| `!hist(column)` | a histogram of a numeric column, binned by the larger of the Freedman–Diaconis and Sturges counts, with round-number axis ticks and the count, missing count, mean, sd and five-number summary beside it |
 | `!bar(column)` | a bar chart of a categorical column's value counts, missing included |
 
 - Each tap has type `T -> T` with a presentation effect. It observes the exact

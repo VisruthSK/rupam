@@ -85,6 +85,17 @@ type annotation =
 
 type variant = string * (string * annotation) list [@@deriving sexp_of]
 
+let american name =
+  match name with
+  | "summarise" -> "summarize"
+  | "standardise" -> "standardize"
+  | "normalise" -> "normalize"
+  | "categorise" -> "categorize"
+  | "colour" -> "color"
+  | "colours" -> "colors"
+  | name -> name
+;;
+
 type expr =
   { form : form
   ; span : span

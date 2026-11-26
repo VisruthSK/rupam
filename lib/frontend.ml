@@ -122,11 +122,11 @@ let rec desugar parse x =
   | _ -> x
 ;;
 
-let rec parse lexbuf =
+let rec items lexbuf =
   let expression position source =
     let buffer = Lexing.from_string source in
     Lexing.set_position buffer position;
-    match parse buffer with
+    match items buffer with
     | [ { Syntax.declaration = Evaluate value; _ } ] -> value
     | _ -> Diagnostic.fail Bad_interpolation "A string slot holds one expression"
   in
@@ -207,6 +207,24 @@ let rec parse lexbuf =
     (Parser.program next lexbuf)
 ;;
 
+let parse buf =
+  let span () = buf.Lexing.lex_start_p, buf.lex_curr_p in
+  match items buf with
+  | declarations -> declarations
+  | exception Parser.Error ->
+    if Lexing.lexeme buf = ""
+    then Diagnostic.fail ~span:(span ()) Incomplete_input "Unfinished expression"
+    else Diagnostic.fail ~span:(span ()) Syntax_error ("Unexpected " ^ Lexing.lexeme buf)
+  | exception Diagnostic.Error ({ span = None; _ } as d) ->
+    raise (Diagnostic.Error { d with span = Some (span ()) })
+;;
+
+let read ?(file = "") source =
+  let buf = Lexing.from_string source in
+  Lexing.set_filename buf file;
+  parse buf
+;;
+
 let valid_prefix source =
   let buf = Lexing.from_string source in
   let rec boundaries depth acc =
@@ -226,22 +244,8 @@ let valid_prefix source =
          | [] -> None
          | ds -> Some (text, ds)
        with
-       | Parser.Error | Diagnostic.Error _ -> None)
+       | Diagnostic.Error _ -> None)
     (boundaries 0 [])
-;;
-
-let read ?(file = "") source =
-  let buf = Lexing.from_string source in
-  Lexing.set_filename buf file;
-  let span () = buf.lex_start_p, buf.lex_curr_p in
-  match parse buf with
-  | declarations -> declarations
-  | exception Parser.Error ->
-    if Lexing.lexeme buf = ""
-    then Diagnostic.fail ~span:(span ()) Incomplete_input "Unfinished expression"
-    else Diagnostic.fail ~span:(span ()) Syntax_error ("Unexpected " ^ Lexing.lexeme buf)
-  | exception Diagnostic.Error ({ span = None; _ } as d) ->
-    raise (Diagnostic.Error { d with span = Some (span ()) })
 ;;
 
 let table_draft source =

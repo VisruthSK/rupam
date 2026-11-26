@@ -1,0 +1,4 @@
+id = "C148"
+status = "pending"
+case = '''`Float in 0<..<1` written as a parameter and displayed by `:type`'''
+expected = '''displayed as written'''

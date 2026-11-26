@@ -10,7 +10,7 @@ type event =
   | Viewed of Syntax.expr * result
   | Schema of (string * Types.t) list
   | Typed of Types.t
-  | Histogram of string * Arrow_result.histogram
+  | Histogram of string * Arrow_result.summary
   | Bars of string * Arrow_result.frequencies
   | Inspection_failed of Diagnostic.t
 
@@ -37,7 +37,7 @@ val close_draft : draft -> unit
 val release_draft : result -> unit
 val result : t -> TransformIR.table -> result
 val page : ?columns:string list -> result -> offset:int -> limit:int -> Page.t
-val histogram : result -> string -> Arrow_result.histogram
+val histogram : result -> string -> Arrow_result.summary
 val column_summary : result -> string -> Arrow_result.profile
 val cell : result -> row:int -> string -> Types.t * Arrow_result.value
 val total : result -> int

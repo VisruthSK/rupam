@@ -1,4 +1,14 @@
 id = "C55"
-status = "pending"
+status = "active"
 case = '''`if (some(x)) x + 1 else 0`, x is Int?'''
 expected = '''present Int; missing element becomes 0'''
+
+[run]
+source = '''
+let x: Int? = None
+if (some(x)) x + 1 else 0
+'''
+
+[expect]
+type = "Int"
+value = '''0'''

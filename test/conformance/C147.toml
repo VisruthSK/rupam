@@ -1,0 +1,4 @@
+id = "C147"
+status = "pending"
+case = '''`let p(x: Float in 0=..=1) = x`; `p(0.5)`, `p(1.5)`, `p(mean(probs))` where `probs` has contract bounds [0, 1]'''
+expected = '''0.5; `refinement-required` naming (1, 1.5]; checks'''

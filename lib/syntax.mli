@@ -78,6 +78,8 @@ type annotation =
 
 type variant = string * (string * annotation) list [@@deriving sexp_of]
 
+val american : string -> string
+
 type expr =
   { form : form
   ; span : span

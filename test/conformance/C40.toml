@@ -2,3 +2,12 @@ id = "C40"
 status = "pending"
 case = '''`Int(x)` with `x : Float`; `Int(round(x))`'''
 expected = '''type error; accepted with checked range'''
+
+[run]
+source = '''
+let x = 2.5
+Int(x)
+'''
+
+[expect]
+diagnostic = "type"

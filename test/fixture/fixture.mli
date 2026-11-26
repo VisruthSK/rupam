@@ -6,6 +6,7 @@ type outcome =
   { typ : string option
   ; value : string option
   ; diagnostic : string option
+  ; message : string option
   }
 
 type t =

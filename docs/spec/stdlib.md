@@ -1,5 +1,10 @@
 # Standard library
 
+Each name has one documented spelling. British spellings of function and verb
+names (`summarise`, `normalise`, `colour`) are accepted silently and formatted
+to the documented spelling; they never appear in completion, help or
+diagnostics.
+
 Functions lift per [Types](types.md). Table operations use native vectorised
 lowerings or narrow adapters; the common supported core is available in both
 dialects. Reductions take `missing =` for optional inputs. Ordinary vector
@@ -113,6 +118,13 @@ Boolean stored values with the corresponding primitive parser first). Date
 and time parsers follow the formats and zone rules below; ambiguous or
 nonexistent local times require the same explicit strategies as construction.
 
+`as_enum(x)` (alias `as_factor`) converts a String, Int or Bool column to an
+enum whose levels are its distinct present values in ascending order; `None`
+stays `None`. Levels are discovered from the snapshot as pivot levels are:
+provisional while exploring, committed by `:lock`, and a changed level set
+requires relocking. More than 50 levels is the warning `many-levels`, since
+such a column is rarely categorical. Declared domains use `parse_enum`.
+
 ## Missing values
 
 `coalesce(x, fallback)` selects the first present value, using compatible
@@ -170,8 +182,7 @@ policy for optional predicates; `reduce(xs, init, f)` folds left in vector
 order, returning `init` on empty input; each accumulator has the inferred
 common type of `init` and `f`'s result. `seq(from, to, by)` is inclusive of
 reachable endpoints, has nonzero step and compatible numeric inputs;
-inconsistent step direction yields an empty vector. `rep(x, times)` repeats
-values for a nonnegative Int count. `x in set` uses exact compatible
+inconsistent step direction yields an empty vector. `x in set` uses exact compatible
 relational equivalence on present values; missing operands follow ordinary
 optional comparison semantics (a present match determines TRUE, otherwise
 unknown if a candidate is missing). `assert_key`, `desc`, `across`, selectors,

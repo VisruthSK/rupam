@@ -1,0 +1,4 @@
+id = "C137"
+status = "pending"
+case = '''helper annotated `(t: Table<{a: Int, b: String}>)` applied to a table whose columns are `b, a`'''
+expected = '''accepted; the result keeps the order `b, a`'''

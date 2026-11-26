@@ -1,0 +1,4 @@
+id = "C134"
+status = "pending"
+case = '''`page` of a table with a restricted column at `rows` exposure'''
+expected = '''column absent; omission reported'''

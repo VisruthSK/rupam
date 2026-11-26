@@ -47,14 +47,23 @@ the locked analysis.
 | `:status` | current/stale lock and changed dependencies |
 | `:validate TABLE` | validate the whole source snapshot |
 | `:share` | let `rupam mcp --attach` join this session |
-| `:bindings`, `:help`, `:quit` | |
+| `:help [NAME]`, `?[NAME]` | commands and keys; with a name, the documentation of a function, verb or command, a table's schema or a binding's type |
+| `:bindings`, `:quit` | |
 
-`!print()`, `!view()`, `!schema()` and `!hist(column)` are inspection taps
+`!print()`, `!view()`, `!schema()`, `!hist(column)` and `!bar(column)` are inspection taps
 ([Session](session.md#inspection-taps)); `:view` and `:preview` remain as
 command forms of the same operations.
 
 The prompt highlights syntax as it is typed, completes from a menu, edits
-multiple lines and keeps history. Completion offers columns with their types
+multiple lines and keeps history.
+
+- Tab opens the completion menu; Up and Down move through it. Enter on a
+  highlighted suggestion accepts it and never runs the input.
+- While the input is a bare command, the line under the prompt shows its usage.
+  Enter on a command that requires an argument inserts a space and waits.
+- Ctrl+R searches history backwards for the typed substring. Ctrl+R again
+  moves to the next older match, Enter keeps the match for editing, and Esc
+  or Ctrl+G restores the original input. Completion offers columns with their types
 and units, enum values, and functions with signatures.
 
 Tables print the checker’s exact type beneath each column name in subdued grey,

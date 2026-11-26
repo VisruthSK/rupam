@@ -1,0 +1,4 @@
+id = "C133"
+status = "pending"
+case = '''evaluate `write_csv` without passing its effect set'''
+expected = '''rejected; nothing written'''

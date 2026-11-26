@@ -8,6 +8,7 @@ type outcome =
   { typ : string option
   ; value : string option
   ; diagnostic : string option
+  ; message : string option
   }
 
 type t =
@@ -41,6 +42,7 @@ let load file =
       { typ = expected "type"
       ; value = expected "value"
       ; diagnostic = expected "diagnostic"
+      ; message = None
       }
   }
 ;;
@@ -69,17 +71,19 @@ let evaluate source =
       , Option.map (fun (_, v) -> Reference.display v) (List.nth_opt (List.rev shown) 0) )
     | Variant _ :: _ | [] -> None, None
   with
-  | typ, value -> { typ; value; diagnostic = None }
+  | typ, value -> { typ; value; diagnostic = None; message = None }
   | exception exn ->
+    let d = Diagnostic.of_exn exn in
     { typ = None
     ; value = None
-    ; diagnostic = Some (Diagnostic.name (Diagnostic.of_exn exn).code)
+    ; diagnostic = Some (Diagnostic.name d.code)
+    ; message = Some d.message
     }
 ;;
 
 let check fixture =
   match fixture.source, fixture.expect with
-  | None, _ | Some _, { typ = None; value = None; diagnostic = None } -> Unspecified
+  | None, _ | Some _, { typ = None; value = None; diagnostic = None; _ } -> Unspecified
   | Some source, expect ->
     let outcome = evaluate source in
     let compare what expected actual =
@@ -92,7 +96,8 @@ let check fixture =
              e
              (match actual, outcome.diagnostic with
               | Some a, _ -> a
-              | None, Some code -> "diagnostic " ^ code
+              | None, Some code ->
+                "diagnostic " ^ code ^ Option.fold ~none:"" ~some:(( ^ ) ": ") outcome.message
               | None, None -> "nothing"))
       | _ -> None
     in

@@ -265,12 +265,18 @@ tolerance, ambiguity and coverage are explicit; established facts such as
 non-overlapping intervals inform cardinality. Precedents: Polars non-equi and
 as-of joins; dplyr inequality, rolling and overlap joins.
 
-## Inline help
+## Help search
 
-`?name` at the prompt shows documentation for a function, verb, binding,
-column or type, as R's `?`, from the same declarations that drive completion
-and `rupam explain`. `??term` searches names and descriptions. In the viewer,
-`?` on its own shows the key bindings.
+`??term` searches names and descriptions of functions, verbs, bindings,
+columns and types, from the same declarations as `?name`.
+
+## Repeat
+
+`repeat(xs, times)` repeats the whole vector `times` times and
+`repeat_each(xs, times)` repeats each element, with `times` either one Int or
+one Int per element. Two functions replace the modes of R's `rep()`: there is
+no `length.out`, no recycling of `times`, and no meaning that changes with
+argument length. See tidyverse design, "Case study: rep()".
 
 ## Comment-preserving formatting
 

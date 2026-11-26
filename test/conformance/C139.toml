@@ -1,0 +1,4 @@
+id = "C139"
+status = "pending"
+case = '''`first`/`last` of `[None, 10, 20]` and `[10, 20, None]` under `keep` and `skip`'''
+expected = '''first: `None`/10 under keep, 10/10 under skip; last: 20/`None` under keep, 20/20 under skip'''

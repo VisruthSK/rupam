@@ -1,0 +1,4 @@
+id = "C151"
+status = "pending"
+case = '''`summarise(n = n())`'''
+expected = '''parsed and formatted as `summarize(n = n())`'''

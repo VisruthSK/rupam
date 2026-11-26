@@ -1,0 +1,4 @@
+id = "C144"
+status = "pending"
+case = '''`:target python-polars` after a `write` in an R session'''
+expected = '''no rewrite of the file; R-specific evidence discarded; values re-established only on demand'''

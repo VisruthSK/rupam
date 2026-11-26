@@ -183,6 +183,9 @@ check that proved obligations emit no redundant runtime assertions.
 | C146 | `0 < x <= 10` over `[0, 5, 10, 11]`; `1 < 2 > 0`; `1 == 1 == 1` | `[FALSE, TRUE, TRUE, FALSE]`; both others `syntax-error` |
 | C147 | `let p(x: Float in 0=..=1) = x`; `p(0.5)`, `p(1.5)`, `p(mean(probs))` where `probs` has contract bounds [0, 1] | 0.5; `refinement-required` naming (1, 1.5]; checks |
 | C148 | `Float in 0<..<1` written as a parameter and displayed by `:type` | displayed as written |
+| C149 | `as_enum(island)` over values Torgersen, Biscoe, Dream, `None` | enum levels Biscoe, Dream, Torgersen; `None` kept; provisional until `:lock` |
+| C150 | `as_enum(x)` over 51 distinct values | enum of 51 levels with the `many-levels` warning |
+| C151 | `summarise(n = n())` | parsed and formatted as `summarize(n = n())` |
 
 ## Additional implementation requirements
 

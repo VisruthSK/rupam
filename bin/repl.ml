@@ -10,7 +10,7 @@ type view =
 
 type command =
   | Quit
-  | Help
+  | Help of string option
   | Options
   | Version
   | Lock
@@ -55,7 +55,7 @@ let help =
   ; ":redo", "go forward one revision"
   ; ":lock", "validate the saved analysis's inputs and record them in rupam.lock"
   ; ":version", "build identity"
-  ; ":help", "show REPL commands"
+  ; ":help [NAME]", "commands and keys, or documentation for NAME (also ?NAME)"
   ; ":quit", "leave (or Ctrl+D)"
   ]
 ;;
@@ -86,12 +86,16 @@ let parse line =
   let needs what k =
     if rest = "" then Error (verb ^ " expects " ^ what) else Ok (k rest)
   in
-  if not (String.starts_with ~prefix:":" line)
+  if String.starts_with ~prefix:"?" line
+  then (
+    let topic = String.trim (String.sub line 1 (String.length line - 1)) in
+    Ok (Help (if topic = "" then None else Some topic)))
+  else if not (String.starts_with ~prefix:":" line)
   then Ok (Source line)
   else (
     match String.sub verb 1 (String.length verb - 1) with
     | "quit" | "q" -> Ok Quit
-    | "help" | "h" -> Ok Help
+    | "help" | "h" -> Ok (Help (if rest = "" then None else Some rest))
     | "options" when rest = "" -> Ok Options
     | "version" -> Ok Version
     | "lock" -> Ok Lock
@@ -182,7 +186,29 @@ let observe r (d : Syntax.declaration) =
   | _ -> false
 ;;
 
-let histogram ~digits column (h : Arrow_result.histogram) =
+let ticks ~count low high =
+  let range = high -. low in
+  if range <= 0.
+  then [ low, Display.rounded ~digits:2 low ]
+  else (
+    let raw = range /. float_of_int (max 2 count) in
+    let magnitude = 10. ** Float.floor (Float.log10 raw) in
+    let step =
+      magnitude
+      *. List.find (fun m -> m *. magnitude >= raw) [ 1.; 2.; 2.5; 5.; 10. ]
+    in
+    let first = Float.ceil (low /. step) in
+    let last = Float.floor (high /. step) in
+    let decimals = max 0 (int_of_float (Float.ceil (-.Float.log10 step))) in
+    List.init
+      (int_of_float (last -. first) + 1)
+      (fun i ->
+         let tick = (first +. float_of_int i) *. step in
+         tick, Printf.sprintf "%.*f" decimals tick))
+;;
+
+let histogram ~digits (s : Arrow_result.summary) =
+  let h = s.histogram in
   let blocks =
     [| " "
      ; "\xe2\x96\x81"
@@ -197,7 +223,7 @@ let histogram ~digits column (h : Arrow_result.histogram) =
   in
   let height = 8 in
   let bins = Array.length h.counts in
-  let width = max 1 (min 3 (72 / max 1 bins)) in
+  let width = max 1 (56 / max 1 bins) in
   let most = Array.fold_left max 1 h.counts in
   let row level =
     String.concat
@@ -210,16 +236,46 @@ let histogram ~digits column (h : Arrow_result.histogram) =
                String.concat "" (List.init width (fun _ -> blocks.(cell))))
             h.counts))
   in
-  let low = Display.rounded ~digits h.low
-  and high = Display.rounded ~digits h.high in
   let span = bins * width in
-  let axis =
-    low ^ String.make (max 1 (span - String.length low - String.length high)) ' ' ^ high
+  let axis = Bytes.make span ' ' in
+  let place at label =
+    let n = String.length label in
+    let start = max 0 (min (span - n) (at - (n / 2))) in
+    let lo = max 0 (start - 1) and hi = min span (start + n + 1) in
+    if String.for_all (( = ) ' ') (Bytes.sub_string axis lo (hi - lo))
+    then Bytes.blit_string label 0 axis start n
   in
-  (Printf.sprintf "%s  %d bins, most %d" column bins most
-   :: List.init height (fun i -> row (height - i)))
-  @ [ axis ]
-  @ if h.missing > 0 then [ Printf.sprintf "None %d" h.missing ] else []
+  List.iter
+    (fun (tick, label) ->
+       let at =
+         if h.high = h.low
+         then 0
+         else int_of_float ((tick -. h.low) /. (h.high -. h.low) *. float_of_int span)
+       in
+       place at label)
+    (ticks ~count:(span / 8) h.low h.high);
+  let number = Option.fold ~none:"" ~some:(Display.rounded ~digits) in
+  let present = Array.fold_left ( + ) 0 h.counts in
+  let stats =
+    [ "n", string_of_int present ]
+    @ (if h.missing > 0 then [ "None", string_of_int h.missing ] else [])
+    @ [ "mean", number s.mean
+      ; "sd", number s.sd
+      ; "min", Display.rounded ~digits h.low
+      ; "q1", number s.q1
+      ; "median", number s.median
+      ; "q3", number s.q3
+      ; "max", Display.rounded ~digits h.high
+      ]
+  in
+  let bars = List.init height (fun i -> row (height - i)) @ [ Bytes.to_string axis ] in
+  List.mapi
+    (fun i bar ->
+       match List.nth_opt stats i with
+       | Some (name, value) ->
+         Printf.sprintf "%s%s   %-6s %s" bar (String.make (span - Display.width bar) ' ') name value
+       | None -> bar)
+    bars
 ;;
 
 let bars column (f : Arrow_result.frequencies) =
@@ -254,8 +310,7 @@ let present r (event : Session.event) =
     List.iter (fun (n, t) -> Printf.printf "%-*s  %s\n" width n (Types.display t)) columns
   | Typed t -> print_endline (Types.display t)
   | Bars (column, f) -> List.iter print_endline (bars column f)
-  | Histogram (column, h) ->
-    List.iter print_endline (histogram ~digits:(digits r) column h)
+  | Histogram (_, s) -> List.iter print_endline (histogram ~digits:(digits r) s)
 ;;
 
 let submit r declarations =
@@ -341,10 +396,58 @@ let retarget r target =
   print_endline (Target.name target)
 ;;
 
+let usage command =
+  List.find_opt
+    (fun (usage, _) -> List.hd (String.split_on_char ' ' usage) = command)
+    help
+;;
+
+let hint line =
+  let line = String.trim line in
+  match String.split_on_char ' ' line with
+  | [ command ] when String.starts_with ~prefix:":" command ->
+    Option.map (fun (usage, text) -> usage ^ "  " ^ text) (usage command)
+  | _ -> None
+;;
+
+let missing_argument line =
+  match String.split_on_char ' ' (String.trim line) with
+  | [ command ] ->
+    (match usage command with
+     | Some (usage, _) ->
+       (match String.split_on_char ' ' usage with
+        | _ :: argument :: _ -> not (String.starts_with ~prefix:"[" argument)
+        | _ -> false)
+     | None -> false)
+  | _ -> false
+;;
+
+let describe_topic r topic =
+  let env = Session.env r.session in
+  match Scope.lookup env topic with
+  | Some (Table_value { table; _ }) -> print_schema r table
+  | Some (Contract contract) -> Contract.describe contract
+  | Some binding ->
+    Option.iter (fun t -> Printf.printf "%s : %s\n" topic t) (Scope.describe binding)
+  | None ->
+    (match
+       ( List.assoc_opt topic (Elaborate.builtins ())
+       , Completion.verb topic
+       , usage (if String.starts_with ~prefix:":" topic then topic else ":" ^ topic) )
+     with
+     | Some typ, _, _ -> Printf.printf "%s : %s\n" topic typ
+     | None, Some signature, _ -> Printf.printf "%s(%s)\n" topic signature
+     | None, None, Some (usage, text) -> Printf.printf "%s  %s\n" usage text
+     | None, None, None -> report ("No documentation for " ^ topic))
+;;
+
 let dispatch r = function
   | Quit -> false
-  | Help ->
+  | Help None ->
     List.iter (fun (usage, text) -> Printf.printf "  %-24s %s\n" usage text) help;
+    true
+  | Help (Some topic) ->
+    describe_topic r topic;
     true
   | Options ->
     List.iter

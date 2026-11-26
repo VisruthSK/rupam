@@ -30,6 +30,11 @@ let verbs =
   ]
 ;;
 
+let verb name =
+  List.find_map (fun (v, signature, _) -> if v = name then Some signature else None) verbs
+;;
+
+
 let choices = function
   | "missing" | "group_missing" -> [ "skip"; "keep"; "error" ]
   | "relationship" -> [ "one_to_one"; "many_to_one"; "one_to_many"; "many_to_many" ]

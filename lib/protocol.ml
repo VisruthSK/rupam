@@ -207,7 +207,7 @@ let event : Session.event -> Yojson.Safe.t = function
       ; "distinct", `Int f.distinct
       ; "top", `List (List.map (fun (v, n) -> `List [ `String v; `Int n ]) f.top)
       ]
-  | Histogram (column, h) ->
+  | Histogram (column, { histogram = h; _ }) ->
     `Assoc
       [ "kind", `String "histogram"
       ; "column", `String column

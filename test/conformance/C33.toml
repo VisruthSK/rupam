@@ -2,3 +2,13 @@ id = "C33"
 status = "pending"
 case = '''`DateTime<"UTC">` compared with `DateTime<"Europe/Paris">`'''
 expected = '''type error'''
+
+[run]
+source = '''
+let a: DateTime<"UTC"> = dt"2026-01-01T00:00:00Z"
+let b: DateTime<"Europe/Paris"> = dt"2026-01-01T00:00:00+01:00"
+a < b
+'''
+
+[expect]
+diagnostic = "type"

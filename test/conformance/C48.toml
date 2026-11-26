@@ -1,4 +1,13 @@
 id = "C48"
-status = "pending"
+status = "active"
 case = '''`2 ^ (-3)`, `(-2) ^ 3.0`, `0 ^ 0`, `(-2) ^ 0.5`, `0 ^ (-1)`'''
 expected = '''`0.125`, `-8.0`, `1.0`, domain type error, domain type error'''
+
+[run]
+source = '''
+(2 ^ (-3), (-2) ^ 3.0, 0 ^ 0)
+'''
+
+[expect]
+type = "(Float, Float, Float)"
+value = '''(0.125, -8.0, 1.0)'''

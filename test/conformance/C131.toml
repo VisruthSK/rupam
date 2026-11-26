@@ -1,0 +1,4 @@
+id = "C131"
+status = "pending"
+case = '''`mean(x, na.rm = TRUE)`; `t %>% filter(x > 1)`; `NA`'''
+expected = '''`r-na-rm` decision; `r-pipe` fix; `r-na` fix'''
