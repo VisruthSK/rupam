@@ -6,6 +6,20 @@ or Python/Polars. The [specification](spec/README.md) defines semantics and
 [conformance](spec/conformance.md) pins them; this page lists only what is
 not yet built.
 
+## 0. Development loop
+
+Quiet, reusable tooling so routine work costs little:
+
+- `scripts/dev check`: build, unit, conformance and integration in one
+  command that prints only failures and a one-line summary per suite.
+- `scripts/dev eval --targets 'expr'`: run one expression or pipeline on the
+  reference evaluator and every target, printing only disagreements.
+- `scripts/dev fixture CID`: scaffold a fixture from its row in
+  [Conformance](spec/conformance.md), run it everywhere and report the
+  outcome; `--promote` marks it active when it passes on all targets.
+- `scripts/dev triage`: group pending fixtures by failing diagnostic so the
+  next feature is chosen by the number of cases it unlocks.
+
 ## 1. Semantic foundations
 
 - Generate differential programs from typed TransformIR rather than source
