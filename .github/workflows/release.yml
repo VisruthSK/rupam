@@ -29,10 +29,10 @@ jobs:
       run:
         shell: bash
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
       - run: scripts/fetch-deps
 
-      - uses: ocaml/setup-ocaml@v3
+      - uses: ocaml/setup-ocaml@v3.9.1
         with:
           ocaml-compiler: "5.5"
       - run: opam install . --deps-only
@@ -55,7 +55,7 @@ jobs:
           else
             tar czf "$name.tar.gz" "$name"
           fi
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@v7.0.2
         with:
           name: ${{ matrix.platform }}
           path: dist/rupam-*.*
@@ -67,7 +67,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@v8.0.2
         with:
           path: dist
           merge-multiple: true

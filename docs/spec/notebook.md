@@ -8,7 +8,7 @@ Use Dream and Lwt for the native server, subject to native Windows conformance. 
 
 ## Document and execution
 
-- Code cells contain ordered top-level Rupam items; Markdown cells provide narrative. Store cell identities and layout separately from executable `.rp` source. Save accepted items as an ordinary formatted program; preserve unsaved drafts separately. Reopening must not replay effects.
+- Cells contain ordered top-level Rupam items and nothing else; the notebook is an interactive development environment, not a document format. Store cell identities and layout separately from executable `.rp` source. Save accepted items as an ordinary formatted program; preserve unsaved drafts separately. Reopening must not replay effects.
 - Resolve dependencies by binding identity in source order, preserving lexical shadowing. Moving a cell rechecks affected references. Reject unresolved references and dependency cycles.
 - Check edits against pinned revisions. Reevaluate only affected pure items; reuse unchanged values and evidence. Coalesce edits, cancel superseded work and publish results atomically. Retain the last good output with a visible stale marker; block dependent execution when prerequisites fail. Reads follow input-revision rules; random, clock and write effects require explicit submission under the session effect policy.
 

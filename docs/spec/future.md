@@ -220,3 +220,41 @@ sketches are an option for quartiles.
 Unicode spellings of operators, as in Julia: `∈` for `in`, `∉` for
 `not in`, `≤`, `≥`, `≠`, `→`, with LaTeX-style `\in`, `\notin` and similar
 tab-completion in the REPL and notebook. The formatter keeps the spelling.
+
+## Schema algebra
+
+Row-polymorphism constraints for field presence, absence, replacement,
+removal, projection, renaming and composition, so generic transformations,
+joins, selector-dependent schemas and `across` expansions infer without
+annotations. Precedent: Morris and McKinna, *Abstracting Extensible Data
+Types* (POPL 2019).
+
+## Horizontal reductions
+
+Reductions across selected columns within each observation (questionnaire
+scores, composite indicators, row-level missingness), with an explicit axis
+that fits shape inference and missing policies, preserves the observation
+domain and needs no persistent rowwise grouping. Precedents: dplyr
+`c_across`, `if_any`, `if_all`; Polars horizontal reductions.
+
+## Symbolic sizes
+
+Symbolic relationships between collection sizes: preservation, equality,
+bounds and additive cardinality, for vector compatibility, indexing safety,
+reduction preconditions and relational cardinality. They complement
+observation-domain identity. Precedent: Futhark's size-dependent types.
+
+## Refinement-carrying predicates
+
+A predicate extracted into a function keeps the refinements of its inline
+form, including facts from both outcomes and, where decidable, relations
+between values and columns. Precedent: Typed Racket occurrence typing and
+latent propositions.
+
+## Inequality and temporal joins
+
+Inequality, interval and as-of joins integrated with nominal key
+compatibility, temporal types, cardinality guarantees and evidence. Direction,
+tolerance, ambiguity and coverage are explicit; established facts such as
+non-overlapping intervals inform cardinality. Precedents: Polars non-equi and
+as-of joins; dplyr inequality, rolling and overlap joins.
