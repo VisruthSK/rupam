@@ -1,0 +1,9 @@
+name = "rupam-formal"
+defaultTargets = ["Rupam"]
+
+[leanOptions]
+warningAsError = true
+
+[[lean_lib]]
+name = "Rupam"
+globs = ["Rupam.*"]

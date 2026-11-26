@@ -1,18 +1,28 @@
-# Fails when .github/workflows/actions.lock is out of sync with the
-# workflows or a locked pin no longer verifies upstream.
-
-name: verify-lockfile
+name: Format
 
 on:
-  pull_request:
   push:
     branches: [main, master]
+  pull_request:
+  merge_group:
 
 permissions:
   contents: read
 
 jobs:
-  verify:
+  format:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ocaml/setup-ocaml@v3.9.1
+        with:
+          ocaml-compiler: "5.5"
+      - uses: ocaml/setup-ocaml/lint-fmt@v3.9.1
+
+  verify-lockfile:
     runs-on: ubuntu-slim
     env:
       GH_TOKEN: ${{ github.token }}

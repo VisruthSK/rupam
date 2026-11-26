@@ -1,0 +1,26 @@
+name: Lean
+
+on:
+  push:
+    branches: [main]
+    paths: ['formal/**', '.github/workflows/lean.yml']
+  pull_request:
+    paths: ['formal/**', '.github/workflows/lean.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install elan
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends elan
+      - name: Check Lean proofs and shared fixtures
+        run: elan run --install "$(cat formal/lean-toolchain)" python3 formal/check.py

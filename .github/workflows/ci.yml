@@ -13,20 +13,6 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  format:
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v7.0.1
-        with:
-          persist-credentials: false
-      - uses: ocaml/setup-ocaml@v3.9.1
-        with:
-          ocaml-compiler: "5.5"
-      - uses: ocaml/setup-ocaml/lint-fmt@v3.9.1
-
   test:
     strategy:
       fail-fast: false
