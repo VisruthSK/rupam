@@ -33,7 +33,7 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@v7
-      - run: scripts/fetch-duckdb
+      - run: scripts/fetch-deps
 
       - uses: ocaml/setup-ocaml@v3
         with:

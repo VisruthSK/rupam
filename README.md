@@ -44,7 +44,7 @@ needs `dplyr`, `tidyr`, `bit64`, `jsonlite` and `arrow`.
 You need OCaml 5.5, opam, a C compiler, `curl` and `tar`.
 
 ```sh
-scripts/fetch-duckdb          # pinned, checksummed DuckDB static libraries
+scripts/fetch-deps            # pinned, checksummed DuckDB and nanoarrow
 opam install . --deps-only --with-test --with-dev-setup
 opam pin add rupam .
 ```

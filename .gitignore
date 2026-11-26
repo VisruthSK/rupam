@@ -5,3 +5,5 @@ __pycache__/
 !examples/orders.parquet
 vendor/duckdb/*
 !vendor/duckdb/dune
+vendor/nanoarrow/*
+!vendor/nanoarrow/dune
