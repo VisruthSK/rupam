@@ -13,11 +13,11 @@
          invalid-policy, missing-policy-required, missing-under-error,
          int-range, inexact-float, arithmetic-overflow, row-domain-mismatch,
          column-required, scalar-required, duplicate-name, invalid-selector,
-         unordered-slice, group-missing-without-by, nonexhaustive-match,
-         pattern-bindings, join-keys, join-collision, join-relationship,
-         pivot-shape, duplicate-pivot-cell, restricted-output,
-         unsupported-feature, dialect-capability, unreadable-input,
-         unsaved-analysis, unsupported-column-type, contract-failure,
-         invalid-config, missing-target, stale-lock, host-failure, r-range or
-         internal-error
+         unordered-slice, not-a-key, group-missing-without-by,
+         nonexhaustive-match, pattern-bindings, join-keys, join-collision,
+         join-relationship, pivot-shape, duplicate-pivot-cell,
+         restricted-output, unsupported-feature, dialect-capability,
+         unreadable-input, unsaved-analysis, unsupported-column-type,
+         contract-failure, invalid-config, missing-target, stale-lock,
+         host-failure, r-range or internal-error
   [124]

@@ -16,7 +16,14 @@ type host =
   ; mutable target : Target.t
   }
 
-type t =
+type result =
+  { table : TransformIR.table
+  ; id : string
+  ; total : int
+  ; session : t
+  }
+
+and t =
   { directory : string
   ; mutable project : Project.t
   ; mutable path : string option
@@ -25,6 +32,8 @@ type t =
   ; mutable future : revision list
   ; mutable host : host option
   ; mutable saved : int option
+  ; mutable results : (string * result) list
+  ; mutable serial : int
   ; mutable counter : int
   }
 
@@ -35,6 +44,8 @@ type event =
   | Table of Page.t
 
 let history_limit = 100
+let result_limit = 8
+let remove path = if Sys.file_exists path then Sys.remove path
 
 let create ~project ~directory =
   { directory
@@ -49,6 +60,8 @@ let create ~project ~directory =
   ; future = []
   ; host = None
   ; saved = None
+  ; results = []
+  ; serial = 0
   ; counter = 0
   }
 ;;
@@ -60,7 +73,11 @@ let path t = t.path
 let revision t = t.current.number
 let items t = List.concat_map (fun a -> a.items) t.current.accepted
 let target t = t.project.target.value
-let close t = Option.iter (fun h -> Worker.stop h.worker) t.host
+
+let close t =
+  Option.iter (fun h -> Worker.stop h.worker) t.host;
+  t.results <- []
+;;
 
 let stop t =
   close t;
@@ -127,24 +144,54 @@ let commit t revision =
   t.current <- revision
 ;;
 
-let preview t (table : TransformIR.table) ~offset ~limit =
+let release t (r : result) =
+  match t.host with
+  | Some h -> ignore (Worker.evaluate h.worker (Dialect.release h.target ~id:r.id))
+  | None -> ()
+;;
+
+let result t (table : TransformIR.table) =
+  let h = establish t in
+  let key =
+    Target.name h.target ^ Sexplib0.Sexp.to_string (TransformIR.sexp_of_table table)
+    |> Digest.string
+    |> Digest.to_hex
+  in
+  match List.assoc_opt key t.results with
+  | Some r -> r
+  | None ->
+    t.serial <- t.serial + 1;
+    let id = Printf.sprintf "result_%d" t.serial in
+    let total = Worker.evaluate h.worker (Dialect.result h.target h.names table ~id) in
+    let r = { table; id; total = int_of_string (String.trim total); session = t } in
+    let kept = List.filteri (fun i _ -> i < result_limit - 1) t.results in
+    List.iteri (fun i (_, old) -> if i >= result_limit - 1 then release t old) t.results;
+    t.results <- (key, r) :: kept;
+    r
+;;
+
+let page r ~offset ~limit =
+  let t = r.session in
+  if not (List.exists (fun (_, x) -> x == r) t.results)
+  then Diagnostic.fail Unreadable_input "This result was released; evaluate it again";
   let h = establish t in
   let path = Filename.temp_file "rupam" ".parquet" in
   Fun.protect
-    ~finally:(fun () -> if Sys.file_exists path then Sys.remove path)
+    ~finally:(fun () -> remove path)
     (fun () ->
-       let total =
-         Worker.evaluate
-           h.worker
-           (Dialect.preview h.target h.names table ~offset ~limit ~path)
-       in
+       ignore
+         (Worker.evaluate h.worker (Dialect.page h.target ~id:r.id ~offset ~limit ~path));
        Page.read
          ~path
-         ~total:(int_of_string (String.trim total))
-         ~ordered:(table.order <> None)
+         ~total:r.total
+         ~ordered:(r.table.order <> None)
          ~offset
-         table.schema)
+         ~limit
+         r.table.schema)
 ;;
+
+let total r = r.total
+let preview t table ~offset ~limit = page (result t table) ~offset ~limit
 
 let describe env (d : Syntax.declaration) =
   match d with

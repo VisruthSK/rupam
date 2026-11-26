@@ -24,6 +24,7 @@ val read
   -> total:int
   -> ordered:bool
   -> offset:int
+  -> limit:int
   -> (string * Types.t) list
   -> t
 

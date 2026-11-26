@@ -294,16 +294,19 @@ let script items =
   R.program (preamble items @ statements names items)
 ;;
 
-let preview names (t : C.table) ~offset ~limit ~path =
+let result names (t : C.table) ~id =
+  R.Expression (R.call "cat" [ R.call "rp_result" [ Dplyr.table names t; R.String id ] ])
+;;
+
+let page ~id ~offset ~limit ~path =
   R.Expression
     (R.call
-       "cat"
-       [ R.call
-           "rp_preview"
-           [ Dplyr.table names t
-           ; R.Number (string_of_int offset)
-           ; R.Number (string_of_int limit)
-           ; R.String path
-           ]
+       "rp_page"
+       [ R.String id
+       ; R.Number (string_of_int offset)
+       ; R.Number (string_of_int limit)
+       ; R.String path
        ])
 ;;
+
+let release ~id = R.Expression (R.call "rp_release" [ R.String id ])

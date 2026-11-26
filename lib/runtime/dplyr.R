@@ -51,10 +51,20 @@ rp_read <- function(path, digest, format, columns) {
   data
 }
 
-rp_preview <- function(data, offset, limit, path) {
-  arrow::write_parquet(dplyr::slice(data, seq.int(offset + 1, length.out = limit)), path)
+rp_results <- new.env()
+
+rp_result <- function(data, id) {
+  assign(id, data, envir = rp_results)
   nrow(data)
 }
+
+rp_page <- function(id, offset, limit, path) {
+  data <- get(id, envir = rp_results)
+  rows <- seq_len(max(0, min(limit, nrow(data) - offset))) + offset
+  arrow::write_parquet(data[rows, , drop = FALSE], path)
+}
+
+rp_release <- function(id) rm(list = id, envir = rp_results)
 
 rp_write <- function(data, path) {
   arrow::write_parquet(data, path)

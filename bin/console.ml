@@ -9,6 +9,9 @@ type msg =
   | Complete
   | Clear
   | Quit
+  | Resize of int * int
+  | Scroll of Viewer.move
+  | Close
 
 type model =
   { session : Repl.t
@@ -18,6 +21,9 @@ type model =
   ; recalled : int option
   ; menu : menu option
   ; pages : Rupam.Page.t list ref
+  ; opened : (string * Rupam.Session.result) option ref
+  ; viewer : Viewer.t option
+  ; size : int * int
   }
 
 and menu =
@@ -86,7 +92,7 @@ let output_line line =
     | _ -> text line)
 ;;
 
-let page_view ~digits page =
+let page_view ?limit ~digits page =
   let open Rupam.Page in
   let styled (part, text) =
     match part with
@@ -98,7 +104,7 @@ let page_view ~digits page =
   in
   List.map
     (fun line -> box ~flex_direction:Row (List.map styled line))
-    (lines ~digits page)
+    (lines ?limit ~digits page)
 ;;
 
 let transcript ~digits source output pages =
@@ -136,71 +142,89 @@ let status session =
     (Printf.sprintf "  %s \xc2\xb7 :help \xc2\xb7 Ctrl+D quits" dialect)
 ;;
 
-let view model =
-  let pending =
-    List.mapi
-      (fun i line ->
-         box
-           ~flex_direction:Row
-           [ text ~style:(style subtle) (if i = 0 then prompt else continuation)
-           ; text line
-           ])
-      (List.rev model.pending)
-  in
-  let editor =
-    box
-      ~flex_direction:Row
-      ~align_items:Center
-      ~size:{ width = pct 100; height = px 1 }
-      [ text
-          ~style:(style ~bold:true accent)
-          (if model.pending = [] then prompt else continuation)
-      ; input
-          ~size:{ width = pct 100; height = px 1 }
-          ~focused:true
-          ~state:model.input
-          ~on_change:(fun e -> Edit e)
-          ~on_submit:(fun s -> Submit s)
-          ()
-      ]
-  in
-  let suggestions =
-    match model.menu with
-    | None -> []
-    | Some menu ->
-      let width =
-        List.fold_left
-          (fun w (s : Repl.suggestion) -> max w (String.length s.text))
-          0
-          menu.items
-      in
-      let first =
-        match menu.selected with
-        | Some i when i >= 8 -> i - 7
-        | _ -> 0
-      in
-      let shown = List.filteri (fun i _ -> i >= first && i < first + 8) menu.items in
-      List.mapi
-        (fun i (s : Repl.suggestion) ->
-           let chosen = menu.selected = Some (first + i) in
-           box
-             ~flex_direction:Row
-             [ text
-                 ~style:(if chosen then style ~bold:true accent else style typed)
-                 (Printf.sprintf "  %s %-*s" (if chosen then "âº" else " ") width s.text)
-             ; text ~style:(style faint) ("  " ^ s.detail)
-             ])
-        shown
-      @
-      let rest = List.length menu.items - first - List.length shown in
-      if rest > 0
-      then [ text ~style:(style faint) (Printf.sprintf "    â¦ %d more" rest) ]
-      else []
-  in
+let grid model (v : Viewer.t) =
   box
     ~flex_direction:Column
-    ~size:full
-    (pending @ [ editor ] @ suggestions @ [ status model.session ])
+    ~size:{ width = pct 100; height = px (snd model.size) }
+    (page_view
+       ~limit:(fst model.size)
+       ~digits:(Repl.digits model.session)
+       (Viewer.visible v)
+     @ [ text ~style:(style faint) (Viewer.status v) ])
+;;
+
+let view model =
+  match model.viewer with
+  | Some v -> grid model v
+  | None ->
+    let pending =
+      List.mapi
+        (fun i line ->
+           box
+             ~flex_direction:Row
+             [ text ~style:(style subtle) (if i = 0 then prompt else continuation)
+             ; text line
+             ])
+        (List.rev model.pending)
+    in
+    let editor =
+      box
+        ~flex_direction:Row
+        ~align_items:Center
+        ~size:{ width = pct 100; height = px 1 }
+        [ text
+            ~style:(style ~bold:true accent)
+            (if model.pending = [] then prompt else continuation)
+        ; input
+            ~size:{ width = pct 100; height = px 1 }
+            ~focused:true
+            ~state:model.input
+            ~on_change:(fun e -> Edit e)
+            ~on_submit:(fun s -> Submit s)
+            ()
+        ]
+    in
+    let suggestions =
+      match model.menu with
+      | None -> []
+      | Some menu ->
+        let width =
+          List.fold_left
+            (fun w (s : Repl.suggestion) -> max w (String.length s.text))
+            0
+            menu.items
+        in
+        let first =
+          match menu.selected with
+          | Some i when i >= 8 -> i - 7
+          | _ -> 0
+        in
+        let shown = List.filteri (fun i _ -> i >= first && i < first + 8) menu.items in
+        List.mapi
+          (fun i (s : Repl.suggestion) ->
+             let chosen = menu.selected = Some (first + i) in
+             box
+               ~flex_direction:Row
+               [ text
+                   ~style:(if chosen then style ~bold:true accent else style typed)
+                   (Printf.sprintf
+                      "  %s %-*s"
+                      (if chosen then "âº" else " ")
+                      width
+                      s.text)
+               ; text ~style:(style faint) ("  " ^ s.detail)
+               ])
+          shown
+        @
+        let rest = List.length menu.items - first - List.length shown in
+        if rest > 0
+        then [ text ~style:(style faint) (Printf.sprintf "    â¦ %d more" rest) ]
+        else []
+    in
+    box
+      ~flex_direction:Column
+      ~size:full
+      (pending @ [ editor ] @ suggestions @ [ status model.session ])
 ;;
 
 let banner session =
@@ -232,6 +256,7 @@ let evaluate model source =
     let history = entry :: model.history in
     Line.save_history history;
     model.pages := [];
+    model.opened := None;
     let next, output =
       capture (fun () ->
         match Repl.parse entry with
@@ -259,6 +284,12 @@ let evaluate model source =
         ; history
         ; recalled = None
         ; menu = None
+        ; viewer =
+            Option.map
+              (fun (title, result) ->
+                 let width, height = model.size in
+                 Viewer.open_ ~title ~width ~height result)
+              !(model.opened)
         }
       , committed ))
 ;;
@@ -334,17 +365,56 @@ let update msg model =
   | Quit ->
     Rupam.Session.close model.session.session;
     model, Cmd.quit
+  | Resize (width, height) ->
+    ( { model with
+        size = width, height
+      ; viewer = Option.map (Viewer.resize ~width ~height) model.viewer
+      }
+    , Cmd.none )
+  | Scroll step ->
+    ( { model with viewer = Option.map (fun v -> Viewer.move v step) model.viewer }
+    , Cmd.none )
+  | Close -> { model with viewer = None }, Cmd.none
 ;;
 
 let subscriptions model =
-  Sub.on_keys
-    ~phase:Capture
-    ([ Shortcut.up, Recall (-1)
-     ; Shortcut.down, Recall 1
-     ; Shortcut.tab, Complete
-     ; Shortcut.ctrl 'l', Clear
-     ]
-     @ if Editor.text model.input = "" then [ Shortcut.ctrl 'd', Quit ] else [])
+  let resize = Sub.on_resize (fun ~width ~height -> Resize (width, height)) in
+  match model.viewer with
+  | Some v ->
+    let page = Viewer.rows v in
+    Sub.batch
+      [ resize
+      ; Sub.on_keys
+          ~phase:Capture
+          [ Shortcut.up, Scroll (Rows (-1))
+          ; Shortcut.down, Scroll (Rows 1)
+          ; Shortcut.char 'k', Scroll (Rows (-1))
+          ; Shortcut.char 'j', Scroll (Rows 1)
+          ; Shortcut.left, Scroll (Columns (-1))
+          ; Shortcut.right, Scroll (Columns 1)
+          ; Shortcut.char 'h', Scroll (Columns (-1))
+          ; Shortcut.char 'l', Scroll (Columns 1)
+          ; Shortcut.key Page_up, Scroll (Rows (-page))
+          ; Shortcut.key Page_down, Scroll (Rows page)
+          ; Shortcut.space, Scroll (Rows page)
+          ; Shortcut.char 'g', Scroll Top
+          ; Shortcut.char 'G', Scroll Bottom
+          ; Shortcut.char 'q', Close
+          ; Shortcut.escape, Close
+          ]
+      ]
+  | None ->
+    Sub.batch
+      [ resize
+      ; Sub.on_keys
+          ~phase:Capture
+          ([ Shortcut.up, Recall (-1)
+           ; Shortcut.down, Recall 1
+           ; Shortcut.tab, Complete
+           ; Shortcut.ctrl 'l', Clear
+           ]
+           @ if Editor.text model.input = "" then [ Shortcut.ctrl 'd', Quit ] else [])
+      ]
 ;;
 
 let start ~project ?path () =
@@ -352,8 +422,12 @@ let start ~project ?path () =
   | None -> ()
   | Some session ->
     let pages = ref [] in
+    let opened = ref None in
     let session =
-      { session with show = (fun ~digits:_ page -> pages := page :: !pages) }
+      { session with
+        show = (fun ~digits:_ page -> pages := page :: !pages)
+      ; view = (fun ~title result -> opened := Some (title, result))
+      }
     in
     let config = Matrix.config ~mode:`Primary ~mouse:`Off () in
     run
@@ -367,6 +441,9 @@ let start ~project ?path () =
               ; recalled = None
               ; menu = None
               ; pages
+              ; opened
+              ; viewer = None
+              ; size = 100, 30
               }
             , banner session ))
       ; update

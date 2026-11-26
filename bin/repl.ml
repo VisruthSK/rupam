@@ -2,6 +2,7 @@ open Rupam
 
 type view =
   | Schema
+  | Grid
   | Preview
   | Explain
   | Contract
@@ -28,6 +29,7 @@ type command =
 let views =
   [ "schema", Schema
   ; "preview", Preview
+  ; "view", Grid
   ; "explain", Explain
   ; "contract", Contract
   ; "validate", Validate
@@ -38,6 +40,7 @@ let help =
   [ ":type EXPR", "inferred type, without running anything"
   ; ":schema [TABLE]", "columns and types; every table when no name is given"
   ; ":preview TABLE", "first rows"
+  ; ":view TABLE", "open the full-screen viewer"
   ; ":explain TABLE", "plan from source to result"
   ; ":contract TABLE", "where a table's rows come from"
   ; ":validate TABLE", "run data-dict validation now"
@@ -136,6 +139,7 @@ type t =
   { session : Session.t
   ; directory : string
   ; show : digits:int -> Page.t -> unit
+  ; view : title:string -> Session.result -> unit
   }
 
 let digits r = (Session.project r.session).preview_digits.value
@@ -342,7 +346,8 @@ let dispatch r = function
          | Explain ->
            List.iteri (fun i s -> Printf.printf "%2d  %s\n" (i + 1) s) (Plan.explain t)
          | Preview ->
-           r.show ~digits:(digits r) (Session.preview r.session t ~offset:0 ~limit:20)));
+           r.show ~digits:(digits r) (Session.preview r.session t ~offset:0 ~limit:20)
+         | Grid -> r.view ~title:source (Session.result r.session t)));
     true
   | Source "" -> true
   | Source source ->
@@ -365,7 +370,14 @@ let plain ~digits page = List.iter print_endline (Page.plain ~digits page)
 let open_session ~project ?path () =
   let directory = Option.fold ~none:"." ~some:Filename.dirname path in
   let session = Session.create ~project ~directory in
-  let r = { session; directory; show = plain } in
+  let r =
+    { session
+    ; directory
+    ; show = plain
+    ; view =
+        (fun ~title:_ result -> plain ~digits:2 (Session.page result ~offset:0 ~limit:20))
+    }
+  in
   match path with
   | None -> Some r
   | Some path ->

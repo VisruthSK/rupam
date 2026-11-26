@@ -30,9 +30,14 @@ let cell t = function
        | _ -> text)
 ;;
 
-let read ~path ~total ~ordered ~offset fields =
+let read ~path ~total ~ordered ~offset ~limit fields =
   let names, rows =
-    Data_file.query ("SELECT * FROM read_parquet(" ^ Data_file.literal path ^ ")")
+    Data_file.query
+      (Printf.sprintf
+         "SELECT * FROM read_parquet(%s) LIMIT %d OFFSET %d"
+         (Data_file.literal path)
+         limit
+         offset)
   in
   let columns =
     Array.to_list names

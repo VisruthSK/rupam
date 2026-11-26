@@ -203,3 +203,9 @@ Evaluate replacing the mosaic REPL and viewer with Bonsai (`bonsai_term`),
 sharing components with the Bonsai notebook. Adopt it if incremental
 rendering measurably cuts frame time and the frontend code shrinks enough to
 justify the Core/Async dependency cost; measure on wide grids and live editing.
+
+## Unicode operators
+
+Unicode spellings of operators, as in Julia: `∈` for `in`, `∉` for
+`not in`, `≤`, `≥`, `≠`, `→`, with LaTeX-style `\in`, `\notin` and similar
+tab-completion in the REPL and notebook. The formatter keeps the spelling.

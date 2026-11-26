@@ -311,16 +311,15 @@ let script items =
   P.program (preamble items @ statements names items)
 ;;
 
-let preview names (t : C.table) ~offset ~limit ~path =
+let result names (t : C.table) ~id =
+  P.Expression (P.call "print" [ P.call "rp_result" [ table names t; P.Str id ] ])
+;;
+
+let page ~id ~offset ~limit ~path =
   P.Expression
     (P.call
-       "print"
-       [ P.call
-           "rp_preview"
-           [ table names t
-           ; P.Int (string_of_int offset)
-           ; P.Int (string_of_int limit)
-           ; P.Str path
-           ]
-       ])
+       "rp_page"
+       [ P.Str id; P.Int (string_of_int offset); P.Int (string_of_int limit); P.Str path ])
 ;;
+
+let release ~id = P.Expression (P.call "rp_release" [ P.Str id ])
