@@ -153,7 +153,10 @@ let builtin e (row : Prelude.row) args =
 let aggregate e (reduction : Prelude.reduction) policy values =
   if policy = C.Fail && Array.mem Missing values
   then fail e Missing_under_error "A reduction met a missing value and missing = error"
-  else if policy = C.Keep && reduction <> Distinct && Array.mem Missing values
+  else if
+    policy = C.Keep
+    && (not (Prelude.missing_is_value reduction))
+    && Array.mem Missing values
   then Missing
   else (
     let xs = List.filter (( <> ) Missing) (Array.to_list values) in
@@ -167,6 +170,11 @@ let aggregate e (reduction : Prelude.reduction) policy values =
     in
     match reduction, xs with
     | Count, _ -> Int (Int64.of_int (Array.length values))
+    | (First | Last), _ ->
+      let kept = if policy = C.Keep then Array.to_list values else xs in
+      (match if reduction = First then kept else List.rev kept with
+       | v :: _ -> v
+       | [] -> Missing)
     | Distinct, _ ->
       let kept = if policy = C.Keep then Array.to_list values else xs in
       Int (Int64.of_int (List.length (List.sort_uniq compare kept)))
@@ -616,10 +624,15 @@ and stage env frame (step : C.step) =
     Array.iter
       (fun i ->
          let key = List.map (fun n -> (List.assoc n frame.columns).(i)) names in
+         if List.mem Missing key
+         then
+           Diagnostic.fail
+             Not_a_key
+             (String.concat ", " names ^ " is not a key: some rows are missing it");
          if Hashtbl.mem seen key
          then
            Diagnostic.fail
-             Duplicate_name
+             Not_a_key
              (String.concat ", " names ^ " is not a key: some rows repeat it");
          Hashtbl.add seen key ())
       all;

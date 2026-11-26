@@ -529,6 +529,7 @@ and builtin ctx span n b args =
         v, T.Option element
       | Mean | Median | Var | Sd -> to_float v, T.Option T.Float
       | Distinct -> v, T.Int
+      | First | Last -> v, T.Option element
       | Count -> v, T.Int
     in
     make Scalar result (Reduce (r, policy, v))

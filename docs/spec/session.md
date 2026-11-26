@@ -143,8 +143,10 @@ shared decoded inputs.
 
 Input and paint never wait on native computation. Rendering follows the
 display's refresh (about 16.7 ms per frame at 60 Hz, 3.6 ms at 280 Hz) with
-no fixed cap and no redraw when idle. Grids virtualise rows and columns and
-format only visible cells. Scrolling, completion, repaint and histogram
+no fixed cap and no redraw when idle. Grids are viewport-bounded: they fetch,
+format and paint only the visible cells (a few hundred of a billion), from
+Arrow batches indexed by row offset and projected to visible columns, so
+scrolling and jumping cost the same on ten rows or ten million. Scrolling, completion, repaint and histogram
 layout reuse completed results and never run analysis. Only results matching
 the current revision are published; the last successful view stays visible
 and marked stale while a draft is invalid or running.

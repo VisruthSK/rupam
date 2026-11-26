@@ -32,6 +32,8 @@ type reduction =
   | Min
   | Max
   | Distinct
+  | First
+  | Last
   | Count
 [@@deriving sexp_of]
 
@@ -75,8 +77,20 @@ let reductions =
   ; "min", Min
   ; "max", Max
   ; "n_distinct", Distinct
+  ; "first", First
+  ; "last", Last
   ; "n", Count
   ]
+;;
+
+let missing_is_value = function
+  | Distinct | First | Last -> true
+  | Sum | Mean | Median | Var | Sd | Min | Max | Count -> false
+;;
+
+let positional = function
+  | First | Last -> true
+  | Sum | Mean | Median | Var | Sd | Min | Max | Distinct | Count -> false
 ;;
 
 let scalar = ("coalesce", Coalesce) :: List.map (fun (n, r) -> n, Row r) rows

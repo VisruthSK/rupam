@@ -147,6 +147,9 @@ let builtin_type level = function
   | Reduction (Mean | Median | Var | Sd) ->
     T.Arrow ([ T.Option (T.fresh ~kind:Number level) ], T.Option T.Float)
   | Reduction Distinct -> T.Arrow ([ T.Option (T.fresh level) ], T.Int)
+  | Reduction (First | Last) ->
+    let a = T.fresh level in
+    T.Arrow ([ T.Option a ], T.Option a)
   | Reduction Count -> T.Arrow ([], T.Int)
   | Coalesce ->
     let a = T.fresh level in

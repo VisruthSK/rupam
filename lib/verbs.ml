@@ -275,6 +275,21 @@ let apply_group_policy span policy (t : C.table) keys =
   | Some Keep | None -> t
 ;;
 
+let ordered span (t : C.table) (value : C.expr) =
+  let positional (e : C.expr) =
+    match e.node with
+    | Reduce (r, _, _) -> Prelude.positional r
+    | _ -> false
+  in
+  if t.order = None && C.exists positional value
+  then
+    fail
+      span
+      Unordered_slice
+      "first and last need a row order. arrange the table, or establish one with \
+       assert_key"
+;;
+
 let summarize context span (t : C.table) arguments =
   let missing, group_missing, rest = options arguments in
   let keys = grouping span t rest in
@@ -288,6 +303,7 @@ let summarize context span (t : C.table) arguments =
           let value = context.expression ?missing (C.row t) x in
           if value.shape <> Scalar
           then fail x.span Scalar_required "A summary needs one value per group";
+          ordered x.span t value;
           Some (n, value)
         | None, x -> fail x.span Wrong_arguments "summarize needs named summaries")
       rest
@@ -328,6 +344,7 @@ let mutate context span (t : C.table) arguments =
          fail x.span Wrong_arguments "mutate needs named columns"
        | Some name, x ->
          let value = context.expression ?missing (C.row t) x in
+         ordered x.span t value;
          let value =
            if policy = Some Skip && C.reduces value
            then
@@ -689,7 +706,12 @@ let apply context span name (t : C.table) arguments =
         arguments
     in
     if columns = [] then fail span Wrong_arguments "assert_key needs at least one column";
-    add span (Assert_key columns) { t with keys = columns :: t.keys }
+    let schema =
+      List.map
+        (fun (n, typ) -> n, if List.mem n columns then T.present typ else typ)
+        t.schema
+    in
+    add span (Assert_key columns) { t with schema; keys = columns :: t.keys }
   | "pivot_longer", _ -> pivot span t false arguments
   | "pivot_wider", _ -> pivot span t true arguments
   | name, _ when List.mem_assoc name C.join_kinds ->

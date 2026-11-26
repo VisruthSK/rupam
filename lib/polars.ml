@@ -180,9 +180,12 @@ and reduce ~scalar (e : C.expr) r policy x =
     | Count -> length
     | Distinct when policy = C.Keep -> cast (P.meth a "n_unique" []) "Int64"
     | Distinct -> cast (P.meth (P.meth a "drop_nulls" []) "n_unique" []) "Int64"
+    | First | Last ->
+      let present = if policy = C.Skip then P.meth a "drop_nulls" [] else a in
+      P.meth present (if r = First then "first" else "last") []
   in
   ignore e;
-  if policy = C.Keep && r <> Distinct
+  if policy = C.Keep && not (Prelude.missing_is_value r)
   then choose (P.Binary (Equal, P.meth source "null_count" [], P.Int "0")) value P.Null
   else value
 ;;

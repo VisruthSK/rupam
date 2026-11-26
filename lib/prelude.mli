@@ -32,6 +32,8 @@ type reduction =
   | Min
   | Max
   | Distinct
+  | First
+  | Last
   | Count
 [@@deriving sexp_of]
 
@@ -41,6 +43,8 @@ type builtin =
   | Coalesce
 
 val reductions : (string * reduction) list
+val missing_is_value : reduction -> bool
+val positional : reduction -> bool
 val scalar : (string * builtin) list
 val all : (string * builtin) list
 val name : builtin -> string

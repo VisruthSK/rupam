@@ -33,6 +33,7 @@ type code =
   | Duplicate_name
   | Invalid_selector
   | Unordered_slice
+  | Not_a_key
   | Group_missing_without_by
   | Nonexhaustive_match
   | Pattern_bindings

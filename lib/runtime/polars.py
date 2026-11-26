@@ -49,6 +49,8 @@ def rp_covered(left, right, key, kind):
 
 
 def rp_assert_key(frame, columns):
+    if frame.select(pl.any_horizontal(pl.col(columns).is_null().any())).collect().item():
+        raise ValueError(f"{', '.join(columns)} is not a key: some rows are missing it")
     if frame.select(pl.struct(columns).is_duplicated().any()).collect().item():
         raise ValueError(f"{', '.join(columns)} is not a key: some rows repeat it")
     return frame

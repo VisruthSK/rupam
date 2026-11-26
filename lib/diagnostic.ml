@@ -33,6 +33,7 @@ type code =
   | Duplicate_name
   | Invalid_selector
   | Unordered_slice
+  | Not_a_key
   | Group_missing_without_by
   | Nonexhaustive_match
   | Pattern_bindings
@@ -114,6 +115,7 @@ let name = function
   | Duplicate_name -> "duplicate-name"
   | Invalid_selector -> "invalid-selector"
   | Unordered_slice -> "unordered-slice"
+  | Not_a_key -> "not-a-key"
   | Group_missing_without_by -> "group-missing-without-by"
   | Nonexhaustive_match -> "nonexhaustive-match"
   | Pattern_bindings -> "pattern-bindings"
@@ -204,6 +206,9 @@ let explanation = function
      fields, types or constructors."
   | Invalid_selector ->
     "A column selector is a name, a range `a:b` in schema order, or a list of names."
+  | Not_a_key ->
+    "`assert_key` found a missing or repeated key. Every key component must be present \
+     and each combination unique."
   | Unordered_slice ->
     "A positional operation needs a total row order. `arrange` by columns that include a \
      key, or establish one with `assert_key`."

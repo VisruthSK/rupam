@@ -153,9 +153,14 @@ and reduce names r policy x =
            "dplyr"
            "n_distinct"
            [ R.Positional x; R.Named ("na.rm", R.Logical (policy <> C.Keep)) ])
+    | First | Last ->
+      R.qualified
+        "dplyr"
+        (if r = First then "first" else "last")
+        [ R.Positional x; R.Named ("na_rm", R.Logical (policy = C.Skip)) ]
     | Count -> integer64 (R.qualified "dplyr" "n" [])
   in
-  if policy = C.Keep && r <> Distinct
+  if policy = C.Keep && not (Prelude.missing_is_value r)
   then if_else (R.call "anyNA" [ source ]) R.Na value
   else value
 

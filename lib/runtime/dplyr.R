@@ -18,6 +18,7 @@ rp_covered <- function(left, right, key, kind) {
 }
 
 rp_assert_key <- function(data, columns) {
+  if (anyNA(data[columns])) stop(paste(columns, collapse = ", "), " is not a key: some rows are missing it", call. = FALSE)
   if (anyDuplicated(data[columns])) stop(paste(columns, collapse = ", "), " is not a key: some rows repeat it", call. = FALSE)
   data
 }
