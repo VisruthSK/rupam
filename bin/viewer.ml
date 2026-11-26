@@ -235,7 +235,6 @@ let edit t text =
       text
     ; generation = t.generation + 1
     ; edited_at = Unix.gettimeofday ()
-    ; diagnostic = None
     ; policy = None
     }
 ;;

@@ -405,7 +405,6 @@ let grid model (v : Viewer.t) =
           ; "2 Keep", Act (Missing_policy Keep)
           ; "3 Error", Act (Missing_policy Fail)
           ]
-      | None, Some { code = Incomplete_input; _ } -> text ""
       | None, Some diagnostic ->
         box
           ~flex_direction:Column
@@ -413,12 +412,6 @@ let grid model (v : Viewer.t) =
           (List.map
              (text ~wrap:`Word ~style:(style failure))
              (String.split_on_char '\n' (Rupam.Diagnostic.render diagnostic)))
-      | None, None when v.displayed <> v.generation ->
-        text
-          ~style:(style subtle)
-          (if model.save_requested = Some v.generation
-           then "Saving\xe2\x80\xa6"
-           else "Updating preview\xe2\x80\xa6")
       | None, None -> text "")
   in
   let hint =
@@ -427,8 +420,8 @@ let grid model (v : Viewer.t) =
     else
       [ text
           ~style:(style faint)
-          "s/S sort \xc2\xb7 = keep \xc2\xb7 d details \xc2\xb7 u undo \xc2\xb7 i edit \
-           \xc2\xb7 q close"
+          "s/S sort \xc2\xb7 = filter to value \xc2\xb7 d describe column \xc2\xb7 u \
+           undo \xc2\xb7 i edit \xc2\xb7 q close"
       ]
   in
   let details = List.map (text ~style:(style typed)) (Viewer.bars ~digits v) in

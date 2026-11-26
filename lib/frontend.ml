@@ -238,7 +238,7 @@ let read ?(file = "") source =
   | declarations -> declarations
   | exception Parser.Error ->
     if Lexing.lexeme buf = ""
-    then Diagnostic.fail ~span:(span ()) Incomplete_input "The input ends too early"
+    then Diagnostic.fail ~span:(span ()) Incomplete_input "Unfinished expression"
     else Diagnostic.fail ~span:(span ()) Syntax_error ("Unexpected " ^ Lexing.lexeme buf)
   | exception Diagnostic.Error ({ span = None; _ } as d) ->
     raise (Diagnostic.Error { d with span = Some (span ()) })
