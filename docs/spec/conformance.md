@@ -23,23 +23,23 @@ check that proved obligations emit no redundant runtime assertions.
 
 | ID | Program | Expected |
 | --- | --- | --- |
-| C01 | `let square(x) = x * x; square(3)` | `9 : Int64` |
-| C02 | `mutate(s = square(revenue))` | element-wise; `s : Float64` |
-| C03 | `mutate(s = square(cost))`, `cost : Float64?` | `s : Float64?` |
-| C04 | `mutate(s = coalesce(cost, 0.0))` | `s : Float64` |
+| C01 | `let square(x) = x * x; square(3)` | `9 : Int` |
+| C02 | `mutate(s = square(revenue))` | element-wise; `s : Float` |
+| C03 | `mutate(s = square(cost))`, `cost : Float?` | `s : Float?` |
+| C04 | `mutate(s = coalesce(cost, 0.0))` | `s : Float` |
 | C05 | `mutate(a = revenue + 1.0, b = a * 2.0)` | `b` uses the new `a` |
 | C06 | `mutate(revenue = revenue + 1.0)` | `revenue` replaced in place |
 | C07 | `filter(cost > 0.0)` | type error naming `cost`; accepted with `missing = skip` |
 | C08 | `select(region:cost)` | inclusive range in schema order |
 | C09 | `select(typo)` | unknown column, with suggestions |
 | C10 | `let revenue = 3.0` then `mutate(a = revenue)` on a table with `revenue` | ambiguity error; `$revenue` and `^revenue` accepted |
-| C11 | `standardize(revenue)` | whole-column; `Float64?` |
+| C11 | `standardize(revenue)` | whole-column; `Float?` |
 | C12 | columns of two unrelated tables combined | type error |
-| C13 | `summarize(s = sum(x), missing = skip)` on an all-missing group | `None : Float64?` |
+| C13 | `summarize(s = sum(x), missing = skip)` on an all-missing group | `None : Float?` |
 | C14 | `summarize(n = n())` on an empty table | one row, `n = 0`; with `by =`, zero rows |
 | C15 | `left_join` with missing keys and unmatched rows | missing keys never match; right columns optional |
 | C16 | join with a duplicated non-key column | type error |
-| C17 | `distinct(x, missing = propagate)` with several `None` | one `None` row |
+| C17 | `distinct(x, missing = keep)` with several `None` | one `None` row; `n_distinct` counts it once |
 | C18 | `arrange(desc(v), id) \|> slice_head(n = 5)` with unique `id` | five largest, ties by `id` |
 | C19 | `slice_head(n = 5)` on an unordered table | type error |
 | C20 | contracted source with `None` in a required column | validation fails before output |
@@ -52,7 +52,7 @@ check that proved obligations emit no redundant runtime assertions.
 | C27 | `mutate(rate = cases / population)` on unknown population; locked population containing zero or all nonzero | pending domain obligation; zero fails; all nonzero accepted on explicit lock; filter or ratio works without snapshot proof |
 | C28 | source file with NaN in a float column | read as `None` |
 | C29 | source file with infinity in a float column | read fails |
-| C30 | `x == 0.3`, `x : Float64`; `x ~= 0.3` | exact and approximate comparisons respectively; neither changes with binding extraction |
+| C30 | `x == 0.3`, `x : Float`; `x ~= 0.3` | exact and approximate comparisons respectively; neither changes with binding extraction |
 | C31 | `round(2.5)`, `round(-0.5)` | `2.0`, `-0.0` |
 | C32 | `d"2026-01-31" + months(1)` | `d"2026-02-28"` |
 | C33 | `DateTime<"UTC">` compared with `DateTime<"Europe/Paris">` | type error |
@@ -62,28 +62,28 @@ check that proved obligations emit no redundant runtime assertions.
 | C37 | `[1, 2, 3] + [1, 2]` | length error |
 | C38 | `arrange(name)` on mixed-case strings | byte order |
 | C39 | `match bmi { ..<18.5 => Under, 18.5..<25.0 => Healthy, 25.0.. => Over }` on a column | enum column; exhaustive without `_` |
-| C40 | `Int64(x)` with `x : Float64`; `Int64(round(x))` | type error; accepted with checked range |
+| C40 | `Int(x)` with `x : Float`; `Int(round(x))` | type error; accepted with checked range |
 
 ## Interaction and boundary cases
 
 | ID | Program or input | Expected |
 | --- | --- | --- |
-| C41 | `let inc(x) = x + 1; (inc(2), inc(2.5))` | `(3, 3.5) : (Int64, Float64)` |
+| C41 | `let inc(x) = x + 1; (inc(2), inc(2.5))` | `(3, 3.5) : (Int, Float)` |
 | C42 | `100 * 0.75`; `[1, 2.5]`; `if (TRUE) 1 else 2.5` | `75.0`; `[1.0, 2.5]`; `1.0`, all float elements/results |
 | C43 | `let i = 9_007_199_254_740_993; i * 1.0` | precision-loss error; `9_007_199_254_740_992` promotes exactly |
-| C44 | maximum portable Int64 plus one; literal `-9_223_372_036_854_775_808` | overflow; out-of-range literal error |
+| C44 | maximum portable Int plus one; literal `-9_223_372_036_854_775_808` | overflow; out-of-range literal error |
 | C45 | `1e308 * 1e308` | arithmetic-overflow; never infinity or `None` |
 | C46 | `let x = 1e-200 * 1e-200; 1.0 / x` | x is zero; divisor refinement not established, type error |
 | C47 | `exp(-1000.0)` | `0.0`, no positive refinement |
 | C48 | `2 ^ (-3)`, `(-2) ^ 3.0`, `0 ^ 0`, `(-2) ^ 0.5`, `0 ^ (-1)` | `0.125`, `-8.0`, `1.0`, domain type error, domain type error |
-| C49 | `Int64(round(1e100))` | conversion-range error, not wrap or None |
+| C49 | `Int(round(1e100))` | conversion-range error, not wrap or None |
 | C50 | `1.0 ~= 1.000000001` in both operand orders; `0.0 == -0.0` | TRUE in both approximate comparisons; exact TRUE for zero |
 | C51 | `x != 0` and `let zero = 0.0; x != zero`, x is `1e-300` | both TRUE, nonzero refinement from exact comparison to known zero |
 | C52 | `FALSE and None`, `TRUE or None`, `TRUE and None`, `FALSE or None`, `not None` with Bool? operands | FALSE, TRUE, None, None, None |
 | C53 | `x == None`, `x != None`; `some(x)`, `none(x)` on `[1, None]` | comparisons rejected; predicates `[TRUE,FALSE]`, `[FALSE,TRUE]` |
-| C54 | filter optional x `[None, -1, 2]` by `x > 0`, `skip` vs `propagate` | skip retains `[2]` and present positive type; propagate retains `[None,2]` and optional positive type |
-| C55 | `if (some(x)) x + 1 else 0`, x is Int64? | present Int64; missing element becomes 0 |
-| C56 | `let empty: [Int64] = []; sum(empty)`; `sum([None,None], missing = skip)` with Int64? elements; `sum([0,0])` | None, None, 0; nonempty known-present sum is present |
+| C54 | filter optional x `[None, -1, 2]` by `x > 0`, `skip` vs `keep` | skip retains `[2]` and present positive type; keep retains `[None,2]` and optional positive type |
+| C55 | `if (some(x)) x + 1 else 0`, x is Int? | present Int; missing element becomes 0 |
+| C56 | `let empty: [Int] = []; sum(empty)`; `sum([None,None], missing = skip)` with Int? elements; `sum([0,0])` | None, None, 0; nonempty known-present sum is present |
 | C57 | grouped mutate x `[2,9,4]`, key `[A,None,A]`, `m = mean(x), y = x + 1, missing = skip` | m `[3.0,None,3.0]`, y `[3,10,5]`; three rows |
 | C58 | `standardize([2.0,None,4.0], missing = skip)` | `[-0.70710678,None,0.70710678]` |
 | C59 | `let avg(x) = mean(x)` then `summarize(m = avg(x), missing = skip)` for `[1,None,3]` | `2.0`; helper inherits policy |
@@ -91,8 +91,8 @@ check that proved obligations emit no redundant runtime assertions.
 | C61 | helper replaces revenue with `revenue * 2` then averages substituted `revenue - cost`, initial `(100,60)` | `140.0`; removed referenced column gives a diagnostic |
 | C62 | `let center2(x) = x - mean(x); let f(x) = mean(center2(x))` with x `[2.0,4.0]` | scalar `0.0`; nested reduction stays in group scope |
 | C63 | mutate using an independently materialised vector of the same length, or two filtered table domains | reject positional attachment and cross-domain arithmetic |
-| C64 | guarded whole conversion of `[None,2.0]`; inactive elements of a well-typed guarded branch | `[0,2]` for `if (some(x)) Int64(round(x)) else 0`; no failure from inactive elements |
-| C65 | required CustomerId joined to optional CustomerId with `missing = skip`; differing sign refinements | compatible keys; missing never matches; Int64/Float64 key pair rejected |
+| C64 | guarded whole conversion of `[None,2.0]`; inactive elements of a well-typed guarded branch | `[0,2]` for `if (some(x)) Int(round(x)) else 0`; no failure from inactive elements |
+| C65 | required CustomerId joined to optional CustomerId with `missing = skip`; differing sign refinements | compatible keys; missing never matches; Int/Float key pair rejected |
 | C66 | `relationship = one_to_one` with duplicate matching keys | cardinality error before output |
 | C67 | left join with unmatched left order, `unmatched = error` | coverage error; unrelated unused right rows alone do not fail |
 | C68 | full join left key `customer_id`, right key `id`, right-only required key 3 | coalesced key 3 in customer_id; unmatched non-key columns optional |
@@ -103,10 +103,10 @@ check that proved obligations emit no redundant runtime assertions.
 | C73 | filter after total ordering, project away sort column, then lag | order witness preserved; no redundant sorting |
 | C74 | `pivot_wider` duplicate id/level cell; explicit `values_fn = sum` | error without aggregation; sum with aggregation |
 | C75 | enum-derived levels Height, Weight, only Height observed | both output columns in declared order; missing Weight cell optional |
-| C76 | `pivot_longer` integer and float measurements | common Float64 with exact checked promotion |
+| C76 | `pivot_longer` integer and float measurements | common Float with exact checked promotion |
 | C77 | `across(starts_with("score_"), standardize)` | statically expanded columns; zero matches is a no-op; collisions rejected |
-| C78 | row bind `{id:Int64, x:Int64}` with `{id:Int64, y:Float64}` | schema id:Int64, x:Int64?, y:Float64?; missing cells added |
-| C79 | `Table([{a = 1}, {a = 2.5}])` | table `{a:Float64}`; unordered, no inferred uniqueness solely from construction |
+| C78 | row bind `{id:Int, x:Int}` with `{id:Int, y:Float}` | schema id:Int, x:Int?, y:Float?; missing cells added |
+| C79 | `Table([{a = 1}, {a = 2.5}])` | table `{a:Float}`; unordered, no inferred uniqueness solely from construction |
 | C80 | complete January and March cases to months `1..=3` | February row created with None; fill changes only new cells by default |
 | C81 | `expand` over known enum with an unobserved level and year `2025..=2026` | complete Cartesian product, including unobserved level |
 | C82 | required contracted float with NaN; conditional assertion `not active or population > 0` | requiredness fails after normalisation; no unconditional positive refinement |
@@ -128,11 +128,11 @@ check that proved obligations emit no redundant runtime assertions.
 | C98 | foreign declaration in strict mode; non-strict foreign return of incompatible representation | strict rejection; return-boundary error in non-strict mode |
 
 | C99 | `let zero = 0.0; x == zero` versus `x == 0.0`, including signed zero and tiny nonzero | identical exact results and refinements |
-| C100 | `use missing = skip; let avg(x) = mean(x)` called in a verb with `missing = propagate`, x `[1,None,3]` | lexical skip yields 2.0; helper with no lexical policy inherits propagate and yields None |
+| C100 | `set missing = skip; let avg(x) = mean(x)` called in a verb with `missing = keep`, x `[1,None,3]` | lexical skip yields 2.0; helper with no lexical policy inherits propagate and yields None |
 | C101 | pass contextual `mean_by` through a higher-order forwarding helper | deferred expression, group scope and policy requirements preserved; mixed incompatible value/column role rejected with annotation or split-parameter diagnostic |
 | C102 | helper captures lexical `offset`; an earlier mutation adds column `offset` | captured reference remains lexical; explicit column reference sees added column; a genuinely ambiguous fresh name fails |
 | C103 | `` mutate(`missing` = none(x), `by` = region, by = region) `` | output columns named missing and by; grouping uses input region; duplicate decoded output names rejected; formatter preserves required quotes |
-| C104 | `summarize(m = mean(x), by = region, missing = skip, group_missing = propagate)` with `(None,1),(None,None),(A,3)` | missing-region group retained with mean 1; A mean 3 |
+| C104 | `summarize(m = mean(x), by = region, missing = skip, group_missing = keep)` with `(None,1),(None,None),(A,3)` | missing-region group retained with mean 1; A mean 3 |
 | C105 | grouped mutate with required x, missing grouping key and `group_missing = skip` | group-dependent result optional and excluded row None; row count unchanged |
 | C106 | `mutate(across(where(is_number), standardize), by = year)` | implicit selection excludes year; generated expressions read entry snapshot; later arguments see outputs |
 | C107 | explicitly mutate grouping column then compute grouped mean | group membership fixed at verb entry |
@@ -162,7 +162,7 @@ check that proved obligations emit no redundant runtime assertions.
 | ID | Program or input | Expected |
 | --- | --- | --- |
 | C128 | `penguins \|> summarize(m = todo, by = species)` | checks; hole reports numeric type, group scope and candidates including `mean(body_mass)`; `run` and `compile` refuse |
-| C129 | `filter(cost > 0.0)` with optional `cost` through the session protocol | `optional-condition` with a decision whose options are `missing = skip` and `missing = propagate`, each with its schema consequence |
+| C129 | `filter(cost > 0.0)` with optional `cost` through the session protocol | `optional-condition` with a decision whose options are `missing = skip` and `missing = keep`, each with its schema consequence |
 | C130 | `select(body_mas)` | `unknown-column` with a fix to `body_mass` |
 | C131 | `mean(x, na.rm = TRUE)`; `t %>% filter(x > 1)`; `NA` | `r-na-rm` decision; `r-pipe` fix; `r-na` fix |
 | C132 | `define` an item, redefine a dependency | dependant reported stale; old revision still served to an open result handle |
@@ -170,7 +170,16 @@ check that proved obligations emit no redundant runtime assertions.
 | C134 | `page` of a table with a restricted column at `rows` exposure | column absent; omission reported |
 | C135 | `fork`, define in the fork, `context` on both | original session unchanged |
 | C136 | `save` after defines, replacements and a removal | canonical `.rp` in dependency order that checks to the same schemas |
-| C137 | helper annotated `(t: Table<{a: Int64, b: String}>)` applied to a table whose columns are `b, a` | accepted; the result keeps the order `b, a` |
+| C137 | helper annotated `(t: Table<{a: Int, b: String}>)` applied to a table whose columns are `b, a` | accepted; the result keeps the order `b, a` |
+
+| C138 | `n_distinct([1, 2, None, None])` under `keep` and `skip` | 3 and 2, both `Int` |
+| C139 | `first`/`last` of `[None, 10, 20]` and `[10, 20, None]` under `keep` and `skip` | first: `None`/10 under keep, 10/10 under skip; last: 20/`None` under keep, 20/20 under skip |
+| C140 | `elevation` (four ranges over `[1, 3000]`) applied to a contract-bounded column, then to an unbounded one | first checks; second is `nonexhaustive-match` naming the uncovered intervals |
+| C141 | `income ?? income2 ?? 0.0` with `income2` failing where `income` is present | no failure; result `Float`; `revenue ?? 0.0 > 1.0` parses as `(revenue ?? 0.0) > 1.0` |
+| C142 | `x not in ys` and `not (x in ys)` over optional `x`, empty `ys` and `ys` containing `None` | identical results |
+| C143 | `match? score { 90.. => "A", ..<90 => "B" }` over `[95, None, 10]` | `["A", None, "B"]`, type `String?` |
+| C144 | `:target python-polars` after a `write` in an R session | no rewrite of the file; R-specific evidence discarded; values re-established only on demand |
+| C145 | pipeline with `!view()` and `!hist(revenue)` taps, then `:save` | taps run once in pipeline order, leave the value unchanged and are absent from saved source |
 
 ## Additional implementation requirements
 

@@ -6,18 +6,19 @@ A directory containing `rupam.toml` is a project.
 
 ```toml
 [target]
-dialect = "r-dplyr"
+language = "r"
+dialect = "dplyr"
 
 [check]
 strict = true
 ```
 
-- `target.dialect`: `r-dplyr` or `python-polars`. There is no default; a
-  command that runs or compiles without a dialect from `--target` or
-  `rupam.toml` fails. An empty REPL can inspect settings and accept `:target` before execution.
+- `target.language` and `target.dialect` form one valid pair
+  ([Session](session.md#language-and-dialect)); `--target r-dplyr` sets both.
+  There is no default; a command that runs or compiles without a target fails. An empty REPL can inspect settings and accept `:target` before execution.
 - `check.strict`: defaults to `true`.
 
-`[preview] digits = 2` sets decimal places for Float64 grid and preview cells
+`[preview] digits = 2` sets decimal places for Float grid and preview cells
 (0 through 17, default 2). Calculations, exports and locks retain full precision.
 
 Resolve each key independently in this order, with later values taking precedence:
@@ -30,13 +31,10 @@ Resolve each key independently in this order, with later values taking precedenc
 The global file supplies defaults even outside a project. Project environment discovery still starts from the project's own directory. `:options` reports each effective key, value and winning source, including the file path or session flag/command. An explicitly supplied value retains that origin even when it equals the built-in default. Lock semantic settings by effective value. Display preferences and their origins are presentation metadata.
 
 `[agent] data` bounds what the session protocol and MCP server return:
-`schema`, `summaries` (default) or `rows` ([Agents](agent-interface.md#data-exposure)).
-`summaries` sends real values from unrestricted columns: minima, maxima, enum
-levels and most frequent values. Use `schema` or restrict sensitive columns
-for sensitive data.
+`schema` (default), `summaries` or `rows` ([Agents](agent-interface.md#data-exposure)).
 
 Settings that change a program's meaning are declared in the program
-(`use missing`, `use group_missing`).
+(`set missing`, `set group_missing`).
 
 ## Environments
 
@@ -64,7 +62,7 @@ per source and target, including:
 - validation results and discharged data-dependent obligations (numerical
   ones only under the determinism rule in
   [Dialects](dialects.md#checks-and-adapters)), keyed to
-  the typed core, target, exact input/environment fingerprints and evaluation
+  the TransformIR, target, exact input/environment fingerprints and evaluation
   scope; explicitly committed discovered source and pivot schemas, including
   the stage identity, parsing rules, ordered levels and provenance.
 

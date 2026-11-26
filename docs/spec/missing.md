@@ -7,7 +7,7 @@ optional value at a decision point requires a policy:
 | Policy | `filter` | reductions | grouping, `distinct` | join keys |
 | --- | --- | --- | --- | --- |
 | `skip` | drop rows with an unknown predicate | ignore missing values | exclude rows with a missing key from grouping or distinctness | missing never matches |
-| `propagate` | keep rows with an unknown predicate | result is `None` if any input is missing | missing is one group | not allowed |
+| `keep` | keep rows with an unknown predicate | missing is a value: positional and distinct-counting reductions treat it as one; arithmetic reductions return `None` | missing is one group | not allowed |
 | `error` | fail on an unknown predicate | fail on a missing value | fail on a missing key | fail on a missing key |
 
 `mutate` always preserves rows. With effective grouping policy `skip`, group-dependent
@@ -18,7 +18,7 @@ preservation of unmatched rows follows the join kind.
 ## Scope
 
 An explicit policy on a decision point or verb is lexical. A file directive
-`use missing = skip` supplies a lexical default for subsequent definitions
+`set missing = skip` supplies a lexical default for subsequent definitions
 and expressions. An explicitly set policy, including a definition's lexical
 file default, remains fixed when a function is passed or called elsewhere.
 A helper defined without a policy for a required decision point carries an
@@ -30,18 +30,18 @@ inputs are errors. Policies already fixed inside a helper are never overridden
 by callers. Explicit policies at inner decision points override their own
 lexical defaults.
 
-`group_missing = skip | propagate | error` on grouped verbs overrides the
+`group_missing = skip | keep | error` on grouped verbs overrides the
 policy for grouping keys only. `missing =` remains the common convenience
 policy for both reductions and grouping when no group-specific policy is set.
 A grouping decision does not supply a reduction policy on its own. For example:
 
 ```text
 data |> summarize(average = mean(x), by = region,
-                  missing = skip, group_missing = propagate)
+                  missing = skip, group_missing = keep)
 ```
 
 Here missing regions form a group and missing measurements are excluded from
-its mean. A file may specify `use group_missing = propagate` independently;
+its mean. A file may specify `set group_missing = keep` independently;
 explicit verb `group_missing` takes precedence, then an explicit common verb
 policy, then the lexical group default, then the lexical common policy. The
 more local explicit common policy therefore overrides outer defaults. Contextual grouping requirements inherit
@@ -61,16 +61,25 @@ would otherwise be guaranteed present.
   input with `skip`. `var` and `sd` return `None` under two present values.
   `coalesce(sum(x), 0)` deliberately supplies the additive identity.
 - `prod` also returns `None` over no present values. `n()` counts rows and
-  takes no policy. `n_distinct` counts present values under `skip`.
+  takes no policy. `n_distinct(x)` is `n(distinct(x))`
+  under the same policy: under `keep` missing contributes one distinct value,
+  under `skip` it contributes none. `n_distinct([1, 2, None, None])` is 3
+  under `keep` and 2 under `skip`; the result is always present. Estimating
+  distinct underlying values is a different question and no current function
+  answers it.
+- `first` and `last` are positional: under `keep` they return the value at
+  the first or last position, missing or not; under `skip` the first or last
+  present value. `first([10, 20, None])` is 10 and `first([None, 10, 20])` is
+  `None` under `keep`, 10 under `skip`.
 - `any` and `all` reduce present values under `skip` (empty identities
-  `FALSE` and `TRUE`); `propagate` uses three-valued Boolean reduction: a
+  `FALSE` and `TRUE`); `keep` uses three-valued Boolean reduction: a
   decisive present value determines the result, otherwise a missing input
   yields `None`. `error` rejects missing values before reduction.
 - Infer a present result if the operator's minimum present count and domain
   requirements are established (e.g. `sum` of a required column in a nonempty
   group). The result type never changes in response to actual values.
 - Length-preserving transforms retain missing positions. For reductions used
-  in transforms, `skip` uses present observations; `propagate` makes an
+  in transforms, `skip` uses present observations; `keep` makes an
   affected group's reduction missing. Positional `lag` and `lead` do not skip
   over missing positions; see [Standard library](stdlib.md#transforms).
 - `arrange` sorts missing values last in either direction and takes no policy.

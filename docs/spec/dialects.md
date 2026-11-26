@@ -11,10 +11,10 @@ A dialect is a host language and table library.
 
 ```text
 source -> syntax tree with spans -> resolved names -> inferred types, shapes and refinements
-       -> typed core -> checked locked analysis -> host syntax tree -> script, source map, manifest
+       -> TransformIR -> checked locked analysis -> host syntax tree -> script, source map, manifest
 ```
 
-The reference evaluator interprets the typed core and defines expected results
+The reference evaluator interprets the TransformIR and defines expected results
 for [conformance](conformance.md). It is not the production runtime. The
 compiler checks the locked analysis in the target worker; statically proved
 obligations need no execution. Data-dependent obligations may be discharged
@@ -35,7 +35,7 @@ A dialect provides:
 - its adapters, packages, and readers and writers per file format.
 
 The host language owns worker startup, host syntax printing and source mapping. Table dialects of that language share these facilities. The viewer compiles Rupam expressions through the same selected dialect as the REPL and script compiler.
-The manifest is derived from the typed core, lock and capability table.
+The manifest is derived from the TransformIR, lock and capability table.
 
 ## Lowering
 
@@ -72,7 +72,7 @@ emit it only when used. Keep adapter bodies separate from the analysis.
 | Adapter category | Required behavior |
 | --- | --- |
 | lock verification | verify content and environment before analysis, without rupam |
-| numeric representation | exact Int64, checked promotion/overflow, finite floats, guarded domains |
+| numeric representation | exact Int, checked promotion/overflow, finite floats, guarded domains |
 | reductions | undefined statistics and empty/all-missing sums return `None`; exact integer accumulation; explicit policies |
 | table semantics | exact join, ordering, pivot, grouping and schema rules where host defaults differ |
 | ingestion | exact parsing, optionality and normalisation of NaN; reject infinity |
@@ -104,9 +104,9 @@ restrict the program to compatible dialects.
 
 ## Effects and portability
 
-`set_seed(seed: Int64)` sets the target's random stream. `runif(n, min = 0.0,
-max = 1.0)` returns a vector of uniform Float64 draws; `sample(xs, n,
-replacement = without)` samples from an ordered vector. Counts are checked against supported host ranges; seeds are Int64 from 0
+`set_seed(seed: Int)` sets the target's random stream. `runif(n, min = 0.0,
+max = 1.0)` returns a vector of uniform Float draws; `sample(xs, n,
+replacement = without)` samples from an ordered vector. Counts are checked against supported host ranges; seeds are Int from 0
 through 2_147_483_647; `min <= max`, and without replacement
 `n <= length(xs)`. These are top-level effects, with evaluation in source
 order. They lower to the target's seeded RNG. Reproducibility is relative to
@@ -131,7 +131,7 @@ numerical or effect differences.
 
 ```text
 import r "stats" {
-  quantile(x: [Float64], probs: Float64): Float64?
+  quantile(x: [Float], probs: Float): Float?
 }
 ```
 

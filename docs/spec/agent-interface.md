@@ -53,15 +53,15 @@ session protocol and MCP server:
 | `summaries` | `schema` plus per-column statistics from the viewer's summaries |
 | `rows` | `summaries` plus bounded pages of rows |
 
-The default is `summaries`. Summaries are computed from the data and contain
-real values: each column's minimum and maximum, enum levels, most frequent
-values and their counts, and missing counts. A name, identifier or rare
-category in an unrestricted column can therefore reach the agent and its model
-provider. For sensitive data, mark the sensitive columns restricted in the
-contract or set `data = "schema"` for that project. `context` and the MCP
+The default is `schema`. Summaries and rows are opt-in. Summaries contain real
+values (minima, maxima, enum levels, frequent values and counts), so a name or
+rare category in an unrestricted column can reach the agent and its model
+provider. Even `schema` discloses row counts, and repeated queries can infer
+more. These levels protect against accidental disclosure; they are not a
+guarantee against inference or deliberate exfiltration. `context` and the MCP
 server state the exposure level on their first line.
 
-Restricted columns and values derived from them are absent at every level, including diagnostics, suggestions, summaries and
+Restricted columns and values derived from them are absent at every level, including taps, probes, logs, generated code, schema discovery, diagnostics, suggestions, summaries and
 error text returned by a worker. The REPL and viewer are local and are not
 bounded by this setting.
 
@@ -76,15 +76,15 @@ client that cannot see the screen:
 
 ```text
 project  examples/  target r-dplyr  strict  lock current  exposure summaries
-use missing = error
+set missing = error
 
 penguins : Table  344 rows  source penguins.csv (lock 3f2a…)
   species      Species              3 levels: Adelie, Chinstrap, Gentoo
   island       Island               3 levels
-  bill_length  Float64? (mm)        2 missing  32.1..59.6
-  body_mass    Int64? > 0 (g)       2 missing  2700..6300
+  bill_length  Float? (mm)        2 missing  32.1..59.6
+  body_mass    Int? > 0 (g)       2 missing  2700..6300
   sex          Sex?                 11 missing
-  year         Int64                2007..2009
+  year         Int                2007..2009
 
 heavy = penguins |> filter(body_mass > 4500, missing = skip)
   depends on penguins; 1 stale dependant: by_island
@@ -106,10 +106,10 @@ resolutions. A resolution is one of:
   correcting `body_mas` to `body_mass` or adding a required import. A client
   may apply a fix without asking.
 - **decision**: two or more edits that give different analytical results, such
-  as `missing = skip` versus `missing = propagate`, or `relationship =
+  as `missing = skip` versus `missing = keep`, or `relationship =
   many_to_one` versus deduplicating the right table. Each option states its
   consequence in schema terms (`drops rows where cost is missing; cost becomes
-  Float64`). When a snapshot is pinned and exposure permits, it adds the
+  Float`). When a snapshot is pinned and exposure permits, it adds the
   observed effect (`drops 11 of 344 rows`). A client must not choose a
   decision silently: an agent asks the analyst or states the choice it made.
 
@@ -126,7 +126,7 @@ expected type, ranked by how few arguments remain unresolved.
 
 ```text
 penguins |> summarize(m = todo, by = species)
-# hole: Float64 or Int64, group scope, missing policy required
+# hole: Float or Int, group scope, missing policy required
 #   mean(body_mass)  median(bill_length)  n()  ...
 ```
 
@@ -170,7 +170,7 @@ A result reply names the item revision, the lock digest when locked, and the
 input digests. A client quoting a number can cite `heavy@4` and later ask
 whether that revision is still current. Values are returned as typed data:
 
-- Int64 as a decimal string, Float64 as the shortest round-trip decimal,
+- Int as a decimal string, Float as the shortest round-trip decimal,
   `None` as null, dates and times in Rupam literal form.
 - A table returns its logical schema, row count, analytical order and a page.
 - A failed evaluation returns the Rupam diagnostic at the Rupam span, never a
@@ -212,17 +212,75 @@ exposure level, diagnostic codes and standard-library names.
 
 ## MCP server
 
-`rupam mcp` serves the session protocol as a Model Context Protocol server over
-standard input and output for the project in the current directory.
+`rupam mcp` adapts the session protocol to the Model Context Protocol over
+standard input and output for the project in the current directory. It is an
+adapter, not a second session engine or checker.
 
-- **Tools** map one-to-one onto session operations. Tool input schemas are the
-  generated protocol schemas. Effectful submissions follow the effect rules
-  above.
-- **Resources:** `rupam://context`, `rupam://item/{name}`,
-  `rupam://schema/{name}`, `rupam://code/{name}`, `rupam://diagnostic/{code}`,
-  `rupam://describe/{name}`. Resource contents follow the exposure level.
-- One MCP connection owns one session. `rupam mcp --attach` joins the analyst's
-  running REPL instead: agent drafts appear in the viewer as proposals, and
-  definitions and effects require the analyst's acceptance at the prompt.
-  The REPL listens on a named pipe on Windows and a Unix socket elsewhere,
-  only while `:share` is active.
+### Protocol
+
+- Supported revisions are `2026-07-28` (stateless; session identity travels in
+  request metadata) and the preceding stateful revisions `2025-06-18` and
+  `2025-11-25`, negotiated at initialisation. Older clients receive the
+  stateful lifecycle over the same session.
+- Analytical state is independent of the transport. Requests address a
+  session handle and result handles explicitly, each scoped to the
+  authenticated client. A dropped connection keeps the session for a bounded
+  idle period; reconnecting with the handle resumes it. After a server
+  restart, expiry or release, a handle is `invalid-handle` and the client
+  starts a new session.
+
+### Tools
+
+Tools are composed around analytical tasks; the full session protocol remains
+available to programmatic clients.
+
+| Tool | Does |
+| --- | --- |
+| `check` | check a pure draft; optionally evaluate it and return a bounded preview |
+| `inspect` | context, schema, item, generated code, documentation or a diagnostic |
+| `fork` | open, compare or discard an isolated fork |
+| `propose` | submit a source change or effect for analyst approval |
+| `lock` | lock status, or lock after approval |
+
+Input and output schemas are generated from the typed protocol declarations.
+Results are structured. Errors fall into distinct categories: `protocol`,
+`diagnostic` (analytical, with code and span), `execution`, `cancelled` and
+`superseded`. Clients never parse message text.
+
+### Authorisation and concurrency
+
+- Every mutating request carries an expected revision and commits atomically
+  against it; a stale request is rejected.
+- An approval binds the exact checked operation: session, revision, canonical
+  source and TransformIR digest, input identities, target, effect, resolved
+  destination path and overwrite policy. A changed, stale, expired or reused
+  approval is rejected. Acknowledging an effect category is not approval.
+- `rupam mcp --attach` joins the analyst's REPL only while `:share` is
+  active, over a named pipe on Windows or a Unix socket elsewhere, with a
+  per-share token. The analyst can revoke it. Permissions are enforced in the
+  session, not by tool descriptions or UI.
+- Agents evaluate alternatives in forks pinned to one base revision and
+  compare bounded consequences permitted by the exposure level. Accepting a
+  proposal rechecks it against the current revision; policies and source
+  change only with analyst approval.
+- Data values, contracts and documents are untrusted data, never instructions.
+
+### Limits and isolation
+
+Each session has finite limits on forks, result handles, worker memory,
+request time, response size, queued requests and concurrent evaluations,
+reported in capabilities. Results are released explicitly or when their last
+consumer leaves. Cancellation, timeout and disconnect clean up workers;
+cancelling native code may require terminating the worker.
+
+Workers run with a minimal environment, the project directory as working
+directory and paths resolved after following symlinks and reparse points,
+checked at use. Where the platform allows, workers have no network access and
+write only to declared destinations. A directory check alone is not a
+sandbox; the capabilities reply states exactly which restrictions are in force.
+
+### Resources
+
+`rupam://context`, `rupam://item/{name}`, `rupam://schema/{name}`,
+`rupam://code/{name}`, `rupam://diagnostic/{code}`, `rupam://describe/{name}`,
+all subject to the exposure level.

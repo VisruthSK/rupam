@@ -26,9 +26,21 @@ A `Decimal` type for exact decimal arithmetic.
 
 ## Dimensional analysis
 
-Units and dimensional arithmetic, meaningful nominal numeric derivation,
-and compound dimensions. For now nominal wrappers require explicit unwrapping
-for arithmetic; metadata units remain descriptive.
+Typed physical units in the style of F# units of measure and Unitful.jl:
+
+```rupam
+let height = 1.75 m
+let weight = 72.0 kg
+let bmi = weight / height^2   // Float<kg/m²>
+```
+
+Compatible units convert (metres plus centimetres), incompatible dimensions
+are rejected (metres plus kilograms), and products and quotients derive
+compound dimensions. Transcendental functions take dimensionless arguments.
+Units are inferred and keep numeric semantics; they are distinct from nominal
+identities and from descriptive contract metadata. The surface syntax above is
+illustrative. Until then nominal wrappers need explicit unwrapping for
+arithmetic.
 
 ## Observational grain
 
@@ -43,7 +55,56 @@ release policy is defined, these outputs remain restricted.
 
 ## Dialects
 
-`r-datatable`, `r-polars`, `julia-tidier`.
+Each dialect connects through the Arrow boundary and its own conformance;
+numerical behaviour is never assumed identical.
+
+- `r-datatable`: first through dtplyr over the dplyr lowering, then a native
+  emitter only if conformance requires it.
+- `python-ibis`: emits an unbound Ibis expression the analyst binds to a
+  backend. Evidence records the executing engine; an unbound expression does
+  not certify every backend.
+- `julia-tidier`, after Arrow logical-type preservation is established.
+- webR: browser execution of the `r-dplyr` dialect, subject to Arrow, file
+  I/O, package availability and numeric conformance.
+
+## Notebook
+
+A reactive notebook (`rupam notebook`) in the spirit of marimo, specified in
+[Notebook](notebook.md).
+
+## Portable compiler
+
+The parser, checker, formatter and lowering as a library free of OS-specific
+ingestion and workers, compilable to JavaScript or Wasm with supplied schemas
+and evidence. A browser-hosted notebook additionally needs a conformant
+browser execution backend.
+
+## Ingestion engine
+
+Talon (raven-ml) is evaluated as a replacement for DuckDB in ingestion, schema
+inspection, validation scans and Arrow access. It is adopted only if it
+matches on native Windows builds, full-file CSV/TSV inference, Parquet, Arrow
+IPC and memory mapping, exact 64-bit integers, finite floats, structured
+errors and buffer lifetimes, and wins on cold and warm ingestion, scans, peak
+memory and packaging. DuckDB stays until then.
+
+## Optimiser validation
+
+Each TransformIR rewrite of the logical optimiser emits a certificate: rule,
+original and replacement subtrees, scope and the facts authorising it. A small
+independent validator checks it before lowering, as in Alive2-style
+translation validation; an invalid or unsupported certificate keeps the
+original expression. Certificates complement Lean proofs and differential
+conformance.
+
+## Inference and resolution
+
+Studied against conformance cases, with no rewrite implied:
+OutsideIn(X) (implication constraints and local assumptions, for refinements
+and policy obligations), Inferno (as reusable inference and elaboration
+infrastructure, adopted only if it simplifies rollback, open rows and
+diagnostics) and scope graphs (one resolution model for checking, completion
+and renaming).
 
 ## Environment setup
 
@@ -69,7 +130,7 @@ plus predicate abstraction over a small decidable domain. After
 | relations | facts between values, such as `start <= end` |
 | implication | whether known facts discharge a new obligation |
 
-Facts follow Rupam's exact Int64 and IEEE binary64 semantics, including
+Facts follow Rupam's exact Int and IEEE binary64 semantics, including
 rounding, underflow and overflow; real-number reasoning alone is unsound. A
 general SMT solver comes only after the decidable domain proves insufficient.
 Users never write logical predicates in ordinary annotations. Related work:
@@ -77,7 +138,7 @@ Abstract Refinement Types (ESOP 2013), Bounded Refinement Types (ICFP 2015).
 
 ## Logical optimiser
 
-A pass over the typed core, after checking and before any lowering, that
+A pass over the TransformIR, after checking and before any lowering, that
 rewrites table pipelines using facts only the checker has. Every rewrite
 preserves the results, diagnostics, evaluation scope and effects defined in
 [Guarantees](guarantees.md), and the source map still points each generated

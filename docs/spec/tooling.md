@@ -18,8 +18,8 @@ the locked analysis.
   needs an established or explicitly committed schema. Show proposed schemas
   and snapshot-specific evidence on lock; never commit partial previews.
 - The REPL tracks lock status, checks for changed inputs and dependencies,
-  and marks stale results. It explains what changed and offers `:reload`,
-  `:lock`, and recompilation. Do not silently update a production lock.
+  and marks stale results. It explains what changed and offers `:refresh`
+  and `:lock`. Do not silently update a production lock.
 - Values print in rupam format in every dialect.
 - Worker errors are reported at the rupam source span.
 - An input that fails to parse, check or execute does not install a binding
@@ -38,12 +38,20 @@ the locked analysis.
 | `:explain TABLE` | plan, validation steps, adapters |
 | `:probe EXPR` | on-demand stage or expression statistics over its current snapshot |
 | `:code TABLE` | generated code |
-| `:target DIALECT` | change dialect; restart worker and reanalyse |
+| `:target LANGUAGE-DIALECT`, `:language L`, `:dialect D` | change target without replaying effects ([Session](session.md#language-and-dialect)) |
+| `:save [FILE]` | write accepted source as a `.rp` file |
+| `:undo`, `:redo` | move between analytical revisions |
+| `:unlock`, `:refresh` | release the snapshot; adopt changed inputs |
+| `:version` | build identity |
 | `:lock` | validate and lock the current complete analysis |
 | `:status` | current/stale lock and changed dependencies |
 | `:validate TABLE` | validate the whole source snapshot |
 | `:share` | let `rupam mcp --attach` join this session |
-| `:bindings`, `:reload`, `:help`, `:quit` | |
+| `:bindings`, `:help`, `:quit` | |
+
+`!print()`, `!view()`, `!schema()` and `!hist(column)` are inspection taps
+([Session](session.md#inspection-taps)); `:view` and `:preview` remain as
+command forms of the same operations.
 
 The prompt highlights syntax as it is typed, completes from a menu, edits
 multiple lines and keeps history. Completion offers columns with their types
@@ -113,7 +121,7 @@ A diagnostic has a stable code, a source span, related spans, and resolutions. A
 ```text
 rates.rp:8:28  zero-divisor
   `cases / population` is undefined where population is 0.
-  population: Float64, sign unknown (data-dict.yaml has no assertion on it)
+  population: Float, sign unknown (data-dict.yaml has no assertion on it)
 
   |> filter(population != 0)
   rate = ratio(cases, population)

@@ -16,6 +16,9 @@ between them.
 | [Contracts](contracts.md) | data-dict contracts and validation |
 | [Dialects](dialects.md) | compilation and generated scripts |
 | [Tooling](tooling.md) | REPL, viewer, diagnostics, deferred editor support |
+| [Session](session.md) | session ownership, targets, saving, taps, revisions, evidence, responsiveness |
+| [Runtime](runtime.md) | Arrow boundary, adapters, versions, supported versions, distribution |
+| [Notebook](notebook.md) | deferred reactive notebook |
 | [Agents](agent-interface.md) | session model, effects, data exposure, session protocol, MCP server |
 | [Projects](projects.md) | `rupam.toml`, environments, locks, command line |
 | [Performance](performance.md) | interactive cost, native execution and compiler optimisation |

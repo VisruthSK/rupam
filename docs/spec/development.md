@@ -28,7 +28,7 @@ directory, so every successful build is immediately the installed version.
   messages are variants or records, never strings, until they are printed.
 - One checker. Scalar and table expressions share resolution, inference,
   refinements and diagnostics. Stage-specific rules live behind one entry
-  point that returns a typed core.
+  point that returns TransformIR.
 - Values cross the worker boundary as Arrow data and typed error conditions,
   not printed text or host error messages matched by substring.
 
@@ -42,13 +42,15 @@ directory, so every successful build is immediately the installed version.
 | `syntax` | syntax tree with spans |
 | `resolved` | binding identities, column references, ambiguity decisions |
 | `typed` | types, shapes, refinements, scopes and obligations per node |
-| `core` | typed core |
+| `transform-ir` | TransformIR with spans and obligations |
 | `host` | host syntax tree before printing |
 | `code` | generated code with its source map |
 
 Output is s-expressions with spans as `file:line:col-line:col`, in a stable
 order, so a dump is a valid expect-test snapshot. `--at LINE:COL` restricts a
-dump to the innermost node at a position.
+dump to the innermost node at a position. `rupam compile FILE --emit
+transform-ir` prints the same TransformIR dump from the installed compiler
+without lowering or running anything.
 
 ## Diagnostic catalogue
 
@@ -85,7 +87,7 @@ the dialect it occurred in.
   `scripts/dev promote` accepts intended changes.
 - **Viewer frames.** The viewer renders to an in-memory cell grid at a fixed
   size. A test drives it with keys and compares frames as text.
-- **Differential tests** (`qcheck`). Generate well-typed core programs and
+- **Differential tests** (`qcheck`). Generate well-typed TransformIR programs and
   matching tables, run the reference evaluator and each installed dialect, and
   compare by the conformance rules. Shrink a failure and write it as a
   `pending` fixture.
@@ -118,7 +120,7 @@ cells. Worker spans include the generated code and the reply's size.
 
 The `dev/` executable can serve the [session protocol](agent-interface.md#session-protocol)
 with additional operations: `stages`, `conformance`, `fixture`, `trace` and
-`core` (the typed core and obligations of an item). A coding agent working on
+`transform-ir` (TransformIR and obligations of an item). A coding agent working on
 the compiler uses it against the library it has just built.
 
 ## Dependencies

@@ -28,12 +28,12 @@ A column without a declared type is not usable with a static type.
 
 ## Physical and nominal types
 
-The file's schema determines `Int64` versus `Float64` and date-time zones. A
+The file's schema determines `Int` versus `Float` and date-time zones. A
 physical type without an exact rupam equivalent is a type error for that
 column. Requiredness and refinements describe the normalised rupam values.
 
 Each unambiguous single-column entity primary key of primitive identifier
-type (`Int64` or `String`) has a nominal domain identified by its contract and table/key identity.
+type (`Int` or `String`) has a nominal domain identified by its contract and table/key identity.
 Validated foreign keys to it share that domain. Do not infer equivalence
 from names, matching representations or arbitrary relationships. Composite
 keys retain combined uniqueness; do not assign entity identity to individual
@@ -49,7 +49,7 @@ errors. Equal label lists do not establish shared enum identity.
 A rupam-side annotation may share or override inferred nominal domains:
 
 ```text
-type CustomerId = new Int64
+type CustomerId = new Int
 type Status = | Active | Inactive
 let customers = load(shop.customers, types = {id: CustomerId, status: Status})
 let orders = load(shop.orders, types = {customer_id: CustomerId})

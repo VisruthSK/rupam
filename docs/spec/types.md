@@ -43,7 +43,7 @@ The following rules constrain elaboration:
    numeric constraints, contextual roles and scope requirements from all uses.
    Solve record rows by field name, with open row variables for unused fields.
 3. For a common-type site, unify identical nominal/structural types, lift
-   optionality if either operand is optional, and choose Float64 for mixed
+   optionality if either operand is optional, and choose Float for mixed
    primitive numbers. Apply recursively to compatible fields. Record promotion
    obligations separately from unification. Unconstrained literals default only
    after contextual constraints are solved; generalise numeric literal constraints
@@ -119,8 +119,8 @@ site are errors. The compiler must not depend on backend-specific inference.
 | Type | Values |
 | --- | --- |
 | `Bool` | `TRUE`, `FALSE` |
-| `Int64` | integers from `-9_223_372_036_854_775_807` through `9_223_372_036_854_775_807` |
-| `Float64` | finite 64-bit floating-point numbers |
+| `Int` | integers from `-9_223_372_036_854_775_807` through `9_223_372_036_854_775_807` |
+| `Float` | finite 64-bit floating-point numbers |
 | `String` | UTF-8 text |
 | `Date`, `Time`, `DateTime<Z>`, `Duration`, `Period` | [Dates and times](#dates-and-times) |
 | `Regex` | patterns in the regex dialect ([Standard library](stdlib.md#regex)) |
@@ -137,9 +137,9 @@ There is no null, NA, NaN or infinity.
 
 | Constraint | Types |
 | --- | --- |
-| `number` | `Int64`, `Float64` |
+| `number` | `Int`, `Float` |
 | `comparable` | numbers, `String`, `Bool`, dates and times of compatible types, enums (declaration order), vectors of comparables (lexicographic), newtypes deriving `comparable` |
-| `equatable` | `Int64`, `Float64`, `Bool`, `String`, dates and times, enums, and vectors, records and variants with equatable components; eligible newtypes |
+| `equatable` | `Int`, `Float`, `Bool`, `String`, dates and times, enums, and vectors, records and variants with equatable components; eligible newtypes |
 | `showable` | primitive values, tables and composites of showable values; not functions |
 
 There are no user-defined type classes.
@@ -164,7 +164,7 @@ from observation order. Vectors have an intrinsic position order.
 - Columns from different table stages cannot be combined as materialised
   values. Table-expression parameters instead use the substitution semantics
   in [Tables](tables.md#column-names).
-- The typed core records evaluation scope, shape, domain, order, required
+- The TransformIR records evaluation scope, shape, domain, order, required
   constraints and unresolved missing policies. Function generalisation and
   instantiation preserve these properties; no user-visible lifting annotations
   are required. Hover shows the chosen lifting.
@@ -198,27 +198,32 @@ from observation order. Vectors have an intrinsic position order.
   `TRUE or None` is `TRUE`, `TRUE and None` and `FALSE or None` are `None`,
   and `not None` is `None`. `and` and `or` skip an unnecessary right operand
   where the left operand determines the result.
-- `coalesce`, `Some`/`None` patterns and the missing policies handle absence.
+- `a ?? b` and `coalesce(a, b, ...)` are one operation: operands evaluate left
+  to right, once, only where every preceding operand is absent; for columns,
+  under the unresolved-row mask with group-scoped reductions intact. The
+  result has the common payload type and is required when any operand is
+  required, so `income ?? 0` is `Int`. All operands are checked statically.
+- `match?`, `Some`/`None` patterns and the missing policies also handle absence.
   `if` and match guards require `Bool`; `filter` also accepts `Bool?` with a
   policy. The two branches of a conditional and all match arms infer a common
   type and compatible shape.
 - Presence and sign refinements follow successful tests, including conjunctions
   and negated presence tests, in branches and filters. After `filter(some(x))`,
   `x` is present; after `filter(x > 0, missing = skip)` it is present and
-  positive. With `propagate`, a retained unknown predicate proves neither
+  positive. With `keep`, a retained unknown predicate proves neither
   presence nor unconditional sign unless the predicate implies it for every
   retained present value. Replacing a column invalidates its old refinements.
 
 ## Numbers
 
-- `Int64` arithmetic is exact within the symmetric portable range in the value
+- `Int` arithmetic is exact within the symmetric portable range in the value
   type table (the excluded minimum signed value is reserved by R bit64).
   Out-of-range results fail with `arithmetic-overflow`.
-- `Float64` uses IEEE 754 binary64, round-to-nearest ties-to-even. Nonfinite
+- `Float` uses IEEE 754 binary64, round-to-nearest ties-to-even. Nonfinite
   arithmetic results fail; subnormal results and underflow to signed zero are
   valid. The checker never infers a nonzero result when rounding may erase it.
-- Numeric common types follow Julia-style promotion: `Int64` with `Int64`
-  remains `Int64`; a mix with `Float64` promotes to `Float64`. Promotion is
+- Numeric common types follow Julia-style promotion: `Int` with `Int`
+  remains `Int`; a mix with `Float` promotes to `Float`. Promotion is
   implicit in arithmetic, numeric comparisons, numeric function arguments,
   compatible record/vector fields and common-type contexts (branches,
   reshaping, row binding). An integer converted to float must be exactly
@@ -229,34 +234,56 @@ from observation order. Vectors have an intrinsic position order.
 - Numeric literals adapt exactly to their inferred context and default to
   their lexical type only when unconstrained. `let inc(x) = x + 1` remains
   polymorphic over numeric inputs. A decimal literal may round to its nearest
-  finite binary64 value; adaptation of an integer literal to Float64 is exact.
-- `/` returns `Float64`; `div(a, b)` takes integers and truncates toward zero.
+  finite binary64 value; adaptation of an integer literal to Float is exact.
+- `/` returns `Float`; `div(a, b)` takes integers and truncates toward zero.
   `%` is modulo with the sign of the divisor. Both operands of integer-to-float
   arithmetic use checked promotion. `div` and `%` require nonzero divisors.
-- `x ^ y` returns `Float64` for all numeric operands. Positive bases admit any
+- `x ^ y` returns `Float` for all numeric operands. Positive bases admit any
   finite exponent. A zero base admits nonnegative exponents (`0 ^ 0 = 1.0`);
-  a negative base requires a whole exponent, including a whole Float64.
+  a negative base requires a whole exponent, including a whole Float.
   Negative integer powers are fractional. Domain requirements must be
   established as below; overflow is an arithmetic error.
 - `==` and `!=` always use exact value equality and its negation, including
-  Float64 and named constants. For scientific comparisons with rounding
+  Float and named constants. For scientific comparisons with rounding
   tolerance, use `a ~= b` (also `a ≈ b`), which uses
   `abs(a-b) <= max(atol, rtol * max(abs(a), abs(b)))`, with `atol = 0.0` and
-  `rtol = sqrt(eps(Float64))` (about `1.49e-8`). This is Julia's symmetric
+  `rtol = sqrt(eps(Float))` (about `1.49e-8`). This is Julia's symmetric
   `isapprox` convention, based on IEEE binary64 machine epsilon `2^-52`, not
   an IEEE-prescribed equality tolerance. `is_approx(a, b, atol = ..., rtol = ...)`
   accepts finite nonnegative tolerances. Zero compares equal to signed zero.
   Relational key equivalence is exact, including for floats (see Tables),
   never approximate. Implement comparisons without overflowing intermediates.
 - `round(x, digits = 0, ties = even)` rounds half to even; `ties = away`
-  rounds half away from zero. `digits` is Int64; negative digits round to
+  rounds half away from zero. `digits` is Int; negative digits round to
   powers of ten. A nonfinite result fails; signed zero is retained. `prod`
-  returns `Float64` when defined, otherwise `None`.
+  returns `Float` when defined, otherwise `None`.
+
+### Refinement-aware exhaustiveness
+
+A `match` or `match?` is exhaustive when its arms cover the subject's
+established domain, not necessarily its primitive type. Domain facts come from
+inferred interval refinements, validated contract bounds, flow refinements of
+preceding transformations and admissible snapshot evidence. A function whose
+arms do not cover its parameter's type carries the uncovered domain as a
+latent requirement in its scheme; each application discharges it from the
+argument's facts or is rejected with `nonexhaustive-match` naming the
+uncovered interval. There is no new syntax.
+
+```rupam
+let elevation(x) = match? x {
+  1..<1000 => "Low",
+  1000..<1500 => "Medium",
+  1500..<2000 => "High",
+  2000..=3000 => "Very high",
+}
+```
+
+`elevation` requires every present argument to lie in `[1, 3000]`.
 
 ### Sign and presence refinements
 
 A numeric type may carry `> 0`, `>= 0` or `!= 0` after the type, e.g.
-`Float64 > 0` or `Float64? > 0` (every present value is positive).
+`Float > 0` or `Float? > 0` (every present value is positive).
 Integral-valuedness and presence are also inferred. These properties have no
 runtime representation. Exact constant and interval facts may be retained
 internally to discharge obligations, without adding user-defined refinements.
@@ -273,7 +300,7 @@ Sources:
 - literals, by value, and constant evaluation;
 - sound arithmetic on refined operands: nonnegative sums and products remain
   nonnegative; positive integer products remain positive on successful
-  execution; Float64 products and divisions can underflow. `abs`, even
+  execution; Float products and divisions can underflow. `abs`, even
   powers, `sqrt` and `exp` are nonnegative; `abs` of a nonzero value is
   positive. `sqrt` of a positive finite value is positive. Infer stronger facts
   only when valid for the actual representation;
@@ -306,12 +333,12 @@ rounding. Optional lifting preserves missing positions.
 
 | From | To | Result |
 | --- | --- | --- |
-| `Int64` | `Float64` | exact value or precision-loss error |
-| `Float64` known to be whole | `Int64` | same value, checked portable range |
-| `Bool` | `Int64`, `Float64` | `FALSE` is 0, `TRUE` is 1 |
+| `Int` | `Float` | exact value or precision-loss error |
+| `Float` known to be whole | `Int` | same value, checked portable range |
+| `Bool` | `Int`, `Float` | `FALSE` is 0, `TRUE` is 1 |
 | any `showable` type | `String` | rupam display format |
 
-The rupam display format writes `Int64` in decimal, `Float64` as the shortest
+The rupam display format writes `Int` in decimal, `Float` as the shortest
 decimal that reads back to the same value, with `.0` on whole values and an
 exponent from `1e16` up or below `1e-4` (`2.0`, `0.30000000000000004`,
 `1e+300`), `Bool` as `TRUE` or `FALSE`, and `String` unchanged. REPL values
@@ -320,21 +347,21 @@ and interpolation use it in every dialect.
 | base type | newtype | wrapped value |
 
 `floor`, `ceiling`, `round` with nonpositive digits, and `trunc` establish
-whole Float64 results. `Int64(round(x))` type-checks; `Int64(x)` on an
-arbitrary Float64 does not. Parsers explicitly return `T?` on invalid input
+whole Float results. `Int(round(x))` type-checks; `Int(x)` on an
+arbitrary Float does not. Parsers explicitly return `T?` on invalid input
 ([Standard library](stdlib.md#parsing)).
 
 ## Records and rows
 
 Records are immutable and structurally typed. A row type
-`{revenue: Float64, ..r}` contains `revenue` and any other fields. Table rows
+`{revenue: Float, ..r}` contains `revenue` and any other fields. Table rows
 are records. Field order is not part of a record or table type.
 
 ## Variants and enums
 
 ```text
 type Quality = | Absent | Invalid | Zero | Valid
-type Reading = | Measured(value: Float64) | Offline | Fault(reason: String)
+type Reading = | Measured(value: Float) | Offline | Fault(reason: String)
 ```
 
 - A variant whose constructors have no fields is an enum. Enums are ordered
@@ -351,8 +378,8 @@ type Reading = | Measured(value: Float64) | Offline | Fault(reason: String)
 ## Newtypes
 
 ```text
-type PatientId = new Int64
-type Usd = new Float64 deriving (comparable)
+type PatientId = new Int
+type Usd = new Float deriving (comparable)
 ```
 
 - A newtype is distinct from its base type and from other newtypes, with the
@@ -387,7 +414,7 @@ type Usd = new Float64 deriving (comparable)
 ## Effects
 
 Functions are pure. Reading and writing files, the clock and randomness are
-effects and appear only at top level. `set_seed(seed: Int64)` sets the host
+effects and appear only at top level. `set_seed(seed: Int)` sets the host
 random stream (see [Dialects](dialects.md#effects-and-portability)). Top-level
 effects evaluate once, in source order. Pure functions capture their values;
 no effect is repeated by lifting or inlining.

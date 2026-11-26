@@ -10,15 +10,15 @@ is conservative: inference removes optionality when definedness is proved.
 
 | Function | Result |
 | --- | --- |
-| `n()` | `Int64`, row count of the table or group |
-| `n_distinct(x)` | `Int64`, or `Int64?` under `propagate` with optional input; number of distinct present values under `skip` |
-| `sum(x)` | `Int64?` for integer or Boolean input, `Float64?` for float input; `None` over no present values |
-| `prod(x)` | `Float64?`; `None` over no present values |
-| `mean(x)`, `median(x)` | `Float64?`; `None` over no present values |
-| `var(x)`, `sd(x)` | `Float64?`, sample statistics (divisor `n - 1`); `None` under two present values |
+| `n()` | `Int`, row count of the table or group |
+| `n_distinct(x)` | `Int`, `n(distinct(x))` under the same policy; see Missing values |
+| `sum(x)` | `Int?` for integer or Boolean input, `Float?` for float input; `None` over no present values |
+| `prod(x)` | `Float?`; `None` over no present values |
+| `mean(x)`, `median(x)` | `Float?`; `None` over no present values |
+| `var(x)`, `sd(x)` | `Float?`, sample statistics (divisor `n - 1`); `None` under two present values |
 | `min(x)`, `max(x)` | `T?` for comparable `T`; `None` over no present values |
-| `quantile(x, p, method = type7)` | `Float64?`; R's quantile conventions |
-| `mad(x)`, `iqr(x)` | `Float64?`, robust spread |
+| `quantile(x, p, method = type7)` | `Float?`; R's quantile conventions |
+| `mad(x)`, `iqr(x)` | `Float?`, robust spread |
 | `any(x)`, `all(x)` | `Bool?` over Boolean input; see Missing values |
 | `sum(b)`, `mean(b)` on `Bool` | count and proportion of `TRUE`, respectively |
 | `first(x)`, `last(x)` | `T?`; total observation order or ordered vector required |
@@ -37,21 +37,19 @@ against the portable range; no order-dependent wraparound or intermediate
 range failure for a representable final integer sum. Use a wider/exact
 accumulator or a proved-safe native reduction. For example `[MAX, 1, -MAX]`
 sums to 1 in any order. Counts use the same final range requirement. For
-Float64 reductions use numerically stable host algorithms where available;
+Float reductions use numerically stable host algorithms where available;
 if an intermediate overflow can be avoided by a semantics-preserving stable
 algorithm, prefer it. Nonfinite final results are errors. Native floating
 rounding and algorithm limitations remain documented; a backend may fail on
 intermediate overflow rather than silently return a wrong result, and fixtures
-must distinguish this limitation from integer exactness. `first` and `last`
-under `skip` select the first or last present value; under `propagate` any
-missing input makes the result missing. `n_distinct` under `propagate` also
-returns `None` if any input is missing. Exact relational equivalence, not
+must distinguish this limitation from integer exactness. `first` and `last` are positional; `n_distinct` is `n(distinct(x))` (see
+[Missing values](missing.md#results)). Exact relational equivalence, not
 approximate numerical comparison, defines distinctness.
 
 ## Transforms
 
 Return an aligned column or vector of the input's length. Under `by =` they
-apply per group. Numeric transforms use Float64 output except integer
+apply per group. Numeric transforms use Float output except integer
 cumulative sums and integer-valued ranks; undefined results are optional.
 
 | Function | Result |
@@ -68,21 +66,21 @@ cumulative sums and integer-valued ranks; undefined results are optional.
 
 `scale`, `standardize` and `rescale` return `None` for every element when the
 divisor is zero or undefined. `rescale` defaults to `(0.0, 1.0)` and permits
-any finite endpoints. Average rank is Float64; min/max/dense ranks are
-Int64. Dense ranks count distinct smaller values plus one. `ntile` requires a
-positive Int64 bucket count; distribute observations into buckets differing
+any finite endpoints. Average rank is Float; min/max/dense ranks are
+Int. Dense ranks count distinct smaller values plus one. `ntile` requires a
+positive Int bucket count; distribute observations into buckets differing
 in size by at most one, larger buckets first. Distinct values establish the
 rank order directly; only ties require meaningful observation order, not
 arbitrary physical row positions. Positional transforms accept
 operation-local `order_by =` (see [Tables](tables.md#order)).
 
 For centering, scaling, ranking and rescaling, `skip` computes using present
-observations, preserving missing positions; `propagate` produces missing
+observations, preserving missing positions; `keep` produces missing
 results for the entire affected group. For cumulative operations, `skip`
-returns `None` at missing positions and continues the accumulator; `propagate`
+returns `None` at missing positions and continues the accumulator; `keep`
 returns `None` at and after the first missing value. `error` fails on missing
-input. `cumsum` of Int64 is checked Int64. `lag`/`lead` preserve missing
-positions and shift by a nonnegative Int64 offset; they take no missing
+input. `cumsum` of Int is checked Int. `lag`/`lead` preserve missing
+positions and shift by a nonnegative Int offset; they take no missing
 policy because they do not drop or aggregate values. A compatible `default`
 fills only positions outside the input. Output is optional if a missing
 input or boundary can occur.
@@ -92,14 +90,14 @@ input or boundary can occur.
 `abs`, `sign`, `sqrt`, `exp`, `log`, `log2`, `log10`, `floor`, `ceiling`,
 `trunc`, `round(x, digits = 0, ties = even)`, `pmin(a, b)`, `pmax(a, b)`,
 `clamp(x, lo, hi)`, `div`, `ratio`, `positive`, `nonnegative`, `nonzero`,
-`is_approx(a, b, atol = 0.0, rtol = sqrt(eps(Float64)))`.
+`is_approx(a, b, atol = 0.0, rtol = sqrt(eps(Float)))`.
 
-`abs` preserves numeric type; `sign` returns Int64 (-1, 0, 1); transcendental
-and rounding functions return Float64. `div` returns Int64. `pmin`, `pmax`
+`abs` preserves numeric type; `sign` returns Int (-1, 0, 1); transcendental
+and rounding functions return Float. `div` returns Int. `pmin`, `pmax`
 and `clamp` use a compatible common comparable type; `clamp` requires
 `lo <= hi`. `min` and `max` reduce; `pmin` and `pmax` are element-wise.
 Numeric domains, promotion, rounding and finite-result rules are in
-[Types](types.md#numbers). `ratio` returns Float64?; sign helpers return the
+[Types](types.md#numbers). `ratio` returns Float?; sign helpers return the
 refined numeric type or `None`. Safe helpers handle their documented domain
 failures, not arithmetic overflow.
 
@@ -164,7 +162,7 @@ See [Types](types.md#dates-and-times) for arithmetic and DST rules.
 
 ## Vectors
 
-`length(xs)` returns Int64; `rev`, `sort` and `unique` return vectors of the
+`length(xs)` returns Int; `rev`, `sort` and `unique` return vectors of the
 input element type (`unique` retains first occurrences); `sort` uses the
 common ordering with missing last. `map(xs, f)` maps a pure unary function;
 `keep(xs, f)` retains elements whose predicate is true, requiring a missing
@@ -173,7 +171,7 @@ order, returning `init` on empty input; each accumulator has the inferred
 common type of `init` and `f`'s result. `seq(from, to, by)` is inclusive of
 reachable endpoints, has nonzero step and compatible numeric inputs;
 inconsistent step direction yields an empty vector. `rep(x, times)` repeats
-values for a nonnegative Int64 count. `x %in% set` uses exact compatible
+values for a nonnegative Int count. `x in set` uses exact compatible
 relational equivalence on present values; missing operands follow ordinary
 optional comparison semantics (a present match determines TRUE, otherwise
 unknown if a candidate is missing). `assert_key`, `desc`, `across`, selectors,

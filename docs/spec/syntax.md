@@ -19,8 +19,8 @@
 
 | Form | Type |
 | --- | --- |
-| `42`, `1_000_000` | `Int64` |
-| `3.5`, `1e-3`, `2.0` | `Float64` |
+| `42`, `1_000_000` | `Int` |
+| `3.5`, `1e-3`, `2.0` | `Float` |
 | `TRUE`, `FALSE` | `Bool` |
 | `None` | `T?` |
 | `"text {expr}"` | `String` |
@@ -29,10 +29,10 @@
 | `t"09:30"` | `Time` |
 | `t"2026-11-24 09:30 America/Los_Angeles"` | `DateTime<"America/Los_Angeles">` |
 | `r"^[A-Z]{3}\d+$"` | `Regex` |
-| `[1, 2, 3]` | `[Int64]` |
-| `{site = "MRS", n = 3}`, `{site, n}` | `{site: String, n: Int64}` |
+| `[1, 2, 3]` | `[Int]` |
+| `{site = "MRS", n = 3}`, `{site, n}` | `{site: String, n: Int}` |
 
-- `1` is `Int64`; `1.0` is `Float64`. A literal adapts to an expected numeric
+- `1` is `Int`; `1.0` is `Float`. A literal adapts to an expected numeric
   type only when exactly representable. Defaulting happens after inference;
   unsolved numeric literal constraints generalise with functions. Underscores
   may occur singly between any two digits, including fraction and exponent
@@ -58,7 +58,7 @@ item          = declaration | expr ;
 end           = newline | ";" ;
 
 declaration   = "use" "contract" string "as" ident
-              | "use" setting "=" ident
+              | "set" setting "=" ident
               | "import" ( "r" | "python" ) string "{" foreign_sig { end foreign_sig } [ end ] "}"
               | "import" ident [ "as" ident ]
               | "type" Ident [ type_params ] "=" type_body
@@ -81,6 +81,7 @@ param         = pattern [ ":" type ] [ "=" expr ] ;
 expr          = "fn" "(" [ param { "," param } ] ")" "=>" expr
               | "if" "(" expr ")" expr "else" expr
               | "match" expr { "," expr } "{" arm { "," arm } [ "," ] "}"
+              | "match?" expr "{" arm { "," arm } [ "," ] "}"
               | "let" binding "in" expr
               | "let" pattern "=" expr "else" expr "in" expr
               | block
@@ -93,8 +94,9 @@ formula       = [ disjunct ] "~" disjunct | disjunct ;
 disjunct      = conjunct { "or" conjunct } ;
 conjunct      = boolean_not { "and" boolean_not } ;
 boolean_not   = "not" boolean_not | comparison ;
-comparison    = range [ compare_op range ] ;
-compare_op    = "==" | "!=" | "~=" | "≈" | "<" | "<=" | ">" | ">=" | "%in%" ;
+comparison    = fallback [ compare_op fallback ] ;
+compare_op    = "==" | "!=" | "~=" | "≈" | "<" | "<=" | ">" | ">=" | "in" | "not" "in" ;
+fallback      = range [ "??" fallback ] ;
 range         = sum [ ( "..=" | "..<" | ":" ) sum ] ;
 sum           = product { ( "+" | "-" ) product } ;
 product       = negation { ( "*" | "/" | "%" ) negation } ;
@@ -141,7 +143,7 @@ type_arg      = type | string ;
 ```
 
 - `T?` and `Option<T>` denote the same type; `rupam fmt` writes `T?`.
-  Nested options flatten. `Float64? > 0` refines present values.
+  Nested options flatten. `Float? > 0` refines present values.
 - In contextual type arguments (`schema =`, `types =`, `parse_enum(enum = ...)`),
   parse a type literal rather than a value expression. `Table` constructs
   from a vector of records. Constructor and type names resolve in the type
@@ -185,22 +187,25 @@ Tightest first:
 4. `*` `/` `%`
 5. `+` `-`
 6. `..=` `..<`, and `:` in column selectors
-7. comparisons, `~=`, `%in%` (non-associative)
-8. `not`
-9. `and`
-10. `or`
-11. `~` (reserved)
-12. `|>`
-13. `fn`, `if`, `match`, `let ... in` (extend right)
+7. `??`, right-associative
+8. comparisons, `~=`, `in` and `not in` (non-associative)
+9. `not`
+10. `and`
+11. `or`
+12. `~` (reserved)
+13. `|>`
+14. `fn`, `if`, `match`, `let ... in` (extend right)
 
 `-x^y`, `a < b < c` and `a ~ b ~ c` are parse errors. The parser rejects
 an unparenthesised power directly under unary minus even though the EBNF
 recognises its token sequence; write `-(x^y)` or `(-x)^y`. `not x > 0` means
-`not (x > 0)`. End-of-file terminates a complete top-level item.
+`not (x > 0)`. `revenue ?? 0.0 > 100.0` means `(revenue ?? 0.0) > 100.0`;
+`a ?? b ?? c` means `a ?? (b ?? c)`. `x not in ys` means `not (x in ys)`.
+`||` and `%in%` are not operators. End-of-file terminates a complete top-level item.
 
 ## Ranges and indexing
 
-- `a..=b` is the Int64 vector from `a` to `b` inclusive; `a..<b` excludes
+- `a..=b` is the Int vector from `a` to `b` inclusive; `a..<b` excludes
   `b`. There is no bare `a..b`. Ranges never count down: `5..=1` is empty, and
   `1..=5 |> rev()` is `[5, 4, 3, 2, 1]`. `1..=n-1` is `1..=(n-1)`.
 - Open ranges (`a..`, `..=b`, `..<b`) appear only in patterns and indexing.
@@ -248,11 +253,26 @@ match reading {
   for its inferred type.
 - `let pattern = e else fallback in body` is `fallback` when the pattern does
   not match.
-- A `match` must be exhaustive. Ranges that together cover every number are
+- `match? x { ... }` matches the present payload of one optional subject
+  and is `None` when `x` is `None`; a branch that is itself optional does not
+  nest. Ordinary `match` handles options explicitly.
+- A `match` must be exhaustive over the subject's established domain: its
+  type narrowed by refinements, validated contract bounds and flow facts (see
+  [Types](types.md#refinement-aware-exhaustiveness)). Ranges that together cover every number are
   exhaustive. Signed numeric range endpoints are permitted; a standalone
   floating literal is not a pattern. Guards do not count toward exhaustiveness.
 
+## Settings
+
+`set missing = skip` and `set group_missing = keep` are lexical declarations
+of analytical defaults, not bindings or mutable options. They apply to
+subsequent items in the file, are captured by definitions that follow them
+and are preserved by `:save`. `use` is reserved for contracts.
+
 ## Formatting
+
+Consecutive `set` declarations form one block separated from adjacent
+imports and bindings by a blank line; declarations are never reordered.
 
 `rupam fmt` is canonical, idempotent and preserves comments and valid numeric
 separator groupings. It preserves backtick quoting wherever removing it would

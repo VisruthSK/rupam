@@ -57,7 +57,7 @@ produces an unordered table; it establishes a schema, not key uniqueness.
   (see [Missing values](missing.md)). `validate` evaluates each predicate and
   reports counts of TRUE (passed), FALSE (failed) and None (unknown), before
   applying a policy. Under `skip`, the failure fraction is failed / (passed +
-  failed); under `propagate` it is `None` if any predicate is unknown, otherwise
+  failed); under `keep` it is `None` if any predicate is unknown, otherwise
   failed / total. Under `error`, any unknown predicate fails validation before
   thresholds are applied. A zero denominator gives `None` (no evidence), not
   zero failures; report the undefined fraction and counts without applying
@@ -108,7 +108,7 @@ sales |> mean_by(revenue, region)
 sales |> mean_by(revenue - cost, region)
 ```
 
-The typed core substitutes column-expression arguments hygienically into the
+The TransformIR substitutes column-expression arguments hygienically into the
 stages that consume them. Column references resolve by name against the
 schema of that stage; lexical bindings retain their captured values. This
 is expression substitution, not evaluation to a vector at the call site.
@@ -290,7 +290,7 @@ orders |> left_join(customers, by = (customer_id == id), unmatched = error)
   columns only. `explicit = all` also fills
   pre-existing missing cells; default `new_only` fills only new cells. Fill
   expressions are compatible scalar values. Missing domain values require a
-  policy; `propagate` includes missing as a distinct level and uses exact
+  policy; `keep` includes missing as a distinct level and uses exact
   grouping equivalence for completion (not join matching). `skip` excludes
   missing values from generated domains, not from the retained source.
   Both verbs support local `by =` and return unordered tables.
@@ -304,7 +304,7 @@ orders |> left_join(customers, by = (customer_id == id), unmatched = error)
 ```text
 use contract "data-dict.yaml" as shop
 let orders = load(shop.orders)
-let visits = read_csv("visits.csv", schema = {id: PatientId, site: String, age: Int64?})
+let visits = read_csv("visits.csv", schema = {id: PatientId, site: String, age: Int?})
 let raw = read_parquet("raw.parquet")
 write_parquet(summary, "summary.parquet")
 write_csv(summary, "summary.csv")
@@ -340,7 +340,7 @@ write_csv(summary, "summary.csv")
   columns marked restricted are excluded. Writing unordered rows does not
   establish semantic order. `row_id = name` on a reader with defined source
   sequence explicitly captures one-based source position as a required unique
-  Int64 column; this does not implicitly sort the table.
+  Int column; this does not implicitly sort the table.
 
 ## Order
 
@@ -373,11 +373,11 @@ General partial-order data structures are not needed for these verbs.
   A selected tie block need not have a deterministic internal sequence; output
   is sorted with ties unless the full output order is proved total. Optional
   selection values require a
-  policy: `skip` excludes them, `propagate` sorts them last as one tie block,
-  `error` rejects them. Results are sorted by the selection order. `n` is a nonnegative Int64.
+  policy: `skip` excludes them, `keep` sorts them last as one tie block,
+  `error` rejects them. Results are sorted by the selection order. `n` is a nonnegative Int.
 - Filtering, projection, renaming, row-preserving mutation and head slicing
   preserve established observation order. Removing or changing sort columns
   retains the sequence but not the claim it is sorted by their new values;
-  the typed core retains the original order witness. Grouped mutation and
+  the TransformIR retains the original order witness. Grouped mutation and
   operation-local sorting restore row alignment. Summaries, distinctness,
   joins, pivots, expansion and row binding return unordered rows.

@@ -15,7 +15,7 @@ checked operations are errors, not silent fallback values.
   full-snapshot proofs, with necessary checks for unpinned effects. Only
   selected guarded computations consume guarded operands. Integer arithmetic
   is exact in the portable range.
-- `==` and `!=` use exact equality for equatable values, including Float64;
+- `==` and `!=` use exact equality for equatable values, including Float;
   `~=` is symmetric approximate numerical comparison. Relational keys use
   exact equivalence. Binding a constant does not change equality semantics.
 - Rounding is half to even unless `ties = away` is given. `var` and `sd`
@@ -50,7 +50,7 @@ checked operations are errors, not silent fallback values.
   deterministic membership does not imply a total output sequence. Ties are
   explicit; string ordering is byte order.
 - Categories are nominal enums with checked values. Ranges never count down.
-  Indexes are present Int64 values from 1; out-of-bounds accesses fail.
+  Indexes are present Int values from 1; out-of-bounds accesses fail.
 
 ## Dates and times
 
