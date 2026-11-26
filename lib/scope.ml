@@ -76,25 +76,30 @@ let fresh_id env name =
 let fail span code message = Diagnostic.fail ~span code message
 let bind env name binding = { env with names = (name, binding) :: env.names }
 
+let table_parameters template =
+  let piped = ref [] in
+  let rec visit (x : Syntax.expr) =
+    (match x.form with
+     | Pipe ({ form = Name (Bare, p); _ }, _) -> piped := p :: !piped
+     | _ -> ());
+    ignore (Syntax.map (fun child -> visit child; child) x)
+  in
+  visit template.body;
+  List.filter (fun p -> List.mem p !piped) template.params
+;;
+
 let describe = function
   | Value { scheme; _ } -> Some (T.display scheme.body)
   | Table_value { table; _ } -> Some (T.display (T.Table (T.closed table.schema)))
   | Function { scheme = Some scheme; _ } -> Some (T.display scheme.body)
   | Function { template; _ } ->
-    let piped = ref [] in
-    let rec visit (x : Syntax.expr) =
-      (match x.form with
-       | Pipe ({ form = Name (Bare, p); _ }, _) -> piped := p :: !piped
-       | _ -> ());
-      ignore (Syntax.map (fun child -> visit child; child) x)
-    in
-    visit template.body;
-    let role p = p ^ ": " ^ if List.mem p !piped then "Table" else "column" in
+    let tables = table_parameters template in
+    let role p = p ^ ": " ^ if List.mem p tables then "Table" else "column" in
     Some
       ("("
        ^ String.concat ", " (List.map role template.params)
        ^ ") -> "
-       ^ if !piped = [] then "column" else "Table")
+       ^ if tables = [] then "column" else "Table")
   | Constructor { scheme; _ } -> Some (T.display scheme.body)
   | Contract _ -> Some "contract"
   | Module m -> Some ("module " ^ m)

@@ -23,6 +23,7 @@ jobs:
         with:
           persist-credentials: false
       - run: shellcheck scripts/fetch-deps scripts/dev
+      - run: python3 dev/declared.py .
 
   test:
     strategy:

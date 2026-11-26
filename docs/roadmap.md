@@ -6,31 +6,15 @@ or Python/Polars. The [specification](spec/README.md) defines semantics and
 [conformance](spec/conformance.md) pins them; this page lists only what is
 not yet built.
 
-## 0. Development loop
-
-Quiet, reusable tooling so routine work costs little:
-
-- `scripts/dev check`: build, unit, conformance and integration in one
-  command that prints only failures and a one-line summary per suite.
-- `scripts/dev eval --targets 'expr'`: run one expression or pipeline on the
-  reference evaluator and every target, printing only disagreements.
-- `scripts/dev fixture CID`: scaffold a fixture from its row in
-  [Conformance](spec/conformance.md), run it everywhere and report the
-  outcome; `--promote` marks it active when it passes on all targets.
-- `scripts/dev triage`: group pending fixtures by failing diagnostic so the
-  next feature is chosen by the number of cases it unlocks.
-
 ## 1. Semantic foundations
 
 - Share one canonical input snapshot across preview, proof checking and
   export. Rupam verifies it during development. Standalone scripts consume
   the supplied inputs without lock or snapshot verification (C22, C90, C96).
-- One inference model for helpers. Table helpers already defer column
-  arguments to the stage that uses them (C60, C124). Remaining: a single
-  scheme carrying parameter roles, scope, alignment and missing-policy
-  requirements through higher-order calls (C101, C62), replacing the
-  ordinary-then-contextual retry in `function_`, and `center` inferring
-  `(Number) -> Float?`.
+- One inference scheme for helpers carrying parameter roles, scope,
+  alignment and missing-policy requirements through higher-order calls
+  (C101, C62), replacing the ordinary-then-contextual retry in `function_`;
+  `center` inferring `(Number) -> Float?`.
 - Presence from evidence: `mean(x, missing = skip)` is `Float?` because a
   group can be empty or all missing; a locked snapshot proving every group
   has a present value refines it to `Float`, and `x ?? mean(x, …)` with it.
@@ -39,15 +23,11 @@ Quiet, reusable tooling so routine work costs little:
   any row selects it and not at all otherwise, together with the row-domain
   and order witnesses that survive projection or replacement. Driven by
   C110, C119, C121 and C123; fixes the dplyr `if_else` length failure in C11.
-
-- Compiler/platform separation ([brief](briefs/compiler-platform-separation.md)).
-  Done: the `rupam` compiler library links no DuckDB, nanoarrow, processes or
-  terminal; inputs and contracts arrive through `Scope.inputs`; platform code
-  lives in `rupam_native`; `test/compiler` builds and generates both targets
-  from descriptors alone. Remaining: execution and result services behind
-  interfaces, snapshot and evidence identities shared by preview, lock and
-  export, bounded host materialisation, then the WASM compiler and browser
-  worker.
+- Platform separation, remaining steps of the
+  [brief](briefs/compiler-platform-separation.md): execution and result
+  services behind interfaces, snapshot and evidence identities shared by
+  preview, lock and export, bounded host materialisation, then the WASM
+  compiler and browser worker.
 - Generate differential programs from typed TransformIR rather than source
   text, and shrink each failure into a pending fixture.
 - `DateTime`, `Time` and zones; nominal types and units (C33, C34, C95).
@@ -83,7 +63,8 @@ In order of conformance cases unlocked:
 - Emit runtime adapters only when the generated code uses them, so
   `:code --full` and exports carry no unused helpers.
 - A TextMate grammar; LSP completion and hover from the shared checker.
-- Frame-time measurements of the viewer on large results.
+- Record viewer frame times on large results with `scripts/dev frames` and
+  set a regression budget from them.
 
 ## 4. Public MVP
 

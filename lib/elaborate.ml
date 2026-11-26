@@ -267,7 +267,6 @@ and name ctx span reference n =
      | Some v, _ -> v
      | None, Some row
        when reference = Bare
-            && Option.is_none (Prelude.find n)
             && Option.is_some (T.field ctx.level row n) ->
        as_column (Option.get (T.field ctx.level row n))
      | None, _ ->
@@ -472,14 +471,33 @@ and call ctx span (f : Syntax.expr) args =
          visit x;
          !found
        in
+       let table_helper = scheme = None && uses_table_verb template.body in
+       let tables = Scope.table_parameters template in
        let deferred, given =
-         List.partition (fun (_, x) -> unresolved x) (List.combine template.params syntax)
+         List.partition
+           (fun (p, x) -> if table_helper then not (List.mem p tables) else unresolved x)
+           (List.combine template.params syntax)
        in
+       let aliases = ref [] in
+       let rec hygienic (x : Syntax.expr) =
+         match x.form with
+         | Name (Bare, n) when List.mem_assoc n ctx.env.names ->
+           let alias = "\xc2\xb7" ^ n in
+           if not (List.mem_assoc alias !aliases)
+           then aliases := (alias, List.assoc n ctx.env.names) :: !aliases;
+           { x with form = Name (Bare, alias) }
+         | _ -> Syntax.map hygienic x
+       in
+       let deferred = List.map (fun (p, x) -> p, hygienic x) deferred in
        let values = List.map (fun (_, x) -> expr ctx x) given in
        let template =
-         { template with
-           params = List.map fst given
+         { params = List.map fst given
          ; body = substitute deferred template.body
+         ; closure =
+             List.fold_left
+               (fun env (alias, binding) -> bind env alias binding)
+               template.closure
+               !aliases
          }
        in
        let inline =

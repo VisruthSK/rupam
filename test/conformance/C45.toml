@@ -1,7 +1,5 @@
 id = "C45"
-status = "dialect"
-dialects = []
-reason = "Rupam establishes this before export; compiled code runs no checks."
+status = "active"
 case = '''`1e308 * 1e308`'''
 expected = '''arithmetic-overflow; never infinity or `None`'''
 

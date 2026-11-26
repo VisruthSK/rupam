@@ -102,6 +102,8 @@ let operator : Syntax.binary -> R.operator = function
   | Or -> Either_scalar
 ;;
 
+let checked names v = if Host.checked names then R.call "rp_checked" [ v ] else v
+
 let constant : C.constant -> R.expr = function
   | Int i -> integer64 (R.String (Int64.to_string i))
   | Float f -> R.Number (R.number f)
@@ -136,6 +138,7 @@ and node names (e : C.expr) : R.expr =
     Option.value
       (Dplyr.date_arithmetic op a.typ b.typ (go a) (go b))
       ~default:(R.Binary (operator op, go a, go b))
+  | Convert x when Host.checked names -> R.call "rp_exact_float" [ go x ]
   | Convert x -> number (go x)
   | Lift (bound, body) ->
     let tests = List.map (fun (id, _) -> is_null (name id)) bound in
@@ -202,10 +205,7 @@ and node names (e : C.expr) : R.expr =
       "rp_vreduce"
       [ R.String (Prelude.name (Reduction r))
       ; R.String
-          (match policy with
-       | C.Skip -> "skip"
-       | Keep -> "keep"
-       | Fail -> "error")
+          (Host.policy_name names policy)
       ; go x
       ]
   | Column _ | Reduce _ | Count ->
@@ -297,7 +297,7 @@ let show names (e : C.expr) =
       , [ R.Positional
             (R.call
                "rp_show"
-               [ value names e
+               [ checked names (value names e)
                ; R.String (Yojson.Basic.to_string (Host.descriptor e.typ))
                ])
         ; R.Positional (R.String "\n")
@@ -310,7 +310,7 @@ let statement names : C.item -> R.statement option = function
     let v =
       match e.node with
       | Lambda _ | Table _ -> value names e
-      | _ -> value names e
+      | _ -> checked names (value names e)
     in
     Some (R.Assign (Host.name names id, v))
   | Variant _ -> None

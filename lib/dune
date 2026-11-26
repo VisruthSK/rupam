@@ -12,6 +12,7 @@
 (rule
  (target adapters.ml)
  (deps
+  runtime/numbers.R
   runtime/display.R
   runtime/r.R
   runtime/dplyr.R
@@ -22,6 +23,7 @@
    %{target}
    (progn
     (echo "let r = {rupam|")
+    (cat runtime/numbers.R)
     (cat runtime/display.R)
     (cat runtime/r.R)
     (echo "|rupam}\n\nlet dplyr = {rupam|")

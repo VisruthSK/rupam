@@ -200,6 +200,54 @@ let mcp () =
     stdout
 ;;
 
+let eval source =
+  let reference = Rupam_fixture.Fixture.evaluate source in
+  let show (o : Rupam_fixture.Fixture.outcome) =
+    match o.value, o.diagnostic with
+    | Some v, _ -> v
+    | None, Some d -> "diagnostic " ^ d
+    | None, None -> "nothing"
+  in
+  Printf.printf "reference\n%s\n" (show reference);
+  List.iter
+    (fun name ->
+       let session = Session.create ~project:Project.standalone ~directory:"." in
+       Session.set_target session (List.assoc name Target.targets) ~origin:"eval";
+       let actual = Rupam_fixture.Fixture.on_session session source in
+       Session.close session;
+       if actual.value <> reference.value || actual.diagnostic <> reference.diagnostic
+       then Printf.printf "%s disagrees\n%s\n" name (show actual))
+    Rupam_fixture.Fixture.targets
+;;
+
+let activate id =
+  let path = Printf.sprintf "test/conformance/%s.toml" id in
+  match List.find_opt (fun (f : Rupam_fixture.Fixture.t) -> f.id = id) (Rupam_fixture.Fixture.all "test/conformance") with
+  | None -> failwith ("No fixture " ^ id)
+  | Some f ->
+    let failures =
+      (match Rupam_fixture.Fixture.check f with
+       | Failed p -> [ "reference: " ^ String.concat "; " p ]
+       | Passed | Unspecified -> [])
+      @ List.concat_map
+          (fun name ->
+             match Rupam_fixture.Fixture.on_target name f with
+             | Failed p -> [ name ^ ": " ^ String.concat "; " p ]
+             | Passed | Unspecified -> [])
+          Rupam_fixture.Fixture.targets
+    in
+    if failures <> []
+    then (
+      List.iter prerr_endline failures;
+      exit 1);
+    let text = In_channel.with_open_text path In_channel.input_all in
+    let active =
+      Astring.String.cuts ~sep:{|status = "pending"|} text |> String.concat {|status = "active"|}
+    in
+    Out_channel.with_open_text path (fun oc -> output_string oc active);
+    Printf.printf "%s passes everywhere and is active\n" id
+;;
+
 let fixture id path =
   let outcome =
     Rupam_fixture.Fixture.capture
@@ -332,6 +380,18 @@ let () =
           ; Cmd.v
               (Cmd.info "mcp" ~doc:"Serve read-only compiler tools over stdio.")
               Term.(const (guarded mcp) $ const ())
+          ; Cmd.v
+              (Cmd.info
+                 "eval"
+                 ~doc:"Run SOURCE on the reference evaluator and every target; print disagreements.")
+              Term.(
+                const (fun s -> guarded eval s)
+                $ Arg.(required & pos 0 (some string) None & info [] ~docv:"SOURCE"))
+          ; Cmd.v
+              (Cmd.info "activate" ~doc:"Mark fixture ID active once it passes on every target.")
+              Term.(
+                const (fun id -> guarded activate id)
+                $ Arg.(required & pos 0 (some string) None & info [] ~docv:"ID"))
           ; Cmd.v
               (Cmd.info
                  "fixture"

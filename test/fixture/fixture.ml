@@ -177,6 +177,14 @@ let check ?session fixture =
      | problems -> Failed problems)
 ;;
 
+let targets = [ "r-dplyr"; "python-polars" ]
+
+let on_target name fixture =
+  let session = Session.create ~project:Project.standalone ~directory:"." in
+  Session.set_target session (List.assoc name Target.targets) ~origin:"fixture";
+  Fun.protect ~finally:(fun () -> Session.close session) (fun () -> check ~session fixture)
+;;
+
 let quote text =
   let escape = function
     | '"' -> "\\\""

@@ -68,15 +68,16 @@ The manifest is derived from the TransformIR, lock and capability table.
 
 ## Checks and adapters
 
-Generated code contains no checks. Rupam discharges every obligation during
-development: statically, or against the locked snapshot at analysis and lock
-time. Overflow, exact Int-to-Float conversion, finite results, keys, join
-coverage, `missing = error` and domain requirements are established before
-export, never re-verified by the script. An obligation Rupam cannot discharge
-(random-dependent arithmetic, foreign returns, effects not fixed by the lock)
-is reported and blocks a strict export rather than becoming a runtime check.
-Use a small adapter only where native semantics differ in value, not to
-verify; emit it only when used.
+Checks run during development and never in exported code. The session lowers
+every expression with checks for overflow, exact Int-to-Float conversion,
+finite results, keys, join coverage and `missing = error`, so the REPL,
+viewer and preview report them as diagnostics against the real data. Compiled
+scripts and `:code` lower the same program without those checks: Rupam
+established the facts during development and at lock time. An obligation
+Rupam cannot discharge (random-dependent arithmetic, foreign returns, effects
+not fixed by the lock) is reported and blocks a strict export rather than
+becoming a runtime check. Use a small adapter only where native semantics
+differ in value; emit it only when used.
 
 | Adapter category | Required behavior |
 | --- | --- |

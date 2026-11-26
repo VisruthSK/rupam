@@ -12,14 +12,21 @@ RUPAM_REVISION=$(git describe --always --dirty --abbrev=12 2>/dev/null || true)
 export RUPAM_REVISION
 
 dune() {
-  opam exec --switch="$switch" -- dune "$@" --build-dir "$build"
+  mkdir -p "$build"
+  flock "$build/.dev.lock" opam exec --switch="$switch" -- dune "$@" --build-dir "$build"
 }
 
 usage() {
   cat <<'EOF'
-scripts/dev check               build, check formatting, run unit, cram and conformance tests
+scripts/dev check               every suite: build, formatting, unit, cram, conformance, integration
+scripts/dev unit                build, formatting, unit, cram and reference conformance only
 scripts/dev integration         run the R and Python integration tests
-scripts/dev full                check, then integration
+scripts/dev eval 'SOURCE'       run SOURCE on the reference evaluator and every target; show disagreements
+scripts/dev triage              group pending conformance fixtures by why they fail
+scripts/dev activate ID         mark fixture ID active once it passes on every target
+scripts/dev frames [ROWS]       open the viewer on ROWS generated rows with the frame-timing overlay
+scripts/dev repl [ARGS]         run rupam with the development venv, so R/Python targets find their packages
+scripts/dev edit                apply raw old/new blocks from stdin (@@@ FILE path, <<<< old ==== new >>>>)
 scripts/dev watch               rebuild and rerun tests on every change
 scripts/dev promote             accept changed expect and cram output
 scripts/dev fmt                 format the code
@@ -30,19 +37,71 @@ scripts/dev mcp                 serve compiler inspection tools over stdio
 EOF
 }
 
-check() {
-  dune build @default @runtest @fmt
+suite() {
+  local name=$1
+  shift
+  if "$@"; then echo "$name: passed"; else echo "$name: FAILED" >&2; return 1; fi
+}
+
+unit() {
+  suite dependencies python3 dev/declared.py "$root"
+  suite unit dune build @default @runtest @fmt
 }
 
 integration() {
   UV_PROJECT_ENVIRONMENT=$venv uv sync --frozen --quiet
-  PATH=$venv/bin:$PATH dune build @integration
+  suite integration env PATH="$venv/bin:$PATH" opam exec --switch="$switch" -- dune build @integration --build-dir "$build"
+}
+
+check() {
+  local status=0
+  unit || status=1
+  integration || status=1
+  return "$status"
+}
+
+dev() {
+  dune build dev/rupam_dev.exe
+  PATH=$venv/bin:$PATH "$build/default/dev/rupam_dev.exe" "$@"
+}
+
+frames() {
+  local rows=${1:-1000000} dir="$build/frames"
+  mkdir -p "$dir"
+  "$venv/bin/python" - "$dir/big.parquet" "$rows" <<'PY'
+import sys
+import polars as pl
+n = int(sys.argv[2])
+pl.DataFrame({
+    "id": range(n),
+    "group": [f"g{i % 97}" for i in range(n)],
+    "value": [i * 0.5 for i in range(n)],
+    "flag": [i % 3 == 0 for i in range(n)],
+}).write_parquet(sys.argv[1])
+PY
+  printf 'let big = read_parquet("big.parquet")\n' > "$dir/frames.rp"
+  dune build bin/rupam_cli.exe
+  echo "Type :view big, then scroll; the overlay shows frame time and rate."
+  (cd "$dir" && MATRIX_DEBUG=overlay PATH=$venv/bin:$PATH "$build/default/bin/rupam_cli.exe" repl --target python-polars frames.rp)
 }
 
 case "${1:-}" in
   check) check ;;
+  unit) unit ;;
   integration) integration ;;
-  full) check && integration ;;
+  eval) shift; dev eval "$@" ;;
+  activate) shift; dev activate "$@" ;;
+  triage)
+    dune build test/conformance.exe
+    (cd test && "$build/default/test/conformance.exe" --triage)
+    ;;
+  frames) shift; frames "$@" ;;
+  repl)
+    shift
+    dune build bin/rupam_cli.exe
+    PATH=$venv/bin:$PATH "$build/default/bin/rupam_cli.exe" repl "$@"
+    ;;
+  edit) python3 dev/edit.py ;;
   watch) dune build --watch @default @runtest ;;
   promote) dune promote ;;
   fmt) dune fmt || true ;;

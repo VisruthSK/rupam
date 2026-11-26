@@ -23,6 +23,10 @@ type result =
   | Unspecified
 
 val all : string -> t list
+val evaluate : string -> outcome
+val on_session : Rupam_native.Session.t -> string -> outcome
+val targets : string list
+val on_target : string -> t -> result
 val check : ?session:Rupam_native.Session.t -> t -> result
 val cell : Rupam_native.Arrow_result.value -> string
 val rows : Rupam_native.Session.t -> string -> string list * string list list

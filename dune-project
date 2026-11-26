@@ -15,6 +15,8 @@
   yojson
   ppx_yojson_conv
   ppx_enumerate
+  ppx_sexp_conv
+  sexplib0
   astring
   re
   digestif
@@ -25,6 +27,7 @@
   (qcheck-core :with-test)
   (cmdliner (>= 2.0))
   mosaic
+  matrix
   (ocamlformat (and :with-dev-setup (= 0.29.0)))))
 
 (package

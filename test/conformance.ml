@@ -1,13 +1,28 @@
-open Rupam
-open Rupam_native
 open Rupam_fixture
 
-let targets = [ "r-dplyr"; "python-polars" ]
+let targets = Fixture.targets
+let on_target = Fixture.on_target
 
-let on_target name (f : Fixture.t) =
-  let session = Session.create ~project:Project.standalone ~directory:"." in
-  Session.set_target session (List.assoc name Target.targets) ~origin:"conformance";
-  Fun.protect ~finally:(fun () -> Session.close session) (fun () -> Fixture.check ~session f)
+let triage fixtures =
+  let groups = Hashtbl.create 16 in
+  List.iter
+    (fun (f : Fixture.t) ->
+       match f.status, f.source with
+       | Pending, Some source ->
+         let outcome = Fixture.evaluate source in
+         let key = Option.value outcome.diagnostic ~default:"wrong or missing value" in
+         Hashtbl.replace groups key (f.id :: Option.value (Hashtbl.find_opt groups key) ~default:[])
+       | Pending, None ->
+         let key = "needs a program" in
+         Hashtbl.replace groups key (f.id :: Option.value (Hashtbl.find_opt groups key) ~default:[])
+       | _ -> ())
+    fixtures;
+  Hashtbl.to_seq groups
+  |> List.of_seq
+  |> List.sort (fun (_, a) (_, b) -> compare (List.length b) (List.length a))
+  |> List.iter (fun (key, ids) ->
+    Printf.printf "%3d  %-28s %s\n" (List.length ids) key (String.concat " " (List.rev ids)));
+  []
 ;;
 
 let reference fixtures =
@@ -61,7 +76,11 @@ let on_targets fixtures =
 let () =
   let fixtures = Fixture.all "conformance" in
   let failures =
-    if Array.mem "--targets" Sys.argv then on_targets fixtures else reference fixtures
+    if Array.mem "--triage" Sys.argv
+    then triage fixtures
+    else if Array.mem "--targets" Sys.argv
+    then on_targets fixtures
+    else reference fixtures
   in
   List.iter prerr_endline failures;
   if failures <> [] then exit 1

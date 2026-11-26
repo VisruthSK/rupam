@@ -170,6 +170,7 @@ let rec value names (e : C.expr) = P.Located (e.span, node names e)
 and node names (e : C.expr) : P.expr =
   let go = value names in
   let name id = P.Name (Host.name names id) in
+  let integer = T.repr (T.present e.typ) = Int in
   match e.node with
   | Constant c -> constant c
   | Absent -> P.Null
@@ -182,6 +183,8 @@ and node names (e : C.expr) : P.expr =
   | Variable id -> name id
   | Builtin (row, args) -> builtin row (List.map go args)
   | Unary (Not, x) -> P.Unary (Not, go x)
+  | Unary (Negate, x) when integer && Host.checked names ->
+    P.call "rp_int" [ P.Unary (Negate, go x) ]
   | Unary (Negate, x) -> P.Unary (Negate, go x)
   | Binary (Approx, a, b) ->
     P.Call
@@ -200,8 +203,16 @@ and node names (e : C.expr) : P.expr =
      | Sub, Date, Period -> P.call "rp_add_months" [ go a; P.Unary (Negate, go b) ]
      | Sub, Date, Date -> P.Attribute (P.Binary (Subtract, go a, go b), "days")
      | _ -> P.Binary (operator op, go a, go b))
+  | Binary (((Add | Sub | Mul) as op), a, b) ->
+    let v = P.Binary (operator op, go a, go b) in
+    if not (Host.checked names)
+    then v
+    else if integer
+    then P.call "rp_int" [ v ]
+    else P.call "rp_real" [ v ]
   | Binary (Power, a, b) -> as_float (P.Binary (Power, go a, go b))
   | Binary (op, a, b) -> P.Binary (operator op, go a, go b)
+  | Convert x when Host.checked names -> P.call "rp_exact_float" [ go x ]
   | Convert x -> as_float (go x)
   | Lift (bound, body) ->
     let tests =
@@ -258,16 +269,13 @@ and node names (e : C.expr) : P.expr =
       "rp_vreduce"
       [ P.Str (Prelude.name (Reduction r))
       ; P.Str
-          (match policy with
-       | C.Skip -> "skip"
-       | Keep -> "keep"
-       | Fail -> "error")
+          (Host.policy_name names policy)
       ; go x
       ]
   | Column _ | Reduce _ | Count ->
     Diagnostic.fail ~span:e.span Column_required "A column expression needs a table verb"
 
-and table names t = Polars.table ~scalar:(value names) ~name:(Host.name names) t
+and table names t = Polars.table ~checked:(Host.checked names) ~scalar:(value names) ~name:(Host.name names) t
 
 and match_ names subject arms =
   let go = value names in

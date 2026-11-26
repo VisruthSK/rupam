@@ -119,7 +119,7 @@ let host ?(started = fun _ -> ()) t =
     let module B = (val Backend.of_target target) in
     let h =
       { worker
-      ; names = B.names ()
+      ; names = Host.checking (B.names ())
       ; established = Hashtbl.create 64
       ; target
       }
@@ -534,7 +534,7 @@ let code t ?(mode = Definition) target source =
   let module B = (val Backend.of_target target) in
   let names =
     match t.host with
-    | Some h when h.target.language = target.language -> h.names
+    | Some h when h.target.language = target.language -> Host.unchecked h.names
     | _ -> B.names ()
   in
   let items = items t in

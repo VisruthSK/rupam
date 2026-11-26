@@ -1,7 +1,5 @@
 id = "C43"
-status = "dialect"
-dialects = []
-reason = "Rupam establishes this before export; compiled code runs no checks."
+status = "active"
 case = '''`let i = 9_007_199_254_740_993; i * 1.0`'''
 expected = '''precision-loss error; `9_007_199_254_740_992` promotes exactly'''
 

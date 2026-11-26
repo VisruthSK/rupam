@@ -8,8 +8,25 @@ rp_wider <- function(data, ids, key, value, labels) {
                      values_from = all_of(value), names_expand = TRUE)
 }
 
+rp_covered <- function(left, right, key, kind) {
+  sides <- switch(kind, left = list(list(left, right)), right = list(list(right, left)),
+                  list(list(left, right), list(right, left)))
+  for (side in sides)
+    if (nrow(dplyr::anti_join(side[[1]], side[[2]], by = key, na_matches = "never")) > 0)
+      rp_fail("join-keys", paste0(kind, "_join with unmatched = error found rows with no match on ", key))
+  left
+}
 
+rp_assert_key <- function(data, columns) {
+  if (anyNA(data[columns])) rp_fail("not-a-key", paste0(paste(columns, collapse = ", "), " is not a key: some rows are missing it"))
+  if (anyDuplicated(data[columns])) rp_fail("not-a-key", paste0(paste(columns, collapse = ", "), " is not a key: some rows repeat it"))
+  data
+}
 
+rp_present <- function(x) {
+  if (anyNA(x)) stop("filter condition is missing and missing = error", call. = FALSE)
+  x
+}
 
 options(arrow.int64_downcast = FALSE)
 

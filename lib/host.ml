@@ -5,9 +5,22 @@ type names =
   { reserved : string list
   ; bound : (int, string) Hashtbl.t
   ; used : (string, unit) Hashtbl.t
+  ; checked : bool
   }
 
-let names reserved = { reserved; bound = Hashtbl.create 64; used = Hashtbl.create 64 }
+let names reserved =
+  { reserved; bound = Hashtbl.create 64; used = Hashtbl.create 64; checked = false }
+;;
+
+let checking names = { names with checked = true }
+let unchecked names = { names with checked = false }
+let checked names = names.checked
+
+let policy_name names : C.policy -> string = function
+  | Skip -> "skip"
+  | Keep -> "keep"
+  | Fail -> if names.checked then "error" else "skip"
+;;
 
 let identifier text =
   let ascii c =
@@ -57,6 +70,19 @@ let rec descriptor t : Yojson.Basic.t =
       ]
   | Variant _ | Var _ | Table _ -> `String "any"
   | Arrow _ -> `String "function"
+;;
+
+let float e = T.repr (T.present e.C.typ) = Float
+let integer e = T.repr (T.present e.C.typ) = Int
+
+let risky =
+  C.exists (fun e ->
+    match e.node with
+    | Binary ((Add | Sub | Mul | Div | Power), _, _) -> float e || integer e
+    | Unary (Negate, _) -> integer e
+    | Builtin ((Exp | Log | Log2 | Log10 | Sqrt), _) -> true
+    | Reduce ((Sum | Mean | Var | Sd), _, _) -> true
+    | _ -> false)
 ;;
 
 let nonportable items =

@@ -51,5 +51,6 @@ val fail : Diagnostic.span -> Diagnostic.code -> string -> 'a
 val bind : env -> string -> binding -> env
 val lookup : env -> string -> binding option
 val bindings : env -> (string * binding * string) list
+val table_parameters : template -> string list
 val describe : binding -> string option
 val origin : env -> TransformIR.table -> string

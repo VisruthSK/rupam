@@ -13,6 +13,8 @@ depends: [
   "yojson"
   "ppx_yojson_conv"
   "ppx_enumerate"
+  "ppx_sexp_conv"
+  "sexplib0"
   "astring"
   "re"
   "digestif"
@@ -23,6 +25,7 @@ depends: [
   "qcheck-core" {with-test}
   "cmdliner" {>= "2.0"}
   "mosaic"
+  "matrix"
   "ocamlformat" {with-dev-setup & = "0.29.0"}
   "odoc" {with-doc}
 ]
