@@ -10,9 +10,9 @@ developer MCP (`scripts/dev mcp`) is maintained alongside as infrastructure.
 
 - Complete the type and TransformIR representations, including nominal and
   temporal columns and interval refinements.
-- Write executable evaluation rules for lifting, optionality, contextual
-  reductions, guarded evaluation and observation domains before implementing
-  their combinations in both backends. The reference evaluator is the
+- Define the calculus λR in [theory](theory/README.md): judgments for lifting,
+  optionality, contextual reductions, guarded evaluation and observation
+  domains, before implementing their combinations in both backends. The reference evaluator is the
   executable form; conformance fixtures pin each rule.
 - Differential tests: generated well-typed programs run through the
   reference evaluator, R/dplyr and Python/Polars, comparing values, types,
@@ -48,8 +48,9 @@ environment setup; realistic end-to-end examples on both targets.
 
 ## 5. Reusable analytical ecosystem
 
-Modules, package export, test blocks, the Lean 4 formalisation in `formal/`
-connected to the reference evaluator through shared fixtures, and expanded
+Modules, package export, test blocks, Lean 4 proofs of the
+[metatheory](theory/metatheory.md) in `formal/`, added incrementally from
+phase 1 and checked against the reference evaluator on shared fixtures, and expanded
 relational operations from [Future](spec/future.md).
 
 ## 6. Additional interfaces
