@@ -1,0 +1,1 @@
+val inputs : Scope.inputs

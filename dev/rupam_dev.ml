@@ -1,4 +1,5 @@
 open Rupam
+open Rupam_native
 open Cmdliner
 
 let source path =
@@ -29,7 +30,7 @@ let elaborate_buffer directory buf =
   let project = Project.load directory in
   snd
     (Elaborate.program
-       (Scope.empty ~directory ~strict:project.strict.value)
+       (Scope.empty ~inputs:Native.inputs ~directory ~strict:project.strict.value ())
        (Frontend.parse buf))
 ;;
 
@@ -234,7 +235,7 @@ let show path keys =
   let names, rows =
     Data_file.query ("SELECT * FROM read_parquet(" ^ Data_file.literal path ^ ")" ^ order)
   in
-  let typed (c : Data_file.column) =
+  let typed (c : Input.column) =
     c.name
     ^ ": "
     ^

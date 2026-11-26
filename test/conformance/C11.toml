@@ -1,5 +1,7 @@
 id = "C11"
-status = "active"
+status = "dialect"
+dialects = ["python-polars"]
+reason = "dplyr if_else needs the guarded group condition at row length; fixed by guarded evaluation in Core (roadmap)."
 case = '''`standardize(revenue)`'''
 expected = '''whole-column; `Float?`'''
 

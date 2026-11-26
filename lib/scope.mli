@@ -28,6 +28,7 @@ and binding =
 
 and env =
   { names : (string * binding) list
+  ; inputs : inputs
   ; types : (string * Types.scheme) list
   ; variants : (string * (string * Types.scheme) list) list
   ; missing : TransformIR.policy option
@@ -37,7 +38,14 @@ and env =
   ; supply : int ref
   }
 
-val empty : directory:string -> strict:bool -> env
+and inputs =
+  { columns : string -> Input.column list
+  ; digest : string -> string
+  ; contract : string -> Contract.t
+  }
+
+val offline : inputs
+val empty : ?inputs:inputs -> directory:string -> strict:bool -> unit -> env
 val fresh_id : env -> string -> TransformIR.id
 val fail : Diagnostic.span -> Diagnostic.code -> string -> 'a
 val bind : env -> string -> binding -> env

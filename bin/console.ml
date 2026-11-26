@@ -39,8 +39,8 @@ type msg =
   | Name_confirm
   | Name_cancel
   | Draft_tick
-  | Draft_ready of int * (Rupam.Session.result, Rupam.Diagnostic.t) result
-  | Column_ready of int * string * (Rupam.Arrow_result.profile, Rupam.Diagnostic.t) result
+  | Draft_ready of int * (Rupam_native.Session.result, Rupam.Diagnostic.t) result
+  | Column_ready of int * string * (Rupam_native.Arrow_result.profile, Rupam.Diagnostic.t) result
 
 type model =
   { session : Repl.t
@@ -49,8 +49,8 @@ type model =
   ; history : string list
   ; recalled : int option
   ; menu : menu option
-  ; pages : Rupam.Page.t list ref
-  ; opened : (Rupam.Syntax.expr * Rupam.Session.result) option ref
+  ; pages : Rupam_native.Page.t list ref
+  ; opened : (Rupam.Syntax.expr * Rupam_native.Session.result) option ref
   ; viewer : Viewer.t option
   ; editing : bool
   ; naming : Editor.t option
@@ -150,7 +150,7 @@ let output_line line =
 ;;
 
 let page_view ~digits page =
-  let open Rupam.Page in
+  let open Rupam_native.Page in
   let styled (part, text) =
     match part with
     | Plain -> Mosaic.text text
@@ -191,7 +191,7 @@ let transcript ~digits source output pages =
 
 let status session =
   let dialect =
-    match Rupam.Session.target session.Repl.session with
+    match Rupam_native.Session.target session.Repl.session with
     | Some t -> Rupam.Target.name t
     | None -> "no target"
   in
@@ -210,7 +210,7 @@ type grid_row =
   | Column_types
   | Observation of int
 
-let grid_table ~digits ~selected (v : Viewer.t) (page : Rupam.Page.t) =
+let grid_table ~digits ~selected (v : Viewer.t) (page : Rupam_native.Page.t) =
   let index_width = Viewer.index_width v in
   let cell_width = Viewer.cell_width v in
   let frozen = Viewer.frozen v in
@@ -225,7 +225,7 @@ let grid_table ~digits ~selected (v : Viewer.t) (page : Rupam.Page.t) =
     :: with_rule
          (Table.column ~width:(`Fixed 1) "│")
          (List.map
-            (fun (c : Rupam.Page.column) ->
+            (fun (c : Rupam_native.Page.column) ->
                Table.column
                  ~width:(`Fixed cell_width)
                  ~alignment:
@@ -242,7 +242,7 @@ let grid_table ~digits ~selected (v : Viewer.t) (page : Rupam.Page.t) =
       Column_types
       (Table.cell "")
       (List.map
-         (fun (c : Rupam.Page.column) ->
+         (fun (c : Rupam_native.Page.column) ->
             Table.cell ~style:(style subtle) ("<" ^ Rupam.Types.display c.typ ^ ">"))
          page.columns)
   in
@@ -256,8 +256,8 @@ let grid_table ~digits ~selected (v : Viewer.t) (page : Rupam.Page.t) =
         (Observation r)
         (Table.cell ~style:(style faint) (string_of_int (r + 1)))
         (List.map
-           (fun (c : Rupam.Page.column) ->
-              let value = Rupam.Page.format_cell ~digits c.typ c.cells.(i) in
+           (fun (c : Rupam_native.Page.column) ->
+              let value = Rupam_native.Page.format_cell ~digits c.typ c.cells.(i) in
               let style =
                 if selected && v.row = r && focus = Some c.name
                 then
@@ -427,7 +427,7 @@ let grid model (v : Viewer.t) =
     box
       ~flex_direction:Column
       ~size:{ width = pct 100; height = px (max 1 (height - Viewer.panel_height)) }
-      [ text ~style:(style subtle) (Rupam.Page.summary page)
+      [ text ~style:(style subtle) (Rupam_native.Page.summary page)
       ; grid_table ~digits ~selected:(not model.editing) v page
       ]
   in
@@ -598,7 +598,7 @@ let view model =
 
 let banner session =
   let loaded =
-    match Rupam.Session.path session.Repl.session with
+    match Rupam_native.Session.path session.Repl.session with
     | Some path -> [ text ~style:(style faint) ("loaded " ^ path) ]
     | None -> []
   in
@@ -640,7 +640,7 @@ let evaluate model source =
     in
     if not next
     then (
-      Rupam.Session.close model.session.session;
+      Rupam_native.Session.close model.session.session;
       model, Cmd.batch [ committed; Cmd.quit ])
     else (
       let viewer =
@@ -688,10 +688,11 @@ let common_prefix = function
   | (first : Repl.suggestion) :: rest ->
     List.fold_left
       (fun prefix (s : Repl.suggestion) ->
-         let n = min (String.length prefix) (String.length s.text) in
-         let rec go i = if i < n && prefix.[i] = s.text.[i] then go (i + 1) else i in
+         let insert = Rupam_native.Completion.insert s in
+         let n = min (String.length prefix) (String.length insert) in
+         let rec go i = if i < n && prefix.[i] = insert.[i] then go (i + 1) else i in
          String.sub prefix 0 (go 0))
-      first.text
+      (Rupam_native.Completion.insert first)
       rest
 ;;
 
@@ -713,7 +714,7 @@ let complete_editor session input menu =
       | Some i -> (i + 1) mod List.length items
     in
     let item = List.nth items next in
-    insert_completion input menu.before item.text, Some { menu with selected = Some next }
+    insert_completion input menu.before (Rupam_native.Completion.insert item), Some { menu with selected = Some next }
   | _ ->
     let line = completion_prefix input in
     let start, candidates = Repl.complete session line in
@@ -721,7 +722,7 @@ let complete_editor session input menu =
     (match candidates with
      | [] -> input, None
      | [ only ] ->
-       ( insert_completion input before only.text
+       ( insert_completion input before (Rupam_native.Completion.insert only)
        , Some { before; items = [ only ]; selected = Some 0 } )
      | many ->
        let prefix = common_prefix many in
@@ -805,7 +806,7 @@ let change_draft model f =
     if next.generation = v.generation
     then { model with viewer = Some next; input }
     else (
-      if model.working = Some Preview_work then Rupam.Session.cancel_draft v.context;
+      if model.working = Some Preview_work then Rupam_native.Session.cancel_draft v.context;
       { model with viewer = Some next; input; save_requested = None })
 ;;
 
@@ -897,7 +898,7 @@ let step msg model =
          | Some i -> (i + step + count) mod count
        in
        let item = List.nth items next in
-       let input = insert_completion model.input menu.before item.text in
+       let input = insert_completion model.input menu.before (Rupam_native.Completion.insert item) in
        ( change_draft
            { model with input; menu = Some { menu with selected = Some next } }
            (fun v -> Viewer.edit v (Editor.text input))
@@ -909,7 +910,7 @@ let step msg model =
     , Cmd.none )
   | Clear -> { model with input = Editor.empty; pending = [] }, Cmd.static_clear
   | Quit ->
-    Rupam.Session.close model.session.session;
+    Rupam_native.Session.close model.session.session;
     model, Cmd.quit
   | Resize _ ->
     let width, height = terminal () in
@@ -939,7 +940,7 @@ let step msg model =
              ( { model with working = Some Profile_work }
              , Cmd.perform (fun dispatch ->
                  let profile =
-                   result_of (fun () -> Rupam.Session.column_summary v.result name)
+                   result_of (fun () -> Rupam_native.Session.column_summary v.result name)
                  in
                  dispatch (Column_ready (v.displayed, name, profile))) ))
         | None -> model, Cmd.none)
@@ -994,7 +995,7 @@ let step msg model =
     if model.working <> None
     then (
       Option.iter
-        (fun (v : Viewer.t) -> Rupam.Session.cancel_draft v.context)
+        (fun (v : Viewer.t) -> Rupam_native.Session.cancel_draft v.context)
         model.viewer;
       { model with closing = true }, Cmd.none)
     else close_viewer model, Cmd.none
@@ -1011,7 +1012,7 @@ let step msg model =
        ( { model with working = Some Preview_work }
        , Cmd.perform (fun dispatch ->
            let result =
-             result_of (fun () -> Rupam.Session.preview_draft v.context (Viewer.source v))
+             result_of (fun () -> Rupam_native.Session.preview_draft v.context (Viewer.source v))
            in
            dispatch (Draft_ready (v.generation, result))) )
      | _ -> model, Cmd.none)
@@ -1022,11 +1023,11 @@ let step msg model =
        finish_viewer_work
          { model with viewer = Some (Viewer.publish v generation result) }
      | _ ->
-       Result.iter Rupam.Session.release_draft result;
+       Result.iter Rupam_native.Session.release_draft result;
        if not model.closing
        then
          Option.iter
-           (fun (v : Viewer.t) -> Rupam.Session.reset_cancelled_draft v.context)
+           (fun (v : Viewer.t) -> Rupam_native.Session.reset_cancelled_draft v.context)
            model.viewer;
        (if model.closing then close_viewer model else model), Cmd.none)
   | Column_ready (generation, name, result) ->
@@ -1051,7 +1052,14 @@ let step msg model =
 let paste_formatting =
   Sub.on_paste ~phase:Capture (fun event ->
     Event.Paste.prevent_default event;
-    Some (Pasted (Event.Paste.text event)))
+    let lines =
+      String.split_on_char '\r' (Event.Paste.text event)
+      |> List.mapi (fun i piece ->
+        if i > 0 && String.starts_with ~prefix:"\n" piece
+        then String.sub piece 1 (String.length piece - 1)
+        else piece)
+    in
+    Some (Pasted (String.concat "\n" lines)))
 ;;
 
 let searching =

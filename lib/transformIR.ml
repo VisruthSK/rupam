@@ -132,7 +132,7 @@ and source =
 and file =
   { path : string
   ; digest : string
-  ; format : Data_file.format
+  ; format : Input.format
   ; columns : (string * Types.t) list
   }
 

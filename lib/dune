@@ -5,27 +5,9 @@
 
 (library
  (name rupam)
- (libraries ptime
-  unix
-  yojson
-  uucp
-  toml
-  astring
-  digestif
-  re
-  sexplib0
-  duckdb_static
-  nanoarrow)
+ (libraries ptime yojson uucp astring re sexplib0)
  (preprocess
-  (pps ppx_enumerate ppx_yojson_conv ppx_sexp_conv))
- (foreign_stubs
-  (language c)
-  (names duckdb_stubs)
-  (include_dirs ../vendor/duckdb))
- (foreign_stubs
-  (language c)
-  (names arrow_stubs)
-  (include_dirs ../vendor/nanoarrow/include)))
+  (pps ppx_enumerate ppx_yojson_conv ppx_sexp_conv)))
 
 (rule
  (target adapters.ml)

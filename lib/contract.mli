@@ -21,7 +21,6 @@ type t =
   ; metadata : Yojson.Basic.t
   }
 
-val import : string -> t
-val validate : string -> unit
+val decode : string -> Yojson.Basic.t -> t
 val describe_table : table -> unit
 val describe : t -> unit

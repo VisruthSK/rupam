@@ -1,10 +1,11 @@
 open Rupam
+open Rupam_native
 
 let run source =
   match
     let env, items =
       Elaborate.program
-        (Scope.empty ~directory:"." ~strict:true)
+        (Scope.empty ~inputs:Native.inputs ~directory:"." ~strict:true ())
         (Frontend.parse (Lexing.from_string source))
     in
     let values, shown = Reference.run [] items in

@@ -136,7 +136,7 @@ let write root entry =
 
 let establish ~project ~source items =
   let root, entry, contracts = analysis ~project ~source items in
-  List.iter Contract.validate contracts;
+  List.iter Data_dict.validate contracts;
   write root entry;
   entry
 ;;
@@ -181,7 +181,7 @@ let require ~project ~source items =
             (String.concat ", " changed)
             current.source))
   | None when current.schemas = [] ->
-    List.iter Contract.validate contracts;
+    List.iter Data_dict.validate contracts;
     write root current;
     current
   | None ->

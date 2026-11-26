@@ -1,4 +1,5 @@
 open Rupam
+open Rupam_native
 
 module C = TransformIR
 module T = Types

@@ -1,4 +1,5 @@
 open Rupam
+open Rupam_native
 
 type status =
   | Active
@@ -66,7 +67,7 @@ let evaluate source =
   match
     let declarations = Frontend.parse (Lexing.from_string source) in
     let _, items =
-      Elaborate.program (Scope.empty ~directory:"." ~strict:true) declarations
+      Elaborate.program (Scope.empty ~inputs:Native.inputs ~directory:"." ~strict:true ()) declarations
     in
     let env, shown = Reference.run [] items in
     match List.rev items with

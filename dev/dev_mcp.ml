@@ -1,4 +1,5 @@
 open Rupam
+open Rupam_native
 
 type parameter =
   | Text of string

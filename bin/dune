@@ -2,4 +2,4 @@
  (name rupam_cli)
  (public_name rupam)
  (package rupam)
- (libraries rupam cmdliner unix mosaic matrix.tty))
+ (libraries rupam rupam_native cmdliner unix mosaic matrix.tty))

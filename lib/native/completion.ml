@@ -1,7 +1,26 @@
+type kind =
+  | Function
+  | File
+  | Directory
+  | Option
+  | Plain
+
 type suggestion =
   { text : string
   ; detail : string
+  ; kind : kind
   }
+
+let suggestion ?(kind = Plain) text detail = { text; detail; kind }
+
+let insert s =
+  match s.kind with
+  | Function -> s.text ^ "("
+  | File -> s.text ^ "\""
+  | Directory -> s.text ^ "/"
+  | Option -> s.text ^ " = "
+  | Plain -> s.text
+;;
 
 let verbs =
   [ "filter", "condition, missing = skip | keep | error", [ "missing" ]
@@ -104,7 +123,7 @@ let piped session line pipe =
 ;;
 
 let columns (t : TransformIR.table) =
-  List.map (fun (n, typ) -> { text = n; detail = Types.display typ }) t.schema
+  List.map (fun (n, typ) -> suggestion n (Types.display typ)) t.schema
 ;;
 
 let bindings session =
@@ -115,16 +134,16 @@ let bindings session =
          | Table_value _ -> "table"
          | _ -> detail
        in
-       n, b, { text = n; detail })
+       n, b, suggestion n detail)
     (Scope.bindings (Session.env session))
 ;;
 
 let functions session =
-  List.map (fun (text, detail) -> { text; detail }) (Elaborate.builtins ())
+  List.map (fun (text, detail) -> suggestion ~kind:Function text detail) (Elaborate.builtins ())
   @ List.filter_map
       (fun (_, (b : Scope.binding), s) ->
          match b with
-         | Function _ -> Some s
+         | Function _ -> Some { s with kind = Function }
          | _ -> None)
       (bindings session)
 ;;
@@ -182,8 +201,8 @@ let files session ?kind prefix =
         then e
         else Filename.concat (Filename.dirname prefix) e
       in
-      { text =
-          (if Sys.is_directory (Filename.concat directory e) then path ^ "/" else path ^ "\"")
+      { text = path
+      ; kind = (if Sys.is_directory (Filename.concat directory e) then Directory else File)
       ; detail =
           (if Sys.is_directory (Filename.concat directory e)
            then "directory"
@@ -217,14 +236,14 @@ let complete session line =
       match Scope.lookup (Session.env session) owner with
       | Some (Contract contract) ->
         ( List.map
-            (fun (t : Contract.table) -> { text = t.name; detail = "table" })
+            (fun (t : Contract.table) -> suggestion t.name "table")
             contract.tables
         , start
         , word )
       | _ -> [], start, word)
     else if ends_with_pipe (String.sub line 0 start)
     then
-      ( List.map (fun (v, d, _) -> { text = v; detail = d }) verbs
+      ( List.map (fun (v, d, _) -> suggestion ~kind:Function v d) verbs
         @ List.filter (fun s -> String.contains s.detail '>') (functions session)
       , start
       , word )
@@ -257,10 +276,10 @@ let complete session line =
       match inside with
       | Some (options, _, _) when List.mem (option_name argument) options ->
         let option = option_name argument in
-        List.map (fun c -> { text = c; detail = option }) (choices option), start, word
+        List.map (fun c -> suggestion c option) (choices option), start, word
       | Some (options, table, _) ->
         ( Option.fold ~none:[] ~some:columns table
-          @ List.map (fun o -> { text = o ^ " = "; detail = "option" }) options
+          @ List.map (fun o -> suggestion ~kind:Option o "option") options
           @ functions session
           @ values session
         , start
@@ -268,7 +287,7 @@ let complete session line =
       | None ->
         ( values session
           @ functions session
-          @ List.map (fun k -> { text = k; detail = "keyword" }) keywords
+          @ List.map (fun k -> suggestion k "keyword") keywords
         , start
         , word ))
   in

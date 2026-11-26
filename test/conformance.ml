@@ -1,4 +1,5 @@
 open Rupam
+open Rupam_native
 open Rupam_fixture
 
 let targets = [ "r-dplyr"; "python-polars" ]

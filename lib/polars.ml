@@ -290,7 +290,7 @@ let file (f : C.file) =
   P.call
     "rp_read"
     [ P.Str f.path
-    ; P.Str (Data_file.format_name f.format)
+    ; P.Str (Input.format_name f.format)
     ; P.Dict
         (List.map
            (fun (n, t) ->

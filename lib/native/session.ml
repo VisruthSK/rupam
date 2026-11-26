@@ -69,7 +69,7 @@ let create ~project ~directory =
   ; path = None
   ; current =
       { number = 0
-      ; env = Scope.empty ~directory ~strict:project.Project.strict.value
+      ; env = Scope.empty ~inputs:Native.inputs ~directory ~strict:project.Project.strict.value ()
       ; accepted = []
       }
   ; past = []

@@ -1,4 +1,5 @@
 open Rupam
+open Rupam_native
 module G = QCheck.Gen
 
 type outcome =
@@ -146,7 +147,7 @@ let reference source =
     let items =
       snd
         (Elaborate.program
-           (Scope.empty ~directory:"." ~strict:true)
+           (Scope.empty ~inputs:Native.inputs ~directory:"." ~strict:true ())
            (Frontend.read source))
     in
     let env, shown = Reference.run [] items in

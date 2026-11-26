@@ -1,35 +1,6 @@
 external query : string -> string array * string option array array = "rupam_duckdb_query"
 
-type format =
-  | Parquet
-  | Csv
-  | Tsv
-[@@deriving sexp_of]
-
-type physical =
-  | Supported of Types.t
-  | Unsupported of string
-
-type column =
-  { name : string
-  ; typ : physical
-  ; nullable : bool
-  }
-
-let format path =
-  match String.lowercase_ascii (Filename.extension path) with
-  | ".parquet" -> Parquet
-  | ".csv" -> Csv
-  | ".tsv" | ".tab" -> Tsv
-  | extension ->
-    Diagnostic.fail Unreadable_input ("Unsupported data file extension " ^ extension)
-;;
-
-let format_name = function
-  | Parquet -> "parquet"
-  | Csv -> "csv"
-  | Tsv -> "tsv"
-;;
+open Input
 
 let literal text = "'" ^ String.concat "''" (String.split_on_char '\'' text) ^ "'"
 
@@ -51,7 +22,7 @@ let digest path =
     feed Digestif.SHA256.empty)
 ;;
 
-let columns path =
+let columns path : Input.column list =
   if not (Sys.file_exists path)
   then Diagnostic.fail Unreadable_input ("No such data file " ^ path);
   let names, rows = query ("DESCRIBE SELECT * FROM " ^ reader path) in

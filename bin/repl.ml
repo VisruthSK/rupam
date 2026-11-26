@@ -1,4 +1,5 @@
 open Rupam
+open Rupam_native
 
 type view =
   | Schema
@@ -333,17 +334,18 @@ let submit r declarations =
 type suggestion = Completion.suggestion =
   { text : string
   ; detail : string
+  ; kind : Completion.kind
   }
 
 let command_candidates line =
   let words = String.split_on_char ' ' line |> List.filter (( <> ) "") in
   let fresh = String.ends_with ~suffix:" " line in
-  let named names = List.map (fun (text, _) -> { text; detail = "" }) names in
+  let named names = List.map (fun (text, _) -> Completion.suggestion text "") names in
   match words, fresh with
   | ([] | [ _ ]), false ->
     List.map
       (fun (usage, text) ->
-         { text = List.hd (String.split_on_char ' ' usage); detail = text })
+         Completion.suggestion (List.hd (String.split_on_char ' ' usage)) text)
       help
   | [ ":target" ], true | [ ":target"; _ ], false -> named Target.targets
   | [ ":language" ], true | [ ":language"; _ ], false -> named Target.languages
@@ -540,7 +542,7 @@ let dispatch r = function
          | Schema -> inspect_schema r source
          | Contract -> print_endline (Scope.origin env t)
          | Validate ->
-           List.iter Contract.validate (List.sort_uniq compare (TransformIR.contracts t));
+           List.iter Data_dict.validate (List.sort_uniq compare (TransformIR.contracts t));
            print_endline "The data matches its contract"
          | Explain ->
            List.iteri (fun i s -> Printf.printf "%2d  %s\n" (i + 1) s) (Plan.explain t)

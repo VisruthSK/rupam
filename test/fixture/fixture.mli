@@ -23,7 +23,7 @@ type result =
   | Unspecified
 
 val all : string -> t list
-val check : ?session:Rupam.Session.t -> t -> result
-val cell : Rupam.Arrow_result.value -> string
-val rows : Rupam.Session.t -> string -> string list * string list list
+val check : ?session:Rupam_native.Session.t -> t -> result
+val cell : Rupam_native.Arrow_result.value -> string
+val rows : Rupam_native.Session.t -> string -> string list * string list list
 val capture : directory:string -> id:string -> string -> outcome

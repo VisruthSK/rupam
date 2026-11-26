@@ -1,4 +1,5 @@
 open Rupam
+open Rupam_native
 open Cmdliner
 
 let with_program path action =
@@ -43,7 +44,7 @@ let targeted directory target strict action =
 let elaborate (project : Project.t) path ds =
   snd
     (Elaborate.program
-       (Scope.empty ~directory:(Filename.dirname path) ~strict:project.strict.value)
+       (Scope.empty ~inputs:Native.inputs ~directory:(Filename.dirname path) ~strict:project.strict.value ())
        ds)
 ;;
 
@@ -257,7 +258,7 @@ let commands =
       "Describe the tables in a data-dict contract."
       Term.(
         const (fun path ->
-          Contract.describe (Contract.import path);
+          Contract.describe (Data_dict.import path);
           Cmd.Exit.ok)
         $ Arg.(required & pos 0 (some file) None & info [] ~docv:"data-dict.yaml"))
   ; command

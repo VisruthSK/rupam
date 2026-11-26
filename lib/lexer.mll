@@ -13,8 +13,8 @@ let exponent = ['e' 'E'] ['+' '-']? number
 let start = ['a'-'z' 'A'-'Z' '_' '\128'-'\255']
 let id = start (start | digit)*
 rule token = parse
- | [' ' '\t' '\r']+ | '#' [^'\n']* { token lexbuf }
- | '\n' { Lexing.new_line lexbuf; END }
+ | [' ' '\t']+ | '#' [^'\n' '\r']* { token lexbuf }
+ | "\r\n" | '\n' | '\r' { Lexing.new_line lexbuf; END }
  | id as s { if Identifier.valid s then keyword s else Diagnostic.fail Syntax_error "Invalid Unicode identifier" }
  | '`' { quoted (Buffer.create 16) lexbuf }
  | number as n { INT (digits n) }

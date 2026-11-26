@@ -7,7 +7,7 @@
 (test
  (name conformance)
  (modules conformance)
- (libraries rupam rupam_fixture)
+ (libraries rupam rupam_native rupam_fixture)
  (deps
   (glob_files conformance/*.toml)
   (glob_files conformance/data/*.csv)))

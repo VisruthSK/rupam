@@ -64,7 +64,7 @@ let inspect text =
       let env =
         List.fold_left
           (fun env d -> fst (Elaborate.item env d))
-          (Scope.empty ~directory:"." ~strict:false)
+          (Scope.empty ~inputs:Native.inputs ~directory:"." ~strict:false ())
           ds
       in
       symbols

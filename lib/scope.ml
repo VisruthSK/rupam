@@ -31,6 +31,7 @@ and binding =
 
 and env =
   { names : (string * binding) list
+  ; inputs : inputs
   ; types : (string * T.scheme) list
   ; variants : (string * (string * T.scheme) list) list
   ; missing : C.policy option
@@ -40,8 +41,23 @@ and env =
   ; supply : int ref
   }
 
-let empty ~directory ~strict =
+and inputs =
+  { columns : string -> Input.column list
+  ; digest : string -> string
+  ; contract : string -> Contract.t
+  }
+
+let unresolved path =
+  Diagnostic.fail
+    Unreadable_input
+    ("The compiler was given no way to read " ^ path ^ "; resolve inputs before checking")
+;;
+
+let offline = { columns = unresolved; digest = unresolved; contract = unresolved }
+
+let empty ?(inputs = offline) ~directory ~strict () =
   { names = []
+  ; inputs
   ; types = []
   ; variants = []
   ; missing = None

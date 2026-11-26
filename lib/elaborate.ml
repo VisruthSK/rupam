@@ -1133,8 +1133,8 @@ and source ctx span (f : Syntax.expr) args : C.table =
   | ( Name (_, (("read_csv" | "read_tsv" | "read_parquet") as reader))
     , [ (None, { form = Literal (Text path); _ }) ] ) ->
     let path = plain path in
-    let format = Data_file.format path in
-    let expected : Data_file.format =
+    let format = Input.format path in
+    let expected : Input.format =
       match reader with
       | "read_csv" -> Csv
       | "read_tsv" -> Tsv
@@ -1144,7 +1144,7 @@ and source ctx span (f : Syntax.expr) args : C.table =
     then fail span Unreadable_input (reader ^ " cannot read " ^ Filename.basename path);
     let columns =
       List.map
-        (fun (c : Data_file.column) ->
+        (fun (c : Input.column) ->
            match c.typ with
            | Supported t -> c.name, if c.nullable then T.Option t else t
            | Unsupported other ->
@@ -1152,9 +1152,9 @@ and source ctx span (f : Syntax.expr) args : C.table =
                span
                Unsupported_column_type
                (Printf.sprintf "Column %s has unsupported type %s" c.name other))
-        (Diagnostic.locate span (fun () -> Data_file.columns path))
+        (Diagnostic.locate span (fun () -> ctx.env.inputs.columns path))
     in
-    { source = Read { path; digest = Data_file.digest path; format; columns }
+    { source = Read { path; digest = ctx.env.inputs.digest path; format; columns }
     ; stages = []
     ; schema = columns
     ; rest = None
@@ -1180,7 +1180,7 @@ and source ctx span (f : Syntax.expr) args : C.table =
         fail span Wrong_arguments ("Contracted table " ^ n ^ " has no Parquet source")
     in
     let physical =
-      List.map (fun (c : Data_file.column) -> c.name, c.typ) (Data_file.columns path)
+      List.map (fun (c : Input.column) -> c.name, c.typ) (ctx.env.inputs.columns path)
     in
     let columns =
       List.map
@@ -1212,7 +1212,7 @@ and source ctx span (f : Syntax.expr) args : C.table =
         Load
           { contract
           ; table
-          ; file = { path; digest = Data_file.digest path; format = Parquet; columns }
+          ; file = { path; digest = ctx.env.inputs.digest path; format = Parquet; columns }
           }
     ; stages = []
     ; schema = columns
@@ -1499,7 +1499,7 @@ let declaration env (d : Syntax.declaration) =
     let path =
       if Filename.is_relative path then Filename.concat env.directory path else path
     in
-    bind env n (Contract (Contract.import path)), []
+    bind env n (Contract (env.inputs.contract path)), []
   | Setting (name, value) ->
     let policy =
       match List.assoc_opt value C.policies with

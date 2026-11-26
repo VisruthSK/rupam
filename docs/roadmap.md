@@ -25,17 +25,29 @@ Quiet, reusable tooling so routine work costs little:
 - Share one canonical input snapshot across preview, proof checking and
   export. Rupam verifies it during development. Standalone scripts consume
   the supplied inputs without lock or snapshot verification (C22, C90, C96).
-- One inference model for helpers: a single scheme carrying parameter roles,
-  scope, alignment and missing-policy requirements through higher-order
-  calls, replacing the ordinary-then-contextual retry in `function_` and the
-  re-elaboration of saved syntax. Keep stage-relative resolution of deferred
-  column arguments and lexical bindings by identity. Driven by C101 and C124.
+- One inference model for helpers. Table helpers already defer column
+  arguments to the stage that uses them (C60, C124). Remaining: a single
+  scheme carrying parameter roles, scope, alignment and missing-policy
+  requirements through higher-order calls (C101, C62), replacing the
+  ordinary-then-contextual retry in `function_`, and `center` inferring
+  `(Number) -> Float?`.
+- Presence from evidence: `mean(x, missing = skip)` is `Float?` because a
+  group can be empty or all missing; a locked snapshot proving every group
+  has a present value refines it to `Float`, and `x ?? mean(x, …)` with it.
 - Guarded evaluation in Core: represent both the active rows and the
   enclosing group, so a guarded reduction runs once over the whole group when
   any row selects it and not at all otherwise, together with the row-domain
   and order witnesses that survive projection or replacement. Driven by
   C110, C119, C121 and C123; fixes the dplyr `if_else` length failure in C11.
 
+- Compiler/platform separation ([brief](briefs/compiler-platform-separation.md)).
+  Done: the `rupam` compiler library links no DuckDB, nanoarrow, processes or
+  terminal; inputs and contracts arrive through `Scope.inputs`; platform code
+  lives in `rupam_native`; `test/compiler` builds and generates both targets
+  from descriptors alone. Remaining: execution and result services behind
+  interfaces, snapshot and evidence identities shared by preview, lock and
+  export, bounded host materialisation, then the WASM compiler and browser
+  worker.
 - Generate differential programs from typed TransformIR rather than source
   text, and shrink each failure into a pending fixture.
 - `DateTime`, `Time` and zones; nominal types and units (C33, C34, C95).
@@ -44,9 +56,8 @@ Quiet, reusable tooling so routine work costs little:
 
 In order of conformance cases unlocked:
 
-1. Contextual helpers passed as values and nested contextual reductions
-   (C60, C62, C124), multi-column `match` in verbs (C127), quoted output
-   names (C103), `Int()` conversion (C40, C49, C64).
+1. Multi-column `match` in verbs (C127), quoted output names (C103),
+   `Int()` conversion (C40, C49, C64).
 2. A fixture runner for the session protocol: drafts, holes, decisions,
    `define`, `fork`, `save`, target switches and taps (about 11 cases).
 3. Contract validation: required, range, NaN and infinity in sources, keys
@@ -69,6 +80,8 @@ In order of conformance cases unlocked:
   revision, the external effect and worker recovery as separate facts.
 
 - `:probe`, `??term` search, comment-preserving `:save`.
+- Emit runtime adapters only when the generated code uses them, so
+  `:code --full` and exports carry no unused helpers.
 - A TextMate grammar; LSP completion and hover from the shared checker.
 - Frame-time measurements of the viewer on large results.
 
@@ -86,6 +99,11 @@ with R and Python only as reference backends.
 ## 5. After the MVP
 
 - Data-discovered enums and `as_enum` ([Future](spec/future.md)).
+- A minimal Talon-based columnar library replacing DuckDB and nanoarrow
+  ([brief](briefs/talon-columnar-extraction.md)), against the service
+  interfaces from the platform separation.
+- Idiomatic R and Python formatting of generated code beyond line breaking,
+  if a light dependency or printer pass suffices.
 - Splitting each backend into a `HOST` and a `DIALECT` once a language has a
   second table library.
 - Modules, package export, test blocks, `repeat`, and the relational
