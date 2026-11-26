@@ -265,6 +265,16 @@ tolerance, ambiguity and coverage are explicit; established facts such as
 non-overlapping intervals inform cardinality. Precedents: Polars non-equi and
 as-of joins; dplyr inequality, rolling and overlap joins.
 
+## Data-discovered enums
+
+`as_enum(x)` (alias `as_factor`) converts a String, Int or Bool column to an
+enum whose levels are its distinct present values in ascending order; `None`
+stays `None`. Levels are discovered from the snapshot as pivot levels are:
+provisional while exploring, committed by `:lock`, and a changed level set
+requires relocking. More than 50 levels is the warning `many-levels`. This
+needs enum columns on every target (R factors, Polars `Enum`, Arrow
+dictionaries) and session-level discovery, so it follows the MVP.
+
 ## Help search
 
 `??term` searches names and descriptions of functions, verbs, bindings,

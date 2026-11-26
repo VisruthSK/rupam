@@ -118,13 +118,6 @@ Boolean stored values with the corresponding primitive parser first). Date
 and time parsers follow the formats and zone rules below; ambiguous or
 nonexistent local times require the same explicit strategies as construction.
 
-`as_enum(x)` (alias `as_factor`) converts a String, Int or Bool column to an
-enum whose levels are its distinct present values in ascending order; `None`
-stays `None`. Levels are discovered from the snapshot as pivot levels are:
-provisional while exploring, committed by `:lock`, and a changed level set
-requires relocking. More than 50 levels is the warning `many-levels`, since
-such a column is rarely categorical. Declared domains use `parse_enum`.
-
 ## Missing values
 
 `coalesce(x, fallback)` selects the first present value, using compatible
