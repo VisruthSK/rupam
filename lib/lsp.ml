@@ -69,12 +69,13 @@ let inspect text =
       in
       symbols
       := List.filter_map
-           (function
-             | Let (n, _, _) ->
-               Option.map
-                 (fun b -> n, Option.value (Scope.describe b) ~default:"")
-                 (Scope.lookup env n)
-             | _ -> None)
+           (fun (i : Syntax.item) ->
+              match i.declaration with
+              | Let (n, _, _) ->
+                Option.map
+                  (fun b -> n, Option.value (Scope.describe b) ~default:"")
+                  (Scope.lookup env n)
+              | _ -> None)
            ds;
       []
     with

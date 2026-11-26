@@ -51,10 +51,10 @@ let subject start finish = function [x] -> x | xs -> at start finish (Tuple xs)
 %right CARET
 %left LP DOT
 %start program
-%type <Syntax.declaration list> program
+%type <Syntax.item list> program
 %%
 program: items EOF { List.rev $1 };
-items: /* empty */ { [] } | items separator { $1 } | items decl separator { $2 :: $1 };
+items: /* empty */ { [] } | items separator { $1 } | items decl separator { { declaration = $2; span = $startpos($2), $endpos($2) } :: $1 };
 separator: END {};
 decl: IMPORT NAME { Import ($2,$2) } | IMPORT NAME AS NAME { Import ($2,$4) }
  | TYPE NAME type_params EQ annotation { Alias ($2,$3,$5) }

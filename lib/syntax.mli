@@ -122,6 +122,12 @@ type declaration =
   | Evaluate of expr
 [@@deriving sexp_of]
 
+type item =
+  { declaration : declaration
+  ; span : span
+  }
+[@@deriving sexp_of]
+
 val literal_text : literal -> string
 val unary_symbol : unary -> string
 val binary_symbol : binary -> string

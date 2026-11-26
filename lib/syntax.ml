@@ -129,6 +129,12 @@ type declaration =
   | Evaluate of expr
 [@@deriving sexp_of]
 
+type item =
+  { declaration : declaration
+  ; span : span
+  }
+[@@deriving sexp_of]
+
 let literal_text = function
   | Int s | Float s -> s
   | Text s -> Printf.sprintf "%S" s

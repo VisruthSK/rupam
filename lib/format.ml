@@ -215,7 +215,8 @@ let kind = function
   | Evaluate _ -> `Evaluate
 ;;
 
-let program ds =
+let program (items : item list) =
+  let ds = List.map (fun (i : item) -> i.declaration) items in
   let rec go previous = function
     | [] -> []
     | d :: rest ->

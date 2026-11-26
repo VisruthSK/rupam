@@ -1097,7 +1097,7 @@ let table_expr span (t : C.table) =
   make span C.Scalar (T.Table (T.closed t.schema)) (C.Table t)
 ;;
 
-let item env (d : Syntax.declaration) =
+let declaration env (d : Syntax.declaration) =
   let ctx = { env; level = 1; columns = None; missing = env.missing } in
   match d with
   | Let (name, Some params, body) | Let (name, None, { form = Lambda (params, body); _ })
@@ -1197,6 +1197,10 @@ let item env (d : Syntax.declaration) =
        Diagnostic.fail
          Unknown_setting
          ("Unknown setting " ^ name ^ ". Expected missing or group_missing"))
+;;
+
+let item env (i : Syntax.item) =
+  Diagnostic.locate i.span (fun () -> declaration env i.declaration)
 ;;
 
 let program env declarations =

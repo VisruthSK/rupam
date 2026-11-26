@@ -25,7 +25,7 @@ let tokens path =
 
 let syntax path =
   List.iter
-    (fun d -> print_endline (Sexplib0.Sexp.to_string_hum (Syntax.sexp_of_declaration d)))
+    (fun d -> print_endline (Sexplib0.Sexp.to_string_hum (Syntax.sexp_of_item d)))
     (Frontend.parse (source path))
 ;;
 

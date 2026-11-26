@@ -1,5 +1,5 @@
 type accepted =
-  { declaration : Syntax.declaration
+  { source : Syntax.item
   ; items : TransformIR.item list
   }
 
@@ -156,8 +156,9 @@ let describe env (d : Syntax.declaration) =
   | _ -> []
 ;;
 
-let declare t (env, accepted, events) d =
-  let env, items = Elaborate.item env d in
+let declare t (env, accepted, events) (source : Syntax.item) =
+  let d = source.declaration in
+  let env, items = Elaborate.item env source in
   let effects =
     List.filter
       (function
@@ -207,7 +208,7 @@ let declare t (env, accepted, events) d =
                   | TransformIR.Write _ -> true
                   | _ -> false)
                 items) -> accepted
-    | _ -> { declaration = d; items } :: accepted
+    | _ -> { source; items } :: accepted
   in
   env, accepted, events
 ;;
@@ -233,12 +234,12 @@ let load t path =
   t.saved <- Some t.current.number
 ;;
 
-let check t (d : Syntax.declaration) = snd (Elaborate.item t.current.env d)
+let check t (i : Syntax.item) = snd (Elaborate.item t.current.env i)
 
 let table t source =
   match Frontend.read source with
-  | [ (Syntax.Evaluate _ as d) ] ->
-    (match check t d with
+  | [ ({ declaration = Evaluate _; _ } as i) ] ->
+    (match check t i with
      | [ Show { node = Table table; _ } ] -> table
      | _ -> Diagnostic.fail Not_a_table "Expected a table expression")
   | _ -> Diagnostic.fail Not_a_table "Expected a table expression"
@@ -279,7 +280,7 @@ let redo t =
     true
 ;;
 
-let source t = Format.program (List.map (fun a -> a.declaration) t.current.accepted)
+let source t = Format.program (List.map (fun a -> a.source) t.current.accepted)
 
 let save t path =
   Out_channel.with_open_text path (fun ch -> output_string ch (source t ^ "\n"));

@@ -125,7 +125,7 @@ let rec parse lexbuf =
     let buffer = Lexing.from_string source in
     Lexing.set_position buffer position;
     match parse buffer with
-    | [ Syntax.Evaluate value ] -> value
+    | [ { Syntax.declaration = Evaluate value; _ } ] -> value
     | _ -> Diagnostic.fail Bad_interpolation "A string slot holds one expression"
   in
   let desugar = desugar expression in
@@ -200,7 +200,9 @@ let rec parse lexbuf =
       deliver t
     | t -> deliver t
   in
-  List.map declaration (Parser.program next lexbuf)
+  List.map
+    (fun (i : Syntax.item) -> { i with declaration = declaration i.declaration })
+    (Parser.program next lexbuf)
 ;;
 
 let valid_prefix source =

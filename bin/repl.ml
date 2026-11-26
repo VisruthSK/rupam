@@ -187,7 +187,7 @@ let present r (event : Session.event) =
 
 let submit r declarations =
   match declarations with
-  | [ d ] when observe r d -> ()
+  | [ (d : Syntax.item) ] when observe r d.declaration -> ()
   | _ -> List.iter (present r) (Session.submit r.session declarations)
 ;;
 
@@ -309,7 +309,7 @@ let dispatch r = function
   | Type source ->
     guard (fun () ->
       match Frontend.read source with
-      | [ (Syntax.Evaluate _ as d) ] ->
+      | [ ({ declaration = Evaluate _; _ } as d) ] ->
         (match Session.check r.session d with
          | [ Show { node = Table t; _ } ] -> print_schema r t
          | [ Show e ] -> print_endline (Types.display e.typ)
