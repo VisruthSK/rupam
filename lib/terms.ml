@@ -27,7 +27,8 @@ let shape_of span xs =
 ;;
 
 let closest name candidates =
-  List.map (fun n -> Distance.between n name, n) candidates
+  List.filter (( <> ) name) candidates
+  |> List.map (fun n -> Distance.between n name, n)
   |> List.sort compare
   |> function
   | (d, n) :: _ when d <= 2 -> Some n

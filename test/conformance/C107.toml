@@ -1,4 +1,16 @@
 id = "C107"
-status = "pending"
+status = "active"
 case = '''explicitly mutate grouping column then compute grouped mean'''
 expected = '''group membership fixed at verb entry'''
+
+[run]
+source = '''
+let s = read_csv("conformance/data/grouped.csv")
+let t = s |> mutate(group = "Z", m = mean(value), by = group) |> select(group, m)
+'''
+
+[expect]
+value = '''group,m
+"Z",2.0
+"Z",2.0
+"Z",5.0'''

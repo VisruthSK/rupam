@@ -337,6 +337,27 @@ let mutate context span (t : C.table) arguments =
     | Some Fail -> apply_group_policy span policy t keys
     | _ -> t
   in
+  let reassigned =
+    List.exists
+      (function
+        | Some name, _ -> name <> "by" && List.mem name keys
+        | None, _ -> false)
+      rest
+  in
+  let entry = if reassigned then List.map (fun k -> k, ".entry_" ^ k) keys else [] in
+  let t =
+    List.fold_left
+      (fun (t : C.table) (k, copy) ->
+         let typ = typ t k in
+         add
+           span
+           (Mutate { name = copy; value = make span Columnar typ (Column k); by = [] })
+           { t with schema = t.schema @ [ copy, typ ] })
+      t
+      entry
+  in
+  let keys = List.map (fun k -> Option.value (List.assoc_opt k entry) ~default:k) keys in
+  let t =
   List.fold_left
     (fun (t : C.table) -> function
        | Some "by", _ -> t
@@ -372,6 +393,13 @@ let mutate context span (t : C.table) arguments =
          add x.span (Mutate { name; value; by = keys }) { t with schema; restricted })
     t
     rest
+  in
+  if entry = []
+  then t
+  else (
+    let copies = List.map snd entry in
+    let names = List.filter (fun n -> not (List.mem n copies)) (C.names t) in
+    add span (Select names) { t with schema = List.map (fun n -> n, typ t n) names })
 ;;
 
 let filter context span (t : C.table) = function
@@ -689,8 +717,11 @@ let apply context span name (t : C.table) arguments =
      | _ -> fail span Wrong_arguments "slice_head needs a nonnegative n")
   | "slice_head", _ -> fail span Wrong_arguments "slice_head takes n = count"
   | "distinct", _ ->
-    let projected = if arguments = [] then t else select span t arguments in
+    let missing, group_missing, rest = options arguments in
+    let projected = if rest = [] then t else select span t rest in
     let columns = C.names projected in
+    let policy = group_policy context span projected ~missing ~group_missing columns in
+    let projected = apply_group_policy span policy projected columns in
     let t = add span (Distinct columns) projected in
     let t = { t with keys = [ columns ]; order = None } in
     if List.exists (fun c -> List.mem c t.restricted) columns then everything t else t

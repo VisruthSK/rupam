@@ -1,0 +1,5 @@
+region,revenue,cost,id
+North,100.0,60.0,1
+South,200.0,,2
+North,300.0,250.0,3
+East,50.0,-5.0,4

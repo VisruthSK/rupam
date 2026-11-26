@@ -1,4 +1,16 @@
 id = "C57"
-status = "pending"
+status = "active"
 case = '''grouped mutate x `[2,9,4]`, key `[A,None,A]`, `m = mean(x), y = x + 1, missing = skip`'''
 expected = '''m `[3.0,None,3.0]`, y `[3,10,5]`; three rows'''
+
+[run]
+source = '''
+let s = read_csv("conformance/data/groups.csv")
+let t = s |> mutate(m = mean(x), y = x + 1, by = g, missing = skip) |> select(m, y)
+'''
+
+[expect]
+value = '''m,y
+3.0,3
+None,10
+3.0,5'''

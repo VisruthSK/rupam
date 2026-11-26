@@ -1,4 +1,15 @@
 id = "C59"
-status = "pending"
+status = "active"
 case = '''`let avg(x) = mean(x)` then `summarize(m = avg(x), missing = skip)` for `[1,None,3]`'''
 expected = '''`2.0`; helper inherits policy'''
+
+[run]
+source = '''
+let s = read_csv("conformance/data/optional.csv")
+let avg(x) = mean(x)
+let t = s |> summarize(m = avg(x), missing = skip)
+'''
+
+[expect]
+value = '''m
+0.5'''

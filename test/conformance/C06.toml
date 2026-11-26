@@ -1,4 +1,17 @@
 id = "C06"
-status = "pending"
+status = "active"
 case = '''`mutate(revenue = revenue + 1.0)`'''
 expected = '''`revenue` replaced in place'''
+
+[run]
+source = '''
+let s = read_csv("conformance/data/sales.csv")
+let t = s |> mutate(revenue = revenue + 1.0) |> select(region, revenue)
+'''
+
+[expect]
+value = '''region,revenue
+"North",101.0
+"South",201.0
+"North",301.0
+"East",51.0'''

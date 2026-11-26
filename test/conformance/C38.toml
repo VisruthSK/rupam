@@ -1,4 +1,17 @@
 id = "C38"
-status = "pending"
+status = "active"
 case = '''`arrange(name)` on mixed-case strings'''
 expected = '''byte order'''
+
+[run]
+source = '''
+let s = read_csv("conformance/data/names.csv")
+let t = s |> arrange(name)
+'''
+
+[expect]
+value = '''name
+"A"
+"B"
+"a"
+"b"'''

@@ -1,4 +1,17 @@
 id = "C15"
-status = "pending"
+status = "active"
 case = '''`left_join` with missing keys and unmatched rows'''
 expected = '''missing keys never match; right columns optional'''
+
+[run]
+source = '''
+let o = read_csv("conformance/data/orders.csv")
+let c = read_csv("conformance/data/customers.csv")
+let t = o |> left_join(c, by = customer_id, relationship = many_to_one) |> select(order, name)
+'''
+
+[expect]
+value = '''order,name
+10,"Ann"
+11,None
+12,None'''

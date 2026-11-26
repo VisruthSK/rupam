@@ -1,4 +1,14 @@
 id = "C14"
-status = "pending"
+status = "active"
 case = '''`summarize(n = n())` on an empty table'''
 expected = '''one row, `n = 0`; with `by =`, zero rows'''
+
+[run]
+source = '''
+let s = read_csv("conformance/data/sales.csv")
+let t = s |> filter(revenue > 1000.0) |> summarize(n = n())
+'''
+
+[expect]
+value = '''n
+0'''

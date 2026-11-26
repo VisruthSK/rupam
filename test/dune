@@ -9,4 +9,5 @@
  (modules conformance)
  (libraries rupam_fixture)
  (deps
-  (glob_files conformance/*.toml)))
+  (glob_files conformance/*.toml)
+  (glob_files conformance/data/*.csv)))

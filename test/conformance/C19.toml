@@ -1,4 +1,13 @@
 id = "C19"
-status = "pending"
+status = "active"
 case = '''`slice_head(n = 5)` on an unordered table'''
 expected = '''type error'''
+
+[run]
+source = '''
+let s = read_csv("conformance/data/sales.csv")
+let t = s |> slice_head(n = 2)
+'''
+
+[expect]
+diagnostic = "unordered-slice"

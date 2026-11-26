@@ -26,7 +26,7 @@ produces an unordered table; it establishes a schema, not key uniqueness.
 | `slice_min(x, n = 5)`, `slice_max(x, n = 5)` | extreme rows with explicit tie semantics |
 | `summarize(name = e, ..., by = keys)` | one row per nonempty group: keys, then summaries; one row when ungrouped |
 | `count(a, b)` | `summarize(n = n(), by = [a, b])` |
-| `distinct(a, b)` | only the selected key columns, one row per distinct combination |
+| `distinct(a, b)` | only the selected key columns, one row per distinct combination; optional keys take `missing =` as grouping keys do |
 | `left_join`, `inner_join`, `right_join`, `full_join`, `semi_join`, `anti_join` | joins |
 | `pivot_longer(cols = [a, b], names_to = k, values_to = v)` | columns to key/value rows |
 | `pivot_wider(names_from = k, values_from = v, levels = [a, b])` | key/value rows to columns |

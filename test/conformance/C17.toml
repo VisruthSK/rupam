@@ -1,4 +1,15 @@
 id = "C17"
-status = "pending"
+status = "active"
 case = '''`distinct(x, missing = keep)` with several `None`'''
 expected = '''one `None` row; `n_distinct` counts it once'''
+
+[run]
+source = '''
+let s = read_csv("conformance/data/groups.csv")
+let t = s |> distinct(g, missing = keep)
+'''
+
+[expect]
+value = '''g
+"A"
+None'''

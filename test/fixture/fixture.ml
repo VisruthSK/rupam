@@ -64,8 +64,13 @@ let evaluate source =
     let env, shown = Reference.run [] items in
     match List.rev items with
     | TransformIR.Define (id, e) :: _ ->
-      ( Some (Types.display e.typ)
-      , Option.map Reference.display (List.assoc_opt id.stamp env) )
+      let render v =
+        match Reference.rows v with
+        | Some (names, rows) ->
+          String.concat "\n" (List.map (String.concat ",") (names :: rows))
+        | None -> Reference.display v
+      in
+      Some (Types.display e.typ), Option.map render (List.assoc_opt id.stamp env)
     | (Show e | Write (e, _)) :: _ ->
       ( Some (Types.display e.typ)
       , Option.map (fun (_, v) -> Reference.display v) (List.nth_opt (List.rev shown) 0) )

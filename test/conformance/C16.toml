@@ -1,4 +1,14 @@
 id = "C16"
-status = "pending"
+status = "active"
 case = '''join with a duplicated non-key column'''
 expected = '''type error'''
+
+[run]
+source = '''
+let o = read_csv("conformance/data/orders.csv")
+let c = read_csv("conformance/data/customers.csv")
+let t = o |> left_join(o, by = order, relationship = one_to_one)
+'''
+
+[expect]
+diagnostic = "join-collision"

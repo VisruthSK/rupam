@@ -1,4 +1,13 @@
 id = "C07"
-status = "pending"
+status = "active"
 case = '''`filter(cost > 0.0)`'''
 expected = '''type error naming `cost`; accepted with `missing = skip`'''
+
+[run]
+source = '''
+let s = read_csv("conformance/data/sales.csv")
+let t = s |> filter(cost > 0.0)
+'''
+
+[expect]
+diagnostic = "optional-condition"

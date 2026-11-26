@@ -1,4 +1,15 @@
 id = "C119"
-status = "pending"
+status = "active"
 case = '''`if (flag) mean(x) else 0.0` for group x `[2.0,4.0]`, flag `[TRUE,FALSE]`'''
 expected = '''`[3.0,0.0]`; full-group reduction, not selected subset'''
+
+[run]
+source = '''
+let s = read_csv("conformance/data/flags.csv")
+let t = s |> mutate(r = if (flag) mean(x) else 0.0, by = g) |> select(r)
+'''
+
+[expect]
+value = '''r
+3.0
+0.0'''

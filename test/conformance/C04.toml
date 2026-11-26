@@ -1,4 +1,17 @@
 id = "C04"
-status = "pending"
+status = "active"
 case = '''`mutate(s = coalesce(cost, 0.0))`'''
 expected = '''`s : Float`'''
+
+[run]
+source = '''
+let s = read_csv("conformance/data/sales.csv")
+let t = s |> mutate(c = coalesce(cost, 0.0)) |> select(c)
+'''
+
+[expect]
+value = '''c
+60.0
+0.0
+250.0
+-5.0'''

@@ -1,4 +1,13 @@
 id = "C09"
-status = "pending"
+status = "active"
 case = '''`select(typo)`'''
 expected = '''unknown column, with suggestions'''
+
+[run]
+source = '''
+let s = read_csv("conformance/data/sales.csv")
+let t = s |> select(typo)
+'''
+
+[expect]
+diagnostic = "unknown-column"

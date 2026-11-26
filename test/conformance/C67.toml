@@ -1,4 +1,14 @@
 id = "C67"
-status = "pending"
+status = "active"
 case = '''left join with unmatched left order, `unmatched = error`'''
 expected = '''coverage error; unrelated unused right rows alone do not fail'''
+
+[run]
+source = '''
+let o = read_csv("conformance/data/orders.csv")
+let c = read_csv("conformance/data/customers.csv")
+let t = o |> left_join(c, by = customer_id, relationship = many_to_one, unmatched = error)
+'''
+
+[expect]
+diagnostic = "join-keys"

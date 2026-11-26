@@ -1,4 +1,15 @@
 id = "C70"
-status = "pending"
+status = "active"
 case = '''`distinct(id)` with rows `(1,40),(1,41)`'''
 expected = '''only id column, one row containing 1'''
+
+[run]
+source = '''
+let s = read_csv("conformance/data/dups.csv")
+let t = s |> distinct(id)
+'''
+
+[expect]
+value = '''id
+1
+2'''

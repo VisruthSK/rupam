@@ -1,4 +1,18 @@
 id = "C03"
-status = "pending"
+status = "active"
 case = '''`mutate(s = square(cost))`, `cost : Float?`'''
 expected = '''`s : Float?`'''
+
+[run]
+source = '''
+let s = read_csv("conformance/data/sales.csv")
+let square(x) = x * x
+let t = s |> mutate(sq = square(cost)) |> select(sq)
+'''
+
+[expect]
+value = '''sq
+3600.0
+None
+62500.0
+25.0'''

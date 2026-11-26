@@ -255,6 +255,11 @@ and name ctx span reference n =
        (match Prelude.find n with
         | Some b ->
           make Scalar (builtin_type ctx.level b) (Variable { name = n; stamp = 0 })
+        | None when List.mem_assoc n ctx.env.names ->
+          fail
+            span
+            Not_a_value
+            (n ^ " reads its table's columns, so it can be called but not passed as a value")
         | None ->
           let columns = List.map fst known in
           (match closest n (columns @ List.map fst ctx.env.names) with

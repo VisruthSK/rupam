@@ -535,6 +535,18 @@ and join env (j : C.join) =
         (List.init right.rows Fun.id)
     | _ -> []
   in
+  let left_unmatched = List.exists (fun (_, r) -> r = None) pairs in
+  let right_unmatched = unmatched_right <> [] in
+  if
+    j.covered
+    && (match j.kind with
+        | Left -> left_unmatched
+        | Right -> right_unmatched
+        | _ -> left_unmatched || right_unmatched)
+  then
+    Diagnostic.fail
+      Join_keys
+      ("A join with unmatched = error found rows with no match on " ^ j.key);
   let pairs = Array.of_list (pairs @ unmatched_right) in
   let pick frame side n =
     Array.map

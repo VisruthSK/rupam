@@ -1,4 +1,15 @@
 id = "C18"
-status = "pending"
+status = "active"
 case = '''`arrange(desc(v), id) \|> slice_head(n = 5)` with unique `id`'''
 expected = '''five largest, ties by `id`'''
+
+[run]
+source = '''
+let s = read_csv("conformance/data/sales.csv")
+let t = s |> assert_key(id) |> arrange(desc(revenue), id) |> slice_head(n = 2) |> select(id)
+'''
+
+[expect]
+value = '''id
+3
+2'''

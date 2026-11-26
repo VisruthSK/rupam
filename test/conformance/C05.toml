@@ -1,4 +1,17 @@
 id = "C05"
-status = "pending"
+status = "active"
 case = '''`mutate(a = revenue + 1.0, b = a * 2.0)`'''
 expected = '''`b` uses the new `a`'''
+
+[run]
+source = '''
+let s = read_csv("conformance/data/sales.csv")
+let t = s |> mutate(a = revenue + 1.0, b = a * 2.0) |> select(b)
+'''
+
+[expect]
+value = '''b
+202.0
+402.0
+602.0
+102.0'''
