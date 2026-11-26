@@ -1,4 +1,13 @@
 id = "C30"
-status = "pending"
+status = "active"
 case = '''`x == 0.3`, `x : Float`; `x ~= 0.3`'''
 expected = '''exact and approximate comparisons respectively; neither changes with binding extraction'''
+
+[run]
+source = '''
+let x = 0.1 + 0.2
+(x == 0.3, x ~= 0.3)
+'''
+
+[expect]
+value = '''(FALSE, TRUE)'''

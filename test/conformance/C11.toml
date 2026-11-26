@@ -1,4 +1,15 @@
 id = "C11"
-status = "pending"
+status = "active"
 case = '''`standardize(revenue)`'''
 expected = '''whole-column; `Float?`'''
+
+[run]
+source = '''
+let s = read_csv("conformance/data/halves.csv")
+let t = s |> mutate(z = standardize(x)) |> select(z)
+'''
+
+[expect]
+value = '''z
+-0.7071067811865475
+0.7071067811865475'''

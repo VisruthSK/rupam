@@ -1,4 +1,13 @@
 id = "C130"
-status = "pending"
+status = "active"
 case = '''`select(body_mas)`'''
 expected = '''`unknown-column` with a fix to `body_mass`'''
+
+[run]
+source = '''
+let s = read_csv("conformance/data/sales.csv")
+let t = s |> select(revenu)
+'''
+
+[expect]
+diagnostic = "unknown-column"

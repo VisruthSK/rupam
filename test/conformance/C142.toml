@@ -1,4 +1,13 @@
 id = "C142"
-status = "pending"
+status = "active"
 case = '''`x not in ys` and `not (x in ys)` over optional `x`, empty `ys` and `ys` containing `None`'''
 expected = '''identical results'''
+
+[run]
+source = '''
+let x: Int? = None
+(x not in [1, 2], not (x in [1, 2]), 1 not in [], not (1 in []))
+'''
+
+[expect]
+value = '''(None, None, TRUE, TRUE)'''

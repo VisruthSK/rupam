@@ -43,6 +43,7 @@ type binary =
   | Greater_equal
   | Equal
   | Not_equal
+  | Approx
   | And
   | Or
 [@@deriving sexp_of]
@@ -72,6 +73,7 @@ and bound =
 type annotation =
   | Arow of (string * annotation) list * string option
   | Atuple of annotation list
+  | Alist of annotation
   | Aarrow of annotation * annotation
   | Named of string * annotation list
   | Optional of annotation

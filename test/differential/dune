@@ -1,6 +1,6 @@
 (executable
  (name differential)
- (libraries rupam reference qcheck-core))
+ (libraries rupam reference rupam_fixture qcheck-core))
 
 (rule
  (alias integration)

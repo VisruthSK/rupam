@@ -1,4 +1,12 @@
 id = "C146"
-status = "pending"
+status = "active"
 case = '''`0 < x <= 10` over `[0, 5, 10, 11]`; `1 < 2 > 0`; `1 == 1 == 1`'''
 expected = '''`[FALSE, TRUE, TRUE, FALSE]`; both others `syntax-error`'''
+
+[run]
+source = '''
+map([0, 5, 10, 11], fn(x) => 0 < x <= 10)
+'''
+
+[expect]
+value = '''[FALSE, TRUE, TRUE, FALSE]'''

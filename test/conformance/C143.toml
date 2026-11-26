@@ -1,4 +1,16 @@
 id = "C143"
-status = "pending"
+status = "active"
 case = '''`match? score { 90=.. => "A", ..<90 => "B" }` over `[95, None, 10]`'''
 expected = '''`["A", None, "B"]`, type `String?`'''
+
+[run]
+source = '''
+let s = read_csv("conformance/data/scores.csv")
+let t = s |> mutate(g = match? score { 90=.. => "A", ..<90 => "B" }) |> select(g)
+'''
+
+[expect]
+value = '''g
+"A"
+None
+"B"'''

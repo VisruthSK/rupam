@@ -28,7 +28,7 @@ rule token = parse
  | "=.." { CLOSED_FROM } | "<.." { OPEN_FROM }
  | "..=" { DOTDOTEQ } | "..<" { DOTDOTLT } | ".." { DOTDOT } | "->" { TYPEARROW }
  | '!' (id as name) { TAP name }
- | "==" { EQUAL } | "!=" { NE } | ">=" { GE } | "<=" { LE } | '=' { EQ }
+ | "~=" | "\xe2\x89\x88" { APPROX } | "==" { EQUAL } | "!=" { NE } | ">=" { GE } | "<=" { LE } | '=' { EQ }
  | '>' { GT } | '<' { LT } | "=>" { ARROW } | "|>" { PIPE }
  | "??" { FALLBACK } | "match?" { MATCH_PRESENT }
  | '+' { PLUS } | '-' { MINUS } | '*' { TIMES } | '/' { DIV } | '%' { MOD }

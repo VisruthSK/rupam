@@ -2,3 +2,15 @@ id = "C127"
 status = "pending"
 case = '''`match x, y { 0, _ => A, _, 0 => B, _, _ => C }`'''
 expected = '''exhaustive; selects per row'''
+
+[run]
+source = '''
+let s = read_csv("conformance/data/pairs.csv")
+let t = s |> mutate(c = match x, y { 0, _ => "A", _, 0 => "B", _, _ => "C" }) |> select(c)
+'''
+
+[expect]
+value = '''c
+"A"
+"B"
+"C"'''

@@ -1,4 +1,16 @@
 id = "C39"
-status = "pending"
+status = "active"
 case = '''`match bmi { ..<18.5 => Under, 18.5=..<25.0 => Healthy, 25.0=.. => Over }` on a column'''
 expected = '''enum column; exhaustive without `_`'''
+
+[run]
+source = '''
+let s = read_csv("conformance/data/bmi.csv")
+let t = s |> mutate(c = match bmi { ..<18.5 => "Under", 18.5=..<25.0 => "Healthy", 25.0=.. => "Over" }) |> select(c)
+'''
+
+[expect]
+value = '''c
+"Under"
+"Healthy"
+"Over"'''

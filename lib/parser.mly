@@ -21,7 +21,7 @@ let compare start finish op (a : expr) (b : expr) =
   match a.form with
   | Binary (first, x, y) when bare start a && ascending first <> None -> extend x [ first, y ]
   | Chain (x, links) when bare start a -> extend x links
-  | (Binary ((Equal | Not_equal), _, _) | Member _) when bare start a ->
+  | (Binary ((Equal | Not_equal | Approx), _, _) | Member _) when bare start a ->
     reject "Equality and membership do not chain"
   | _ -> at start finish (Binary (op, a, b))
 let subject start finish = function [x] -> x | xs -> at start finish (Tuple xs)
@@ -34,7 +34,7 @@ let subject start finish = function [x] -> x | xs -> at start finish (Tuple xs)
 %token TRUE FALSE NONE
 %token IN LB RB LC RC
 %token LP RP COMMA EQ DOT PIPE DOLLAR CARET ARROW END EOF
-%token PLUS MINUS TIMES DIV GT LT GE LE NE EQUAL AND OR NOT COLON MOD TILDE
+%token PLUS MINUS TIMES DIV GT LT GE LE NE EQUAL APPROX AND OR NOT COLON MOD TILDE
 %right TYPEARROW
 %nonassoc QUESTION
 %right ELSE ARROW
@@ -43,7 +43,7 @@ let subject start finish = function [x] -> x | xs -> at start finish (Tuple xs)
 %left OR
 %left AND
 %nonassoc NOT
-%left GT LT GE LE NE EQUAL IN
+%left GT LT GE LE NE EQUAL APPROX IN
 %right FALLBACK
 %nonassoc COLON CLOSED_CLOSED CLOSED_OPEN OPEN_CLOSED OPEN_OPEN
 %left PLUS MINUS
@@ -73,6 +73,7 @@ annotation: NAME { Named ($1,[]) } | NAME LT annotations GT { Named ($1,List.rev
  | annotation QUESTION { Optional $1 }
  | annotation TYPEARROW annotation { Aarrow ($1,$3) }
  | LP annotations RP { match List.rev $2 with [t] -> t | ts -> Atuple ts }
+ | LB annotation RB { Alist $2 }
  | LC RC { Arow ([],None) }
  | LC typed_fields RC { Arow (List.rev $2,None) }
  | LC DOTDOT NAME RC { Arow ([],Some $3) }
@@ -170,12 +171,13 @@ expr: MATCH_PRESENT expr LC arms RC { at $startpos $endpos (Match_present ($2,Li
  | expr LE expr { compare $startpos $endpos Less_equal $1 $3 }
  | expr EQUAL expr { compare $startpos $endpos Equal $1 $3 }
  | expr NE expr { compare $startpos $endpos Not_equal $1 $3 }
+ | expr APPROX expr { compare $startpos $endpos Approx $1 $3 }
  | expr FALLBACK expr { at $startpos $endpos (Fallback ($1,$3)) }
  | expr NOT IN expr %prec IN
    { at $startpos $endpos (Unary (Not, at $startpos $endpos (Member ($1,$4)))) }
  | expr IN expr
    { (match $1.form with
-      | Binary ((Less | Less_equal | Greater | Greater_equal | Equal | Not_equal), _, _) | Member _ | Chain _
+      | Binary ((Less | Less_equal | Greater | Greater_equal | Equal | Not_equal | Approx), _, _) | Member _ | Chain _
         when bare $startpos $1 -> Diagnostic.fail ~span:($startpos, $endpos) Syntax_error "Membership does not chain"
       | _ -> ());
      at $startpos $endpos (Member ($1,$3)) }

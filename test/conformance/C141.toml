@@ -1,4 +1,17 @@
 id = "C141"
-status = "pending"
+status = "active"
 case = '''`income ?? income2 ?? 0.0` with `income2` failing where `income` is present'''
 expected = '''no failure; result `Float`; `revenue ?? 0.0 > 1.0` parses as `(revenue ?? 0.0) > 1.0`'''
+
+[run]
+source = '''
+let s = read_csv("conformance/data/sales.csv")
+let t = s |> mutate(big = cost ?? 0.0 > 1.0) |> select(big)
+'''
+
+[expect]
+value = '''big
+TRUE
+FALSE
+TRUE
+FALSE'''

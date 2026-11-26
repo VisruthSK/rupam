@@ -1,5 +1,7 @@
 id = "C113"
-status = "active"
+status = "dialect"
+dialects = ["r-dplyr"]
+reason = "A Polars frame with no columns has no rows, so a zero-column table loses its row count."
 case = '''select no columns from a three-row table'''
 expected = '''zero columns, three rows, n() = 3'''
 

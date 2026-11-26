@@ -1,4 +1,16 @@
 id = "C105"
-status = "pending"
+status = "active"
 case = '''grouped mutate with required x, missing grouping key and `group_missing = skip`'''
 expected = '''group-dependent result optional and excluded row None; row count unchanged'''
+
+[run]
+source = '''
+let s = read_csv("conformance/data/groups.csv")
+let t = s |> mutate(m = mean(x), by = g, group_missing = skip) |> select(m)
+'''
+
+[expect]
+value = '''m
+3.0
+None
+3.0'''

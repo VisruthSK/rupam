@@ -50,6 +50,10 @@ let reserved =
 
 let names () = Host.names reserved
 let math name a = P.Call (P.Attribute (P.Name "math", name), [ P.Positional a ])
+
+let math2 name a b =
+  P.Call (P.Attribute (P.Name "math", name), [ P.Positional a; P.Positional b ])
+;;
 let as_float e = P.call "float" [ e ]
 let is_none e = P.Binary (Is, e, P.Null)
 
@@ -77,7 +81,7 @@ let builtin (row : Prelude.row) args =
   | Floor, [ a ] -> as_float (math "floor" a)
   | Ceiling, [ a ] -> as_float (math "ceil" a)
   | Trunc, [ a ] -> as_float (math "trunc" a)
-  | Round, [ a ] -> as_float (P.call "round" [ a ])
+  | Round, [ a ] -> math2 "copysign" (as_float (P.call "round" [ a ])) a
   | Round_digits, [ a; d ] -> as_float (P.call "round" [ a; d ])
   | Pmin, [ a; b ] -> P.call "min" [ a; b ]
   | Pmax, [ a; b ] -> P.call "max" [ a; b ]
@@ -138,6 +142,7 @@ let operator : Syntax.binary -> P.operator = function
   | Greater_equal -> Greater_equal
   | Equal -> Equal
   | Not_equal -> Not_equal
+  | Approx -> invalid_arg "~= lowers to math.isclose"
   | And -> And
   | Or -> Or
 ;;
@@ -180,6 +185,16 @@ and node names (e : C.expr) : P.expr =
   | Unary (Not, x) -> P.Unary (Not, go x)
   | Unary (Negate, x) when integer -> P.call "rp_int" [ P.Unary (Negate, go x) ]
   | Unary (Negate, x) -> P.Unary (Negate, go x)
+  | Binary (Approx, a, b) ->
+    P.Call
+      ( P.Attribute (P.Name "math", "isclose")
+      , [ P.Positional (go a)
+        ; P.Positional (go b)
+        ; P.Keyword ("rel_tol", P.Float "1.4901161193847656e-08")
+        ; P.Keyword ("abs_tol", P.Float "0.0")
+        ] )
+  | Binary (((And | Or) as op), a, b) when T.is_optional a.typ || T.is_optional b.typ ->
+    P.call (if op = And then "rp_and" else "rp_or") [ go a; go b ]
   | Binary (((Add | Sub) as op), a, b)
     when List.mem (T.repr (T.present a.typ)) [ T.Date; T.Duration; T.Period ] ->
     (match op, T.repr (T.present a.typ), T.repr (T.present b.typ) with
@@ -192,7 +207,7 @@ and node names (e : C.expr) : P.expr =
     if integer then P.call "rp_int" [ v ] else P.call "rp_real" [ v ]
   | Binary (Power, a, b) -> as_float (P.Binary (Power, go a, go b))
   | Binary (op, a, b) -> P.Binary (operator op, go a, go b)
-  | Convert x -> as_float (go x)
+  | Convert x -> P.call "rp_exact_float" [ go x ]
   | Lift (bound, body) ->
     let tests =
       List.map (fun (id, x) -> is_none (P.Walrus (Host.name names id, go x))) bound
@@ -243,6 +258,17 @@ and node names (e : C.expr) : P.expr =
       ~span:e.span
       Dialect_capability
       (m ^ "." ^ f ^ " needs the Polars table context")
+  | Reduce (r, policy, x) when x.shape = Scalar ->
+    P.call
+      "rp_vreduce"
+      [ P.Str (Prelude.name (Reduction r))
+      ; P.Str
+          (match policy with
+       | C.Skip -> "skip"
+       | Keep -> "keep"
+       | Fail -> "error")
+      ; go x
+      ]
   | Column _ | Reduce _ | Count ->
     Diagnostic.fail ~span:e.span Column_required "A column expression needs a table verb"
 

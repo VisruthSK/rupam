@@ -13,13 +13,13 @@ rp_covered <- function(left, right, key, kind) {
                   list(list(left, right), list(right, left)))
   for (side in sides)
     if (nrow(dplyr::anti_join(side[[1]], side[[2]], by = key, na_matches = "never")) > 0)
-      stop(kind, "_join with unmatched = error found rows with no match on ", key, call. = FALSE)
+      rp_fail("join-keys", paste0(kind, "_join with unmatched = error found rows with no match on ", key))
   left
 }
 
 rp_assert_key <- function(data, columns) {
-  if (anyNA(data[columns])) stop(paste(columns, collapse = ", "), " is not a key: some rows are missing it", call. = FALSE)
-  if (anyDuplicated(data[columns])) stop(paste(columns, collapse = ", "), " is not a key: some rows repeat it", call. = FALSE)
+  if (anyNA(data[columns])) rp_fail("not-a-key", paste0(paste(columns, collapse = ", "), " is not a key: some rows are missing it"))
+  if (anyDuplicated(data[columns])) rp_fail("not-a-key", paste0(paste(columns, collapse = ", "), " is not a key: some rows repeat it"))
   data
 }
 
@@ -39,8 +39,8 @@ rp_read <- function(path, digest, format, columns) {
     arrow::read_parquet(bytes, col_select = dplyr::all_of(names(columns)), as_data_frame = FALSE)
   } else {
     fields <- Map(function(name, kind) arrow::field(name, types[[kind]]), names(columns), columns)
-    arrow::read_delim_arrow(bytes, delim = if (format == "tsv") "\t" else ",",
-                            schema = arrow::schema(unname(fields)), skip = 1, na = "",
+    arrow::read_delim_arrow(bytes, schema = arrow::schema(unname(fields)), skip = 1, na = "",
+                            parse_options = arrow::CsvParseOptions$create(delimiter = if (format == "tsv") "\t" else ",", ignore_empty_lines = FALSE),
                             as_data_frame = FALSE)
   }
   data <- dplyr::as_tibble(as.data.frame(data))

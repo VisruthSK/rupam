@@ -1,4 +1,14 @@
 id = "C25"
-status = "pending"
+status = "active"
 case = '''`if (x > 0.0) log(x) else None`'''
 expected = '''type-checks; `log` receives only positive values'''
+
+[run]
+source = '''
+let x = 2.0
+if (x > 0.0) log(x) else None
+'''
+
+[expect]
+type = "Float?"
+value = '''0.6931471805599453'''

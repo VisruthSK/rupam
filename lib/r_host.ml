@@ -97,6 +97,7 @@ let operator : Syntax.binary -> R.operator = function
   | Greater_equal -> Greater_equal
   | Equal -> Equal
   | Not_equal -> Not_equal
+  | Approx -> invalid_arg "~= lowers to rp_approx"
   | And -> Both_scalar
   | Or -> Either_scalar
 ;;
@@ -128,11 +129,14 @@ and node names (e : C.expr) : R.expr =
   | Builtin (row, args) -> builtin row (List.map go args)
   | Unary (Not, x) -> R.Not (go x)
   | Unary (Negate, x) -> R.Negate (go x)
+  | Binary (Approx, a, b) -> R.call "rp_approx" [ go a; go b ]
+  | Binary (((And | Or) as op), a, b) when T.is_optional a.typ || T.is_optional b.typ ->
+    R.call (if op = And then "rp_and" else "rp_or") [ go a; go b ]
   | Binary (op, a, b) ->
     Option.value
       (Dplyr.date_arithmetic op a.typ b.typ (go a) (go b))
       ~default:(R.Binary (operator op, go a, go b))
-  | Convert x -> number (go x)
+  | Convert x -> R.call "rp_exact_float" [ go x ]
   | Lift (bound, body) ->
     let tests = List.map (fun (id, _) -> is_null (name id)) bound in
     let test =
@@ -193,6 +197,17 @@ and node names (e : C.expr) : R.expr =
       ~span:e.span
       Dialect_capability
       ("R target cannot execute the Python capability " ^ m ^ "." ^ f)
+  | Reduce (r, policy, x) when x.shape = Scalar ->
+    R.call
+      "rp_vreduce"
+      [ R.String (Prelude.name (Reduction r))
+      ; R.String
+          (match policy with
+       | C.Skip -> "skip"
+       | Keep -> "keep"
+       | Fail -> "error")
+      ; go x
+      ]
   | Column _ | Reduce _ | Count ->
     Diagnostic.fail ~span:e.span Column_required "A column expression needs a table verb"
 

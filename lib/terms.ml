@@ -195,6 +195,7 @@ let rec annotation env params level = function
             rest
       }
   | Atuple ts -> T.Tuple (List.map (annotation env params level) ts)
+  | Alist t -> T.List (annotation env params level t)
   | Aarrow (a, b) ->
     T.Arrow ([ annotation env params level a ], annotation env params level b)
   | Optional a -> T.optional (annotation env params level a)

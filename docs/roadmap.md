@@ -8,8 +8,6 @@ not yet built.
 
 ## 1. Semantic foundations
 
-- Run every active conformance fixture on each installed target as well as
-  the reference evaluator, as [Development](spec/development.md) requires.
 - Generate differential programs from typed TransformIR rather than source
   text, and shrink each failure into a pending fixture.
 - `DateTime`, `Time` and zones; nominal types and units (C33, C34, C95).
@@ -18,8 +16,9 @@ not yet built.
 
 In order of conformance cases unlocked:
 
-1. Fixtures for behaviour that already exists: literals, comparison chains,
-   `match`, three-valued logic, helpers and scoping (about 25 cases).
+1. Contextual helpers passed as values and nested contextual reductions
+   (C60, C62, C124), multi-column `match` in verbs (C127), quoted output
+   names (C103), `Int()` conversion (C40, C49, C64).
 2. A fixture runner for the session protocol: drafts, holes, decisions,
    `define`, `fork`, `save`, target switches and taps (about 11 cases).
 3. Contract validation: required, range, NaN and infinity in sources, keys
@@ -29,7 +28,7 @@ In order of conformance cases unlocked:
    (about 13 cases).
 5. Reshaping: `bind_rows`, `complete`, `expand`, pivot duplicates and
    `values_fn` (about 7 cases).
-6. Reductions over vectors, `standardize` and `across` (about 9 cases).
+6. `across` and the remaining column transforms (C77, C106).
 7. Ordered windows: `lag`, `lead`, `slice_min` with total-order obligations
    (5 cases).
 8. Strict mode and effect sets (5 cases); restricted columns (3 cases).

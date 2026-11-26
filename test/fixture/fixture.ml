@@ -3,6 +3,7 @@ open Rupam
 type status =
   | Active
   | Pending
+  | Dialect of string list
 
 type outcome =
   { typ : string option
@@ -36,7 +37,11 @@ let load file =
       (match get Toml.Lenses.(key "status" |-- string) with
        | Some "active" -> Active
        | Some "pending" -> Pending
-       | _ -> failwith (file ^ ": status must be active or pending"))
+       | Some "dialect" ->
+         (match get Toml.Lenses.(key "dialects" |-- array |-- strings), get Toml.Lenses.(key "reason" |-- string) with
+          | Some dialects, Some _ -> Dialect dialects
+          | _ -> failwith (file ^ ": a dialect fixture lists dialects and a reason"))
+       | _ -> failwith (file ^ ": status must be active, pending or dialect"))
   ; source = get Toml.Lenses.(key "run" |-- table |-- key "source" |-- string)
   ; expect =
       { typ = expected "type"
@@ -54,6 +59,8 @@ let all directory =
   |> List.sort compare
   |> List.map (fun f -> load (Filename.concat directory f))
 ;;
+
+let csv (names, rows) = String.concat "\n" (List.map (String.concat ",") (names :: rows))
 
 let evaluate source =
   match
@@ -86,11 +93,62 @@ let evaluate source =
     }
 ;;
 
-let check fixture =
+let cell = function
+  | Arrow_result.Missing -> "None"
+  | Unsupported -> "?"
+  | Bool b -> Display.bool b
+  | Int i -> Int64.to_string i
+  | Float f -> Display.float f
+  | Text s -> Printf.sprintf "%S" s
+  | Date d -> Printf.sprintf {|d"%s"|} (Calendar.to_iso d)
+;;
+
+let rows session name =
+  let result = Session.result session (Session.table session name) in
+  let names = List.map fst (Session.table session name).schema in
+  ( names
+  , List.init (Session.total result) (fun row ->
+      List.map (fun n -> cell (snd (Session.cell result ~row n))) names) )
+;;
+
+
+let on_session session source =
+  match
+    let items = Frontend.read source in
+    let events = Session.submit session items in
+    match List.rev items with
+    | { declaration = Let (name, _, _); _ } :: _ ->
+      (match Session.table session name with
+       | _ -> Some (csv (rows session name))
+       | exception Diagnostic.Error _ -> None)
+    | _ ->
+      List.fold_left
+        (fun last -> function
+           | Session.Value (text, _) -> Some text
+           | _ -> last)
+        None
+        events
+  with
+  | value -> { typ = None; value; diagnostic = None; message = None }
+  | exception exn ->
+    let d = Diagnostic.of_exn exn in
+    { typ = None
+    ; value = None
+    ; diagnostic = Some (Diagnostic.name d.code)
+    ; message = Some d.message
+    }
+;;
+
+let check ?session fixture =
   match fixture.source, fixture.expect with
   | None, _ | Some _, { typ = None; value = None; diagnostic = None; _ } -> Unspecified
   | Some source, expect ->
-    let outcome = evaluate source in
+    let outcome =
+      match session with
+      | None -> evaluate source
+      | Some session -> on_session session source
+    in
+    let expect = if session = None then expect else { expect with typ = None } in
     let compare what expected actual =
       match expected with
       | Some e when Some e <> actual ->

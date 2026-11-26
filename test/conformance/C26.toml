@@ -1,4 +1,18 @@
 id = "C26"
-status = "pending"
+status = "active"
 case = '''user function with `match` lifted over a column'''
 expected = '''native code, no callback'''
+
+[run]
+source = '''
+let s = read_csv("conformance/data/sales.csv")
+let size(v) = match v { 100.0=.. => "big", _ => "small" }
+let t = s |> mutate(k = size(revenue)) |> select(k)
+'''
+
+[expect]
+value = '''k
+"big"
+"big"
+"big"
+"small"'''

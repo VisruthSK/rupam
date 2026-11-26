@@ -160,15 +160,6 @@ let reference source =
   | exception Diagnostic.Error _ -> Failed
 ;;
 
-let cell = function
-  | Arrow_result.Missing -> "None"
-  | Unsupported -> "?"
-  | Bool b -> Display.bool b
-  | Int i -> Int64.to_string i
-  | Float f -> Display.float f
-  | Text s -> Printf.sprintf "%S" s
-  | Date d -> Printf.sprintf {|d"%s"|} (Calendar.to_iso d)
-;;
 
 let counter = ref 0
 
@@ -184,7 +175,7 @@ let host session source ~table =
       Rows
         ( names
         , List.init (Session.total result) (fun row ->
-            List.map (fun n -> cell (snd (Session.cell result ~row n))) names) ))
+            List.map (fun n -> Rupam_fixture.Fixture.cell (snd (Session.cell result ~row n))) names) ))
     else (
       match
         List.find_map

@@ -6,15 +6,21 @@ import math
 import re
 
 
+class RupamError(Exception):
+    def __init__(self, code, message):
+        super().__init__(message)
+        self.code = code
+
+
 def rp_int(x):
     if not -(2**63) < x < 2**63:
-        raise OverflowError("arithmetic overflow: Int out of range")
+        raise RupamError("arithmetic-overflow", "arithmetic overflow: Int out of range")
     return x
 
 
 def rp_real(x):
     if math.isinf(x) or math.isnan(x):
-        raise OverflowError("arithmetic overflow: a result is not finite")
+        raise RupamError("arithmetic-overflow", "arithmetic overflow: a result is not finite")
     return x
 
 
@@ -78,6 +84,13 @@ def rp_show(value, shape):
     return rp_format(value, json.loads(shape))
 
 
+def rp_exact_float(i):
+    f = float(i)
+    if int(f) != i:
+        raise RupamError("inexact-float", f"{i} has no exact Float value")
+    return f
+
+
 def rp_seq(first, last, step=1):
     if step == 0:
         raise ValueError("seq needs a nonzero step")
@@ -119,3 +132,45 @@ def rp_parse_date(text, fmt):
         return datetime.datetime.strptime(text, fmt).date()
     except ValueError:
         return None
+
+
+def rp_and(a, b):
+    if a is False or b is False:
+        return False
+    return None if a is None or b is None else True
+
+
+def rp_or(a, b):
+    if a is True or b is True:
+        return True
+    return None if a is None or b is None else False
+
+
+def rp_vreduce(kind, policy, xs):
+    present = [v for v in xs if v is not None]
+    if policy == "error" and len(present) < len(xs):
+        raise RupamError("missing-under-error", "A reduction met a missing value and missing = error")
+    if policy == "keep" and kind not in ("n_distinct", "first", "last") and len(present) < len(xs):
+        return None
+    kept = xs if policy == "keep" else present
+    if kind in ("first", "last"):
+        return (kept[0] if kind == "first" else kept[-1]) if kept else None
+    if kind == "n_distinct":
+        return len(dict.fromkeys(kept))
+    if not present or (kind in ("var", "sd") and len(present) < 2):
+        return None
+    if kind == "sum":
+        total = sum(present)
+        return rp_int(total) if isinstance(total, int) else rp_real(total)
+    if kind in ("min", "max"):
+        return min(present) if kind == "min" else max(present)
+    floats = [float(v) for v in present]
+    mean = sum(floats) / len(floats)
+    if kind == "mean":
+        return mean
+    if kind == "median":
+        s = sorted(floats)
+        n = len(s)
+        return s[n // 2] if n % 2 else (s[n // 2 - 1] + s[n // 2]) / 2
+    variance = sum((v - mean) ** 2 for v in floats) / (len(floats) - 1)
+    return variance if kind == "var" else math.sqrt(variance)

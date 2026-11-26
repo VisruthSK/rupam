@@ -2,3 +2,16 @@ id = "C103"
 status = "pending"
 case = '''`` mutate(`missing` = none(x), `by` = region, by = region) ``'''
 expected = '''output columns named missing and by; grouping uses input region; duplicate decoded output names rejected; formatter preserves required quotes'''
+
+[run]
+source = '''
+let s = read_csv("conformance/data/sales.csv")
+let t = s |> mutate(`missing` = none(cost), `by` = region, by = region) |> select(`missing`, `by`)
+'''
+
+[expect]
+value = '''missing,by
+FALSE,"North"
+TRUE,"South"
+FALSE,"North"
+FALSE,"East"'''

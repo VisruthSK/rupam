@@ -1,4 +1,17 @@
 id = "C08"
-status = "pending"
+status = "active"
 case = '''`select(region:cost)`'''
 expected = '''inclusive range in schema order'''
+
+[run]
+source = '''
+let s = read_csv("conformance/data/sales.csv")
+let t = s |> select(revenue:id)
+'''
+
+[expect]
+value = '''revenue,cost,id
+100.0,60.0,1
+200.0,None,2
+300.0,250.0,3
+50.0,-5.0,4'''

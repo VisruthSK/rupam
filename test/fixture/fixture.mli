@@ -1,6 +1,7 @@
 type status =
   | Active
   | Pending
+  | Dialect of string list
 
 type outcome =
   { typ : string option
@@ -22,5 +23,7 @@ type result =
   | Unspecified
 
 val all : string -> t list
-val check : t -> result
+val check : ?session:Rupam.Session.t -> t -> result
+val cell : Rupam.Arrow_result.value -> string
+val rows : Rupam.Session.t -> string -> string list * string list list
 val capture : directory:string -> id:string -> string -> outcome

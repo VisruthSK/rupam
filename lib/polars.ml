@@ -100,6 +100,7 @@ let operator : Syntax.binary -> P.operator = function
   | Greater_equal -> Greater_equal
   | Equal -> Equal
   | Not_equal -> Not_equal
+  | Approx -> invalid_arg "~= lowers to a tolerance expression"
   | And -> Both
   | Or -> Either
 ;;
@@ -107,6 +108,7 @@ let operator : Syntax.binary -> P.operator = function
 let columnar =
   C.exists (fun e ->
     match e.node with
+    | Reduce (_, _, { shape = Scalar; _ }) -> false
     | Column _ | Reduce _ | Count -> true
     | _ -> false)
 ;;
@@ -134,6 +136,15 @@ let rec expression ~scalar (e : C.expr) : P.expr =
     | Unary (Not, x) -> P.Unary (Invert, go x)
     | Unary (Negate, x) when integer -> narrow (P.Unary (Negate, wide (go x)))
     | Unary (Negate, x) -> P.Unary (Negate, go x)
+    | Binary (Approx, a, b) ->
+      let magnitude x = P.meth x "abs" [] in
+      P.Binary
+        ( Less_equal
+        , magnitude (P.Binary (Subtract, go a, go b))
+        , P.Binary
+            ( Multiply
+            , P.Float "1.4901161193847656e-08"
+            , P.Call (pl "max_horizontal", positional [ magnitude (go a); magnitude (go b) ]) ) )
     | Binary (((Add | Sub) as op), a, b) when T.repr (T.present a.typ) = Date ->
       let offset sign =
         P.meth

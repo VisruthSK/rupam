@@ -4,6 +4,7 @@ let comma f xs = String.concat ", " (List.map f xs)
 
 let rec annotation = function
   | Atuple ts -> "(" ^ comma annotation ts ^ ")"
+  | Alist t -> "[" ^ annotation t ^ "]"
   | Aarrow (a, b) -> "(" ^ annotation a ^ " -> " ^ annotation b ^ ")"
   | Arow (fs, tail) ->
     "{"
@@ -41,7 +42,7 @@ let binary_level : binary -> int = function
   | Power -> 2
   | Mul | Div | Mod -> 4
   | Add | Sub -> 5
-  | Less | Greater | Less_equal | Greater_equal | Equal | Not_equal -> 8
+  | Less | Greater | Less_equal | Greater_equal | Equal | Not_equal | Approx -> 8
   | And -> 10
   | Or -> 11
 ;;

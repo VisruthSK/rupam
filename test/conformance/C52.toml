@@ -1,4 +1,13 @@
 id = "C52"
-status = "pending"
+status = "active"
 case = '''`FALSE and None`, `TRUE or None`, `TRUE and None`, `FALSE or None`, `not None` with Bool? operands'''
 expected = '''FALSE, TRUE, None, None, None'''
+
+[run]
+source = '''
+let n: Bool? = None
+(FALSE and n, TRUE or n, TRUE and n, FALSE or n, not n)
+'''
+
+[expect]
+value = '''(FALSE, TRUE, None, None, None)'''

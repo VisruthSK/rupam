@@ -150,17 +150,7 @@ let rec expr ctx (x : Syntax.expr) : C.expr =
        in
        make body.shape body.typ (Let (id, v, body)))
   | Lambda (params, body) ->
-    let ids = List.map (fresh_id ctx.env) params in
-    let types = List.map (fun _ -> T.fresh ctx.level) params in
-    let env =
-      List.fold_left2
-        (fun env (p, id) t -> bind env p (Value { id; scheme = T.mono t }))
-        ctx.env
-        (List.combine params ids)
-        types
-    in
-    let body = expr { ctx with env } body in
-    make Scalar (T.Arrow (types, body.typ)) (Lambda (ids, body))
+    lambda ctx span params body (List.map (fun _ -> T.fresh ctx.level) params)
   | Match (subject, arms) -> match_ ctx span (here subject) arms
   | Match_present (subject, arms) ->
     let subject = here subject in
@@ -334,6 +324,10 @@ and binary ctx span op a b =
       number (T.present a.typ);
       number (T.present b.typ);
       to_float a, to_float b, T.Float
+    | Approx ->
+      number (T.present a.typ);
+      number (T.present b.typ);
+      to_float a, to_float b, T.Bool
     | (Add | Sub) when T.repr (T.present a.typ) = Date || T.repr (T.present b.typ) = Date ->
       let result =
         match op, T.repr (T.present a.typ), T.repr (T.present b.typ) with
@@ -367,12 +361,16 @@ and binary ctx span op a b =
          | Add | Sub | Mul | Mod ->
            number t;
            t
-         | Div | Power -> assert false) )
+         | Div | Power | Approx -> assert false) )
   in
   let shape = shape_of span [ a; b ] in
-  lift ctx.env span shape [ a; b ] (function
-    | [ a; b ] -> make shape result (Binary (op, a, b))
-    | _ -> assert false)
+  match op with
+  | (And | Or) when T.is_optional a.typ || T.is_optional b.typ ->
+    make shape (T.optional result) (Binary (op, a, b))
+  | _ ->
+    lift ctx.env span shape [ a; b ] (function
+      | [ a; b ] -> make shape result (Binary (op, a, b))
+      | _ -> assert false)
 
 and arguments ctx span callee args =
   let missing =
@@ -398,6 +396,9 @@ and call ctx span (f : Syntax.expr) args =
        make Scalar (T.fresh ctx.level) (verb ctx span n input rest)
      | _ -> fail span Wrong_arguments (n ^ " needs a table"))
     |> fun e -> retype_table e
+  | Name (Bare, (("center" | "scale" | "standardize" | "rescale") as n))
+    when not (List.mem_assoc n ctx.env.names) ->
+    expr ctx (transform ctx span n args)
   | Name (Bare, ("read_csv" | "read_tsv" | "read_parquet" | "load")) ->
     retype_table (make Scalar (T.fresh ctx.level) (Table (source ctx span f args)))
   | Name (Bare, n)
@@ -482,6 +483,64 @@ and call ctx span (f : Syntax.expr) args =
     in
     expr { ctx with env } body
   | _ -> apply ctx span (expr ctx f) (List.map (fun (_, a) -> expr ctx a) args)
+
+and lambda ctx span params body types =
+  if List.length params <> List.length types
+  then fail span Wrong_arguments "This function takes a different number of arguments";
+  let ids = List.map (fresh_id ctx.env) params in
+  let env =
+    List.fold_left2
+      (fun env (p, id) t -> bind env p (Value { id; scheme = T.mono t }))
+      ctx.env
+      (List.combine params ids)
+      types
+  in
+  let body = expr { ctx with env } body in
+  make span Scalar (T.Arrow (types, body.typ)) (Lambda (ids, body))
+
+and transform ctx span n args =
+  let node form : Syntax.expr = { form; span } in
+  let name n = node (Name (Bare, n)) in
+  let binary op a b = node (Binary (op, a, b)) in
+  let policy = List.filter (fun (label, _) -> label = Some "missing") args in
+  let x =
+    match List.filter (fun (label, _) -> label <> Some "missing") args with
+    | [ (None, x) ] -> x
+    | _ -> fail span Wrong_arguments (n ^ " takes one column or vector and missing =")
+  in
+  let reduce f = node (Call (name f, (None, x) :: policy)) in
+  let numerator, divisor =
+    match n with
+    | "center" -> [ "·mean", reduce "mean" ], None
+    | "scale" -> [ "·sd", reduce "sd" ], Some (name "·sd")
+    | "standardize" -> [ "·mean", reduce "mean"; "·sd", reduce "sd" ], Some (name "·sd")
+    | _ -> [ "·min", reduce "min"; "·max", reduce "max" ], Some (binary Sub (name "·max") (name "·min"))
+  in
+  let shifted v =
+    match n with
+    | "scale" -> v
+    | "rescale" -> binary Sub v (name "·min")
+    | _ -> binary Sub v (name "·mean")
+  in
+  let value v =
+    match divisor with
+    | None -> shifted v
+    | Some d ->
+      node
+        (If
+           ( node
+               (Call
+                  ( name "coalesce"
+                  , [ None, binary Not_equal d (node (Literal (Float "0.0")))
+                    ; None, node (Literal (Bool false))
+                    ] ))
+           , binary Div (shifted v) d
+           , node (Literal Absent) ))
+  in
+  let bind body = List.fold_right (fun (n, e) body -> node (Local (n, e, body))) numerator body in
+  if ctx.columns <> None
+  then bind (value x)
+  else bind (node (Call (name "map", [ None, x; None, node (Lambda ([ "·v" ], value (name "·v"))) ])))
 
 and apply ctx span (f : C.expr) values =
   let make = make span in
@@ -594,7 +653,22 @@ and present_arms span (subject : C.expr) arms =
 and builtin ctx span n b args =
   let make = make span in
   let missing, values = arguments ctx span n args in
-  let values = List.map (expr ctx) values in
+  let element (xs : C.expr) =
+    match T.repr xs.typ with
+    | List e -> e
+    | _ -> T.fresh ctx.level
+  in
+  let values =
+    match b, values with
+    | Row (Map_each | Retain), [ xs; ({ form = Lambda (ps, body); _ } as f) ] ->
+      let xs = expr ctx xs in
+      [ xs; lambda ctx f.span ps body [ element xs ] ]
+    | Row Fold, [ xs; init; ({ form = Lambda (ps, body); _ } as f) ] ->
+      let xs = expr ctx xs
+      and init = expr ctx init in
+      [ xs; init; lambda ctx f.span ps body [ init.typ; element xs ] ]
+    | _ -> List.map (expr ctx) values
+  in
   match b, values with
   | Prelude.Coalesce, (_ :: _ :: _ as values) ->
     let rec chain = function
@@ -637,6 +711,38 @@ and builtin ctx span n b args =
   | Reduction Count, [] ->
     if ctx.columns = None then fail span Column_required "n() counts the rows of a table";
     make Scalar T.Int Count
+  | Reduction r, [ ({ typ; shape = Scalar; _ } as v) ]
+    when (match T.repr typ with
+          | List _ -> true
+          | _ -> false) ->
+    let element =
+      match T.repr typ with
+      | List e -> e
+      | _ -> assert false
+    in
+    let policy =
+      match missing, T.is_optional element with
+      | Some p, true -> p
+      | _, false -> C.Skip
+      | None, true ->
+        fail
+          span
+          Missing_policy_required
+          (n ^ " reads a vector that can hold None. Say what to do with them: missing = skip, keep or error")
+    in
+    let element = T.present element in
+    let result =
+      match r with
+      | Sum | Min | Max ->
+        expect span (T.fresh ~kind:Number ctx.level) element;
+        T.Option element
+      | Mean | Median | Var | Sd ->
+        expect span (T.fresh ~kind:Number ctx.level) element;
+        T.Option T.Float
+      | Distinct | Count -> T.Int
+      | First | Last -> T.Option element
+    in
+    make Scalar result (Reduce (r, policy, v))
   | Reduction r, [ v ] ->
     if v.shape <> Columnar
     then fail span Column_required (n ^ " needs a column, not a single value");

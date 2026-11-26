@@ -1,4 +1,12 @@
 id = "C53"
-status = "pending"
+status = "active"
 case = '''`x == None`, `x != None`; `some(x)`, `none(x)` on `[1, None]`'''
 expected = '''comparisons rejected; predicates `[TRUE,FALSE]`, `[FALSE,TRUE]`'''
+
+[run]
+source = '''
+(map([1, None], fn(v) => some(v)), map([1, None], fn(v) => none(v)))
+'''
+
+[expect]
+value = '''([TRUE, FALSE], [FALSE, TRUE])'''

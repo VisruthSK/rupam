@@ -32,6 +32,7 @@ let operator : Syntax.binary -> R.operator = function
   | Greater_equal -> Greater_equal
   | Equal -> Equal
   | Not_equal -> Not_equal
+  | Approx -> invalid_arg "~= lowers to rp_approx"
   | And -> Both
   | Or -> Either
 ;;
@@ -52,8 +53,7 @@ let dates (row : Prelude.row) args =
   | Floor_week, [ a ] -> Some (R.Binary (Subtract, a, monday_offset a))
   | (Days | Months), [ n ] -> Some (R.call "as.integer" [ n ])
   | Years, [ n ] -> Some (R.Binary (Multiply, R.call "as.integer" [ n ], R.Number "12L"))
-  | Parse_date, [ s; f ] ->
-    Some (R.Call (R.Name "as.Date", [ R.Positional s; R.Named ("format", f) ]))
+  | Parse_date, [ s; f ] -> Some (R.call "rp_parse_date" [ s; f ])
   | _ -> None
 ;;
 
@@ -109,7 +109,7 @@ let rec expression names (e : C.expr) : R.expr =
   match e.node with
   | Column n -> R.Name n
   | Variable { stamp = 0; name } -> R.Name name
-  | Variable id -> R.Name (Host.name names id)
+  | Variable id -> R.Dollar (R.Name ".env", Host.name names id)
   | Constant (Int i) -> integer64 (R.String (Int64.to_string i))
   | Constant (Float f) -> R.Number (R.number f)
   | Constant (Number s) -> R.Number s
@@ -121,15 +121,27 @@ let rec expression names (e : C.expr) : R.expr =
   | Coalesce (a, b) ->
     R.qualified "dplyr" "coalesce" [ R.Positional (go a); R.Positional (go b) ]
   | Builtin (row, args) -> builtin row (List.map go args)
-  | Convert x -> R.call "as.double" [ go x ]
+  | Convert x -> R.call "rp_exact_float" [ go x ]
   | Unary (Not, x) -> R.Not (go x)
   | Unary (Negate, x) -> R.Negate (go x)
+  | Binary (Approx, a, b) -> R.call "rp_approx" [ go a; go b ]
   | Binary (op, a, b) ->
     Option.value
       (date_arithmetic op a.typ b.typ (go a) (go b))
       ~default:(R.Binary (operator op, go a, go b))
   | Require x -> R.call "rp_present" [ go x ]
   | Count -> integer64 (R.qualified "dplyr" "n" [])
+  | Reduce (r, policy, x) when x.shape = Scalar ->
+    R.call
+      "rp_vreduce"
+      [ R.String (Prelude.name (Reduction r))
+      ; R.String
+          (match policy with
+       | C.Skip -> "skip"
+       | Keep -> "keep"
+       | Fail -> "error")
+      ; go x
+      ]
   | Reduce (r, policy, x) -> reduce names r policy x
   | Let (id, v, body) -> R.Block ([ Host.name names id, go v ], go body)
   | Lift (bound, body) ->

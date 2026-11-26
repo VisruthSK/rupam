@@ -87,3 +87,42 @@ rp_add_months <- function(x, n) {
   last <- as.Date(sprintf("%04d-%02d-01", (total + 1L) %/% 12L + 1900L, (total + 1L) %% 12L + 1L)) - 1L
   pmin(first + lt$mday - 1L, last)
 }
+
+rp_parse_date <- function(s, f) {
+  d <- as.Date(s, format = f)
+  d[!is.na(d) & format(d, f) != s] <- NA
+  d
+}
+
+rp_and <- function(a, b) {
+  if (isFALSE(a) || isFALSE(b)) FALSE else if (is.null(a) || is.null(b)) NULL else TRUE
+}
+
+rp_or <- function(a, b) {
+  if (isTRUE(a) || isTRUE(b)) TRUE else if (is.null(a) || is.null(b)) NULL else FALSE
+}
+
+rp_approx <- function(a, b) abs(a - b) <= sqrt(.Machine$double.eps) * pmax(abs(a), abs(b))
+
+rp_vreduce <- function(kind, policy, xs) {
+  absent <- vapply(xs, is.null, logical(1))
+  if (policy == "error" && any(absent)) rp_fail("missing-under-error", "A reduction met a missing value and missing = error")
+  if (policy == "keep" && !(kind %in% c("n_distinct", "first", "last")) && any(absent)) return(NULL)
+  kept <- if (policy == "keep") xs else xs[!absent]
+  if (kind %in% c("first", "last")) {
+    if (!length(kept)) return(NULL)
+    return(kept[[if (kind == "first") 1L else length(kept)]])
+  }
+  if (kind == "n_distinct") return(bit64::as.integer64(length(rp_unique(kept))))
+  present <- xs[!absent]
+  if (!length(present) || (kind %in% c("var", "sd") && length(present) < 2)) return(NULL)
+  v <- do.call(c, present)
+  switch(kind,
+    sum = rp_checked(sum(v)),
+    min = min(v),
+    max = max(v),
+    mean = mean(as.double(v)),
+    median = stats::median(as.double(v)),
+    var = stats::var(as.double(v)),
+    sd = stats::sd(as.double(v)))
+}

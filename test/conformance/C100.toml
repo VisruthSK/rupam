@@ -1,4 +1,16 @@
 id = "C100"
-status = "pending"
+status = "active"
 case = '''`set missing = skip; let avg(x) = mean(x)` called in a verb with `missing = keep`, x `[1,None,3]`'''
 expected = '''lexical skip yields 2.0; helper with no lexical policy inherits propagate and yields None'''
+
+[run]
+source = '''
+let s = read_csv("conformance/data/ints.csv")
+set missing = skip
+let avg(x) = mean(x)
+let t = s |> summarize(m = avg(x), missing = keep)
+'''
+
+[expect]
+value = '''m
+2.0'''

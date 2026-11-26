@@ -110,6 +110,10 @@ let binary e (op : Syntax.binary) a b =
   | (And | Or), _, _ -> invalid_arg "Expected Bool operands"
   | Equal, a, b -> Bool (compare_values a b = 0)
   | Not_equal, a, b -> Bool (compare_values a b <> 0)
+  | Approx, a, b ->
+    let a = number a
+    and b = number b in
+    Bool (Float.abs (a -. b) <= Float.sqrt Float.epsilon *. Float.max (Float.abs a) (Float.abs b))
   | Less, a, b -> Bool (compare_values a b < 0)
   | Greater, a, b -> Bool (compare_values a b > 0)
   | Less_equal, a, b -> Bool (compare_values a b <= 0)
@@ -359,7 +363,10 @@ let rec eval env ?rows (e : C.expr) =
          r
          policy
          (Array.map (fun row -> eval env ~rows:{ at with row } x) group)
-     | None -> invalid_arg "A reduction outside a table")
+     | None ->
+       (match here x with
+        | List xs -> aggregate e r policy (Array.of_list xs)
+        | _ -> invalid_arg "A reduction outside a table"))
   | Builtin (row, xs) -> builtin e (apply e) row (List.map here xs)
   | Unary (op, x) ->
     (match op, here x with
