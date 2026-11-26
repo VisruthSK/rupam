@@ -36,6 +36,7 @@ val reset_cancelled_draft : draft -> unit
 val close_draft : draft -> unit
 val release_draft : result -> unit
 val result : t -> TransformIR.table -> result
+val ordering_of : result -> string
 val page : ?columns:string list -> result -> offset:int -> limit:int -> Page.t
 val histogram : result -> string -> Arrow_result.summary
 val column_summary : result -> string -> Arrow_result.profile
@@ -43,7 +44,12 @@ val cell : result -> row:int -> string -> Types.t * Arrow_result.value
 val total : result -> int
 val table_of_result : result -> TransformIR.table
 val preview : t -> TransformIR.table -> offset:int -> limit:int -> Page.t
-val code : t -> Target.t option -> TransformIR.table -> string
+type code =
+  | Definition
+  | Full
+  | Expression
+
+val code : t -> ?mode:code -> Target.t option -> string -> string
 val undo : t -> bool
 val redo : t -> bool
 val source : t -> string

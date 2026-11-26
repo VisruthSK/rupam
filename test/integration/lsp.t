@@ -11,6 +11,6 @@ The language server reports diagnostics and completes top-level names.
   $ rupam-dev frame < requests | rupam lsp | rupam-dev unframe
   {"id":1,"jsonrpc":"2.0","result":{"capabilities":{"completionProvider":{},"textDocumentSync":1}}}
   {"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"diagnostics":[],"uri":"file:///sample.rp","version":1}}
-  {"id":2,"jsonrpc":"2.0","result":[{"detail":"(number) -> number","label":"square"}]}
-  {"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"diagnostics":[{"message":"Expected Bool, found number","range":{"end":{"character":16,"line":0},"start":{"character":8,"line":0}},"severity":1,"source":"rupam"}],"uri":"file:///sample.rp","version":2}}
+  {"id":2,"jsonrpc":"2.0","result":[{"detail":"(Number) -> Number","label":"square"}]}
+  {"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"diagnostics":[{"message":"Expected Bool, found Number","range":{"end":{"character":16,"line":0},"start":{"character":8,"line":0}},"severity":1,"source":"rupam"}],"uri":"file:///sample.rp","version":2}}
   {"id":3,"jsonrpc":"2.0","result":null}

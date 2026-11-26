@@ -8,7 +8,7 @@ type t =
   { columns : column list
   ; offset : int
   ; total : int
-  ; ordered : bool
+  ; ordering : string
   ; width : int
   }
 
@@ -20,19 +20,10 @@ type part =
   | Index
   | Note
 
-val read
-  :  path:string
-  -> total:int
-  -> ordered:bool
-  -> offset:int
-  -> limit:int
-  -> (string * Types.t) list
-  -> t
-
 val of_arrow
   :  ?columns:string list
   -> Arrow_result.t
-  -> ordered:bool
+  -> ordering:string
   -> offset:int
   -> limit:int
   -> (string * Types.t) list
@@ -41,4 +32,4 @@ val of_arrow
 val lines : ?limit:int -> digits:int -> t -> (part * string) list list
 val plain : digits:int -> t -> string list
 val format_cell : digits:int -> Types.t -> string option -> string option
-val summary : ?ordering:string -> t -> string
+val summary : t -> string

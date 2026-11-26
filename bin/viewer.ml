@@ -291,55 +291,6 @@ let selected t =
   | _ -> None
 ;;
 
-let ordering session t =
-  let open TransformIR in
-  let rec directions table =
-    match
-      List.find_map
-        (function
-          | { step = Arrange keys; _ } -> Some (List.map snd keys)
-          | _ -> None)
-        (List.rev table.stages)
-    with
-    | Some keys -> keys
-    | None ->
-      (match table.source with
-       | Bound source ->
-         List.find_map
-           (function
-             | Define (id, { node = Table table; _ }) when id = source ->
-               Some (directions table)
-             | _ -> None)
-           (Session.items session)
-         |> Option.value ~default:[]
-       | Read _ | Load _ | Join _ -> [])
-  in
-  let table = Session.table_of_result t.result in
-  match table.order with
-  | None -> "unordered"
-  | Some names ->
-    let order = directions table in
-    let keys =
-      List.map2
-        (fun name direction ->
-           if List.mem name table.restricted
-           then None
-           else
-             Some
-               (Identifier.quote name
-                ^
-                match direction with
-                | Ascending -> " asc"
-                | Descending -> " desc"))
-        (take (List.length order) names)
-        (take (List.length names) order)
-      |> List.filter_map Fun.id
-    in
-    (match keys with
-     | [] -> "ordered"
-     | _ -> "ordered by (" ^ String.concat ", " keys ^ ")")
-;;
-
 let filter t condition policy =
   let args =
     arg condition

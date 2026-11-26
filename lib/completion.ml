@@ -182,7 +182,8 @@ let files session ?kind prefix =
         then e
         else Filename.concat (Filename.dirname prefix) e
       in
-      { text = path
+      { text =
+          (if Sys.is_directory (Filename.concat directory e) then path ^ "/" else path ^ "\"")
       ; detail =
           (if Sys.is_directory (Filename.concat directory e)
            then "directory"

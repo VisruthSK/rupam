@@ -23,7 +23,7 @@ type command =
   | Dialect of Target.dialect
   | Type of string
   | View of view * string
-  | Code of Target.t option * string
+  | Code of Target.t option * Session.code * string
   | Source of string
 
 let views =
@@ -44,7 +44,7 @@ let help =
   ; ":explain TABLE", "plan from source to result"
   ; ":contract TABLE", "where a table's rows come from"
   ; ":validate TABLE", "run data-dict validation now"
-  ; ":code [DIALECT] TABLE", "generated code for a table"
+  ; ":code [TARGET] NAME [--full | --expr]", "generated code: the definition, a standalone script, or the expression"
   ; ":target [TARGET]", "show or set the target: r-dplyr or python-polars"
   ; ":language LANGUAGE", "switch the host language: r or python"
   ; ":dialect DIALECT", "switch the dialect: dplyr or polars"
@@ -86,6 +86,15 @@ let parse line =
   let needs what k =
     if rest = "" then Error (verb ^ " expects " ^ what) else Ok (k rest)
   in
+  let code target text =
+    let flag suffix = String.ends_with ~suffix:(" " ^ suffix) text in
+    let strip suffix = String.trim (String.sub text 0 (String.length text - String.length suffix)) in
+    if flag "--full"
+    then Code (target, Session.Full, strip "--full")
+    else if flag "--expr"
+    then Code (target, Session.Expression, strip "--expr")
+    else Code (target, Session.Definition, text)
+  in
   if String.starts_with ~prefix:"?" line
   then (
     let topic = String.trim (String.sub line 1 (String.length line - 1)) in
@@ -119,8 +128,8 @@ let parse line =
         | None -> rest, ""
       in
       (match List.assoc_opt first Target.targets with
-       | Some d when after <> "" -> Ok (Code (Some d, after))
-       | _ -> needs "a table" (fun x -> Code (None, x)))
+       | Some d when after <> "" -> Ok (code (Some d) after)
+       | _ -> needs "a table" (code None))
     | name ->
       (match List.assoc_opt name views with
        | Some v -> needs "a table" (fun x -> View (v, x))
@@ -510,9 +519,9 @@ let dispatch r = function
          | _ -> ())
       | _ -> Diagnostic.fail Wrong_arguments "Expected one expression");
     true
-  | Code (chosen, source) ->
+  | Code (chosen, mode, source) ->
     guard (fun () ->
-      print_endline (Session.code r.session chosen (Session.table r.session source)));
+      print_endline (Session.code r.session ~mode chosen source));
     true
   | View (Schema, "") ->
     schemas r;

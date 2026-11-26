@@ -18,6 +18,14 @@ let policy_of (x : Syntax.expr) =
   | _ -> fail x.span Invalid_policy "A missing policy is skip, keep or error"
 ;;
 
+let sources =
+  [ "read_csv", "(String) -> Table; reads a CSV file"
+  ; "read_tsv", "(String) -> Table; reads a TSV file"
+  ; "read_parquet", "(String) -> Table; reads a Parquet file"
+  ; "load", "(contract table) -> Table; reads a table declared in a contract"
+  ]
+;;
+
 let rec substitute names (x : Syntax.expr) =
   match x.form with
   | Name (Bare, n) when List.mem_assoc n names -> List.assoc n names
@@ -422,7 +430,7 @@ and call ctx span (f : Syntax.expr) args =
   | Name (Bare, (("center" | "scale" | "standardize" | "rescale") as n))
     when not (List.mem_assoc n ctx.env.names) ->
     expr ctx (transform ctx span n args)
-  | Name (Bare, ("read_csv" | "read_tsv" | "read_parquet" | "load")) ->
+  | Name (Bare, n) when List.mem_assoc n sources ->
     retype_table (make Scalar (T.fresh ctx.level) (Table (source ctx span f args)))
   | Name (Bare, n)
     when (not (List.mem_assoc n ctx.env.names)) && Option.is_some (Prelude.find n) ->
@@ -1521,7 +1529,8 @@ let program env declarations =
 ;;
 
 let builtins () =
-  List.map
+  sources
+  @ List.map
     (fun (n, b) ->
        ( n
        , match b with

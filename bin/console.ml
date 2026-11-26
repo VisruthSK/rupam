@@ -422,13 +422,12 @@ let strip_rows = 6
 let grid model (v : Viewer.t) =
   let page = Viewer.visible v in
   let digits = Repl.digits model.session in
-  let ordering = Viewer.ordering model.session.session v in
   let width, height = model.size in
   let body =
     box
       ~flex_direction:Column
       ~size:{ width = pct 100; height = px (max 1 (height - Viewer.panel_height)) }
-      [ text ~style:(style subtle) (Rupam.Page.summary ~ordering page)
+      [ text ~style:(style subtle) (Rupam.Page.summary page)
       ; grid_table ~digits ~selected:(not model.editing) v page
       ]
   in
@@ -452,11 +451,48 @@ let grid model (v : Viewer.t) =
              (String.split_on_char '\n' (Rupam.Diagnostic.render diagnostic)))
       | None, None -> text "")
   in
+  let key_groups =
+    [ ( "Move"
+      , [ "\xe2\x86\x91\xe2\x86\x93\xe2\x86\x90\xe2\x86\x92 hjkl", "cell"
+        ; "PgUp PgDn", "page"
+        ; "g G", "first, last"
+        ] )
+    ; ( "Data"
+      , [ "s S", "sort asc, desc"; "=", "filter to value"; "d", "describe column"; "u", "undo" ] )
+    ; ( "Edit"
+      , [ "i Tab", "prompt"
+        ; "Shift+Tab", "back to grid"
+        ; "Shift+Enter", "new line"
+        ; "Ctrl+Shift+M", "insert |>"
+        ] )
+    ; ( "Leave"
+      , [ "Enter", "run"; "Ctrl+G", "$EDITOR"; "?", "hide keys"; "Esc", "close, no save" ] )
+    ]
+  in
   let keys =
-    "arrows/hjkl move \xc2\xb7 PgUp/PgDn page \xc2\xb7 g/G first/last \xc2\xb7 s/S sort \
-     \xc2\xb7 = filter to value \xc2\xb7 d describe column \xc2\xb7 u undo \xc2\xb7 i \
-     edit \xc2\xb7 Enter run \xc2\xb7 Shift+Enter new line \xc2\xb7 Ctrl+Shift+M |> \
-     \xc2\xb7 Ctrl+G $EDITOR \xc2\xb7 ? help \xc2\xb7 Esc close without saving"
+    box
+      ~flex_direction:Row
+      ~size:{ width = pct 100; height = auto }
+      (List.map
+         (fun (title, entries) ->
+            let width =
+              List.fold_left (fun w (k, _) -> max w (Rupam.Display.width k)) 0 entries
+            in
+            box
+              ~flex_direction:Column
+              ~margin:(margin_lrtb 0 4 0 0)
+              (text ~style:(style ~bold:true subtle) title
+               :: List.map
+                    (fun (k, action) ->
+                       box
+                         ~flex_direction:Row
+                         [ text
+                             ~style:(style ~bold:true accent)
+                             (k ^ String.make (width - Rupam.Display.width k + 2) ' ')
+                         ; text ~style:(style subtle) action
+                         ])
+                    entries))
+         key_groups)
   in
   let line text_ =
     match Astring.String.cut ~sep:"   Missing " text_ with
@@ -474,7 +510,7 @@ let grid model (v : Viewer.t) =
   in
   let strip =
     if model.help
-    then [ text ~wrap:`Word ~style:(style subtle) keys ]
+    then [ keys ]
     else
       [ box
           ~flex_direction:Row
@@ -1077,8 +1113,7 @@ let update msg model =
   in
   let model =
     match msg with
-    | Scroll _ | Select_cell _ | Act _ | Focus_prompt | Return | Close ->
-      { model with help = false }
+    | Close -> { model with help = false }
     | _ -> model
   in
   fit model, cmd

@@ -65,7 +65,7 @@ let handle session : P.request -> Yojson.Safe.t = function
   | Preview { source; offset; limit } ->
     P.page (Session.preview session (Session.table session source) ~offset ~limit)
   | Code { source; target } ->
-    `String (Session.code session target (Session.table session source))
+    `String (Session.code session ~mode:Expression target source)
   | Retarget { target } ->
     Session.set_target session target ~origin:"session protocol";
     `String (Target.name target)

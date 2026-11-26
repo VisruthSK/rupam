@@ -20,6 +20,7 @@ type result =
   { table : TransformIR.table
   ; file : string
   ; arrow : Arrow_result.t
+  ; ordering : string
   }
 
 type t =
@@ -165,12 +166,61 @@ let commit t revision =
   t.current <- revision
 ;;
 
-let materialize h table =
+let ordering t (table : TransformIR.table) =
+  let open TransformIR in
+  let rec directions table =
+    match
+      List.find_map
+        (function
+          | { step = Arrange keys; _ } -> Some (List.map snd keys)
+          | _ -> None)
+        (List.rev table.stages)
+    with
+    | Some keys -> keys
+    | None ->
+      (match table.source with
+       | Bound source ->
+         List.find_map
+           (function
+             | Define (id, { node = Table table; _ }) when id = source ->
+               Some (directions table)
+             | _ -> None)
+           (items t)
+         |> Option.value ~default:[]
+       | Read _ | Load _ | Join _ -> [])
+  in
+  match table.order with
+  | None -> "unordered"
+  | Some names ->
+    let order = directions table in
+    let keys =
+      List.map2
+        (fun name direction ->
+           if List.mem name table.restricted
+           then None
+           else
+             Some
+               (Identifier.quote name
+                ^
+                match direction with
+                | Ascending -> " asc"
+                | Descending -> " desc"))
+        (List.filteri (fun i _ -> i < List.length order) names)
+        (List.filteri (fun i _ -> i < List.length names) order)
+      |> List.filter_map Fun.id
+    in
+    (match keys with
+     | [] -> "ordered"
+     | _ -> "ordered by (" ^ String.concat ", " keys ^ ")")
+;;
+
+
+let materialize h ~ordering table =
   let file = Filename.temp_file "rupam" ".arrow" in
   match
     let module B = (val Backend.of_target h.target) in
     ignore (Worker.evaluate h.worker (B.result h.names table ~path:file));
-    { table; file; arrow = Arrow_result.open_ipc file }
+    { table; file; arrow = Arrow_result.open_ipc file; ordering }
   with
   | result -> result
   | exception exn ->
@@ -188,7 +238,7 @@ let result t (table : TransformIR.table) =
   match List.assoc_opt key t.results with
   | Some r -> r
   | None ->
-    let r = materialize h table in
+    let r = materialize h ~ordering:(ordering t table) table in
     List.iteri (fun i (_, old) -> if i >= result_limit - 1 then discard old) t.results;
     t.results <- (key, r) :: List.filteri (fun i _ -> i < result_limit - 1) t.results;
     r
@@ -206,11 +256,13 @@ let column_index r name =
   find 0
 ;;
 
+let ordering_of r = r.ordering
+
 let page ?columns r ~offset ~limit =
   Page.of_arrow
     ?columns
     r.arrow
-    ~ordered:(r.table.order <> None)
+    ~ordering:r.ordering
     ~offset
     ~limit
     r.table.schema
@@ -465,13 +517,19 @@ let preview_draft draft source =
   let env = { t.current.env with supply = ref !(t.current.env.supply) } in
   let _, expr = Frontend.table_draft source in
   match snd (Elaborate.item env { declaration = Evaluate expr; span = expr.span }) with
-  | [ Show { node = Table table; _ } ] -> materialize (establish ~started t) table
+  | [ Show { node = Table table; _ } ] ->
+    materialize (establish ~started t) ~ordering:(ordering t table) table
   | _ -> Diagnostic.fail ~span:expr.span Not_a_table "Expected a table expression"
 ;;
 
 let release_draft = discard
 
-let code t target table =
+type code =
+  | Definition
+  | Full
+  | Expression
+
+let code t ?(mode = Definition) target source =
   let target = Option.value target ~default:(Project.require_target t.project) in
   let module B = (val Backend.of_target target) in
   let names =
@@ -479,7 +537,19 @@ let code t target table =
     | Some h when h.target.language = target.language -> h.names
     | _ -> B.names ()
   in
-  B.table names table
+  let items = items t in
+  let defined name =
+    List.find_index
+      (function
+        | TransformIR.Define (id, _) -> id.name = name
+        | _ -> false)
+      (List.rev items)
+    |> Option.map (fun i -> List.length items - 1 - i)
+  in
+  match mode, defined (String.trim source) with
+  | Definition, Some i -> B.statements names [ List.nth items i ]
+  | Full, Some i -> fst (B.script (List.filteri (fun j _ -> j <= i) items))
+  | (Definition | Full | Expression), _ -> B.table names (table t source)
 ;;
 
 let set_target t target ~origin =

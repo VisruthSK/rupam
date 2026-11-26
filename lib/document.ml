@@ -34,6 +34,16 @@ let mark d source =
   d.locations <- { line = d.line; column = d.column; source } :: d.locations
 ;;
 
+let width = 80
+
+let fits d render =
+  let scratch = create () in
+  render scratch;
+  let flat = Buffer.contents scratch.buffer in
+  (not (String.contains flat '
+')) && d.column - 1 + String.length flat <= width
+;;
+
 let separated d separator f xs =
   List.iteri
     (fun i x ->

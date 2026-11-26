@@ -149,9 +149,7 @@ let rec expr d indent level e =
      Document.text d ("." ^ name)
    | Call (f, arguments) ->
      expr d indent 15 f;
-     Document.text d "(";
-     Document.separated d ", " (argument d indent) arguments;
-     Document.text d ")"
+     call_arguments d indent arguments
    | Binary (op, a, b) ->
      let left, right =
        match op with
@@ -230,12 +228,30 @@ and chain d indent base links =
     (fun { span; name; arguments } ->
        Document.newline d inner;
        Option.iter (Document.mark d) span;
-       Document.text d ("." ^ name ^ "(");
-       Document.separated d ", " (argument d inner) arguments;
-       Document.text d ")")
+       Document.text d ("." ^ name);
+       call_arguments d inner arguments)
     links;
   Document.newline d indent;
   Document.text d ")"
+
+and call_arguments d indent arguments =
+  let flat d =
+    Document.text d "(";
+    Document.separated d ", " (argument d indent) arguments;
+    Document.text d ")"
+  in
+  if arguments = [] || Document.fits d flat
+  then flat d
+  else (
+    Document.text d "(";
+    List.iteri
+      (fun i a ->
+         if i > 0 then Document.text d ",";
+         Document.newline d (indent + 4);
+         argument d (indent + 4) a)
+      arguments;
+    Document.newline d indent;
+    Document.text d ")")
 
 and argument d indent = function
   | Positional e -> expr d indent 0 e

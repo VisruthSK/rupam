@@ -174,9 +174,7 @@ let rec expr d indent level e =
      expr d indent p e
    | Call (f, arguments) ->
      expr d indent 16 f;
-     Document.text d "(";
-     Document.separated d ", " (argument d indent) arguments;
-     Document.text d ")"
+     call_arguments d indent arguments
    | Dollar (e, n) ->
      expr d indent 16 e;
      Document.text d ("$" ^ identifier n)
@@ -206,6 +204,25 @@ let rec expr d indent level e =
      expr d indent 0 body;
      Document.text d " })");
   if wrap then Document.text d ")"
+
+and call_arguments d indent arguments =
+  let flat d =
+    Document.text d "(";
+    Document.separated d ", " (argument d indent) arguments;
+    Document.text d ")"
+  in
+  if arguments = [] || Document.fits d flat
+  then flat d
+  else (
+    Document.text d "(";
+    List.iteri
+      (fun i a ->
+         if i > 0 then Document.text d ",";
+         Document.newline d (indent + 2);
+         argument d (indent + 2) a)
+      arguments;
+    Document.newline d indent;
+    Document.text d ")")
 
 and argument d indent = function
   | Positional e -> expr d indent 0 e

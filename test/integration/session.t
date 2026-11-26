@@ -5,7 +5,7 @@ Switching target never replays writes, and :save writes the accepted analysis.
   $ (timeout 120 sh -c "until [ -f out.parquet ]; do sleep 0.1; done"; rm out.parquet; printf ':language python\n:target\nsmall\nlet n = 1 + 1\n:undo\n:bindings\n:save b.rp\n:quit\n') | rupam repl --target r-dplyr a.rp
   python-polars
   python-polars
-  4 rows × 1 column, ordered
+  4 rows × 1 column, ordered by (region asc)
      region  
      <String>
   1  North   

@@ -8,7 +8,7 @@ type t =
   { columns : column list
   ; offset : int
   ; total : int
-  ; ordered : bool
+  ; ordering : string
   ; width : int
   }
 
@@ -28,16 +28,14 @@ let format_cell ~digits typ =
   | _ -> Fun.id
 ;;
 
-let summary ?ordering page =
+let summary page =
   Printf.sprintf
     "%d %s × %d %s, %s"
     page.total
     (if page.total = 1 then "row" else "rows")
     page.width
     (if page.width = 1 then "column" else "columns")
-    (match ordering with
-     | Some ordering -> ordering
-     | None -> if page.ordered then "ordered" else "unordered")
+    page.ordering
 ;;
 
 let cell t = function
@@ -51,7 +49,7 @@ let cell t = function
        | _ -> text)
 ;;
 
-let of_arrow ?columns arrow ~ordered ~offset ~limit fields =
+let of_arrow ?columns arrow ~ordering ~offset ~limit fields =
   let names = Arrow_result.names arrow in
   let index name =
     let rec find i = if names.(i) = name then i else find (i + 1) in
@@ -73,28 +71,11 @@ let of_arrow ?columns arrow ~ordered ~offset ~limit fields =
         selected
   ; offset
   ; total = Arrow_result.rows arrow
-  ; ordered
+  ; ordering
   ; width = Array.length names
   }
 ;;
 
-let read ~path ~total ~ordered ~offset ~limit fields =
-  let names, rows =
-    Data_file.query
-      (Printf.sprintf
-         "SELECT * FROM read_parquet(%s) LIMIT %d OFFSET %d"
-         (Data_file.literal path)
-         limit
-         offset)
-  in
-  let columns =
-    Array.to_list names
-    |> List.mapi (fun i name ->
-      let typ = List.assoc name fields in
-      { name; typ; cells = Array.map (fun row -> cell typ row.(i)) rows })
-  in
-  { columns; offset; total; ordered; width = List.length columns }
-;;
 
 let width = Display.width
 

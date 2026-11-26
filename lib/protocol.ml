@@ -154,7 +154,7 @@ let page (p : Page.t) =
   `Assoc
     [ "total", `Int p.total
     ; "offset", `Int p.offset
-    ; "ordered", `Bool p.ordered
+    ; "ordering", `String p.ordering
     ; ( "columns"
       , `List
           (List.map
