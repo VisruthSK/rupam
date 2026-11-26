@@ -22,6 +22,23 @@ Quiet, reusable tooling so routine work costs little:
 
 ## 1. Semantic foundations
 
+- Settle the locked export contract. Projects and Dialects require a
+  standalone script to verify its inputs; Runtime and Guarantees say
+  generated code carries no snapshot checks; C22 and C90 expect rejection of
+  changed inputs. Decide whether an export consumes pinned artifacts or
+  verifies external inputs at startup, then keep one canonical input
+  snapshot shared by preview, proof checking and export.
+- One inference model for helpers: a single scheme carrying parameter roles,
+  scope, alignment and missing-policy requirements through higher-order
+  calls, replacing the ordinary-then-contextual retry in `function_` and the
+  re-elaboration of saved syntax. Keep stage-relative resolution of deferred
+  column arguments and lexical bindings by identity. Driven by C101 and C124.
+- Guarded evaluation in Core: represent both the active rows and the
+  enclosing group, so a guarded reduction runs once over the whole group when
+  any row selects it and not at all otherwise, together with the row-domain
+  and order witnesses that survive projection or replacement. Driven by
+  C110, C119, C121 and C123; fixes the dplyr `if_else` length failure in C11.
+
 - Generate differential programs from typed TransformIR rather than source
   text, and shrink each failure into a pending fixture.
 - `DateTime`, `Time` and zones; nominal types and units (C33, C34, C95).
@@ -48,6 +65,11 @@ In order of conformance cases unlocked:
 8. Strict mode and effect sets (5 cases); restricted columns (3 cases).
 
 ## 3. Interactive experience
+
+- An explicit session state machine: base revision, pinned inputs, pending
+  work and publication outcome. Specify cancellation or worker loss after a
+  write or random draw but before publication, keeping the accepted
+  revision, the external effect and worker recovery as separate facts.
 
 - `:probe`, `??term` search, comment-preserving `:save`.
 - A TextMate grammar; LSP completion and hover from the shared checker.
