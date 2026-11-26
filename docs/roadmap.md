@@ -8,22 +8,16 @@ Architecture comes first: every client consumes one session through one path.
 ## 1. One session, one path
 
 The [session](spec/session.md) library owns accepted items, identities,
-revisions, the worker, results and evidence. The REPL, CLI, `rupam session`,
-viewer, MCP and notebook are thin clients over its typed operations.
-
-- `Target` as language plus dialect, in `rupam.toml`, `--target`, `:target`,
-  `:language`, `:dialect`, locks and manifests.
-- Transactional submit: commit on success only; undo/redo over revisions.
-- Target switches recompile from TransformIR; never re-elaborate or replay writes.
-- `:save`, `:version` and `rupam --version`, `--emit transform-ir`.
-- `rupam session` JSON-RPC over the same operations; its cram tests are the
-  REPL's regression suite.
+revisions, the worker, results and evidence. The REPL and `rupam session`
+are thin clients over its typed operations; the viewer, MCP and notebook
+join them without a second engine. Remaining: `complete`, `context`, forks
+and result handles in the protocol, as steps 3 and 6 need them.
 
 ## 2. Language pass
 
 `Int`/`Float`, `Core` renamed `TransformIR`, `set`, `??` and variadic
 `coalesce`, `match?`, `in`/`not in`, positional `first`/`last`,
-`assert_key` requiredness. Conformance fixtures move with each change.
+`assert_key` requiredness, the `keep` policy across every reduction. Conformance fixtures move with each change.
 
 ## 3. Results and the viewer (before MVP)
 

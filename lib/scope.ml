@@ -37,6 +37,7 @@ and env =
   ; group_missing : C.policy option
   ; directory : string
   ; strict : bool
+  ; supply : int ref
   }
 
 let empty ~directory ~strict =
@@ -47,14 +48,13 @@ let empty ~directory ~strict =
   ; group_missing = None
   ; directory
   ; strict
+  ; supply = ref 0
   }
 ;;
 
-let stamp = ref 0
-
-let fresh_id name =
-  incr stamp;
-  { C.name; stamp = !stamp }
+let fresh_id env name =
+  incr env.supply;
+  { C.name; stamp = !(env.supply) }
 ;;
 
 let fail span code message = Diagnostic.fail ~span code message

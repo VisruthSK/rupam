@@ -11,7 +11,8 @@ val to_float : Core.expr -> Core.expr
 val common : Diagnostic.span -> Core.expr -> Core.expr -> Core.expr * Core.expr * Types.t
 
 val lift
-  :  Syntax.span
+  :  Scope.env
+  -> Syntax.span
   -> Core.shape
   -> Core.expr list
   -> (Core.expr list -> Core.expr)

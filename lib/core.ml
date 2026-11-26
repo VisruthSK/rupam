@@ -1,16 +1,21 @@
+open Sexplib0.Sexp_conv
+
 type id =
   { name : string
   ; stamp : int
   }
+[@@deriving sexp_of]
 
 type shape =
   | Scalar
   | Columnar
+[@@deriving sexp_of]
 
 type policy =
   | Skip
   | Keep
   | Fail
+[@@deriving sexp_of]
 
 type constant =
   | Int of int64
@@ -18,10 +23,12 @@ type constant =
   | Number of string
   | Text of string
   | Bool of bool
+[@@deriving sexp_of]
 
 type direction =
   | Ascending
   | Descending
+[@@deriving sexp_of]
 
 type join_kind =
   | Inner
@@ -30,12 +37,14 @@ type join_kind =
   | Full
   | Semi
   | Anti
+[@@deriving sexp_of]
 
 type relationship =
   | One_to_one
   | Many_to_one
   | One_to_many
   | Many_to_many
+[@@deriving sexp_of]
 
 type expr =
   { node : node
@@ -109,8 +118,8 @@ and table =
 and source =
   | Read of file
   | Load of
-      { contract : Contract.t
-      ; table : Contract.table
+      { contract : (Contract.t[@sexp.opaque])
+      ; table : (Contract.table[@sexp.opaque])
       ; file : file
       }
   | Bound of id
@@ -166,12 +175,14 @@ and step =
       ; levels : string list
       }
   | Assert_key of string list
+[@@deriving sexp_of]
 
 type item =
   | Define of id * expr
   | Variant of string * (string * int) list
   | Show of expr
   | Write of expr * string
+[@@deriving sexp_of]
 
 let join_name = function
   | Inner -> "inner"

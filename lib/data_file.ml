@@ -4,6 +4,7 @@ type format =
   | Parquet
   | Csv
   | Tsv
+[@@deriving sexp_of]
 
 type physical =
   | Supported of Types.t

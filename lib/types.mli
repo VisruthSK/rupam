@@ -52,3 +52,4 @@ val generalize : int -> t -> scheme
 val instantiate : int -> scheme -> t
 val field : int -> row -> string -> t option
 val known : row -> (string * t) list
+val sexp_of_t : t -> Sexplib0.Sexp.t

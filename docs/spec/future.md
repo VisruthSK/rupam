@@ -196,3 +196,10 @@ analysis. `LoadError` is an enum of the failure kinds.
 | Quone | | a separately marked interoperability layer for typed foreign functions outside strict mode; `Result` for loading functions |
 | PRIMUS | contextual requirements as coeffects ([Types](types.md#contextual-requirements)) | basing new guarantees on empirical studies of common analysis errors |
 | Petříček, *Data Exploration through Dot-driven Development* (2017) | | completion that offers only the transformations valid for a table's data-derived type, without exposing the type machinery |
+
+## Bonsai terminal frontend
+
+Evaluate replacing the mosaic REPL and viewer with Bonsai (`bonsai_term`),
+sharing components with the Bonsai notebook. Adopt it if incremental
+rendering measurably cuts frame time and the frontend code shrinks enough to
+justify the Core/Async dependency cost; measure on wide grids and live editing.

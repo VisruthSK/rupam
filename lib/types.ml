@@ -284,3 +284,4 @@ let field level row name =
 ;;
 
 let known row = (resolve_row row).fields
+let sexp_of_t t = Sexplib0.Sexp.Atom (display t)

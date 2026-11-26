@@ -179,6 +179,6 @@ let require_target project =
   | None ->
     Diagnostic.fail
       Missing_target
-      "No target dialect. Pass --target r-dplyr (or python-polars), or set [target] \
+      "No target. Pass --target r-dplyr or python-polars, or set [target] language and \
        dialect in rupam.toml"
 ;;

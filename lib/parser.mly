@@ -9,6 +9,21 @@ let result_annotation t body = match t with None -> body | Some a -> {body with 
 let negative = function Int s -> Int ("-" ^ s) | Float s -> Float ("-" ^ s) | l -> l
 let alternatives a b = match a with Palt ps -> Palt (ps @ [b]) | a -> Palt [a; b]
 let product = function [p] -> p | ps -> Ptuple ps
+let ascending = function Less | Less_equal -> Some true | Greater | Greater_equal -> Some false | _ -> None
+let bare start (x : expr) = fst x.span = start
+let compare start finish op (a : expr) (b : expr) =
+  let reject message = Diagnostic.fail ~span:(start, finish) Syntax_error message in
+  let extend first links =
+    if ascending op <> None && ascending op = ascending (fst (List.hd links))
+    then at start finish (Chain (first, links @ [ op, b ]))
+    else reject "Only <, <= or >, >= chain, all in one direction"
+  in
+  match a.form with
+  | Binary (first, x, y) when bare start a && ascending first <> None -> extend x [ first, y ]
+  | Chain (x, links) when bare start a -> extend x links
+  | (Binary ((Equal | Not_equal), _, _) | Member _) when bare start a ->
+    reject "Equality and membership do not chain"
+  | _ -> at start finish (Binary (op, a, b))
 let subject start finish = function [x] -> x | xs -> at start finish (Tuple xs)
 %}
 %token DOTDOT DOTDOTEQ DOTDOTLT TYPEARROW IMPORT TYPE MATCH BAR QUESTION AT
@@ -26,7 +41,7 @@ let subject start finish = function [x] -> x | xs -> at start finish (Tuple xs)
 %left OR
 %left AND
 %nonassoc NOT
-%nonassoc GT LT GE LE NE EQUAL MEMBER
+%left GT LT GE LE NE EQUAL MEMBER
 %nonassoc COLON
 %left PLUS MINUS
 %left TIMES DIV MOD
@@ -125,13 +140,18 @@ expr: MATCH values LC arms RC { at $startpos $endpos (Match (subject $startpos($
  | expr DIV expr { at $startpos $endpos (Binary (Div,$1,$3)) }
  | expr MOD expr { at $startpos $endpos (Binary (Mod,$1,$3)) }
  | expr CARET expr { at $startpos $endpos (Binary (Power,$1,$3)) }
- | expr GT expr { at $startpos $endpos (Binary (Greater,$1,$3)) }
- | expr LT expr { at $startpos $endpos (Binary (Less,$1,$3)) }
- | expr GE expr { at $startpos $endpos (Binary (Greater_equal,$1,$3)) }
- | expr LE expr { at $startpos $endpos (Binary (Less_equal,$1,$3)) }
- | expr EQUAL expr { at $startpos $endpos (Binary (Equal,$1,$3)) }
- | expr NE expr { at $startpos $endpos (Binary (Not_equal,$1,$3)) }
- | expr MEMBER expr { at $startpos $endpos (Member ($1,$3)) }
+ | expr GT expr { compare $startpos $endpos Greater $1 $3 }
+ | expr LT expr { compare $startpos $endpos Less $1 $3 }
+ | expr GE expr { compare $startpos $endpos Greater_equal $1 $3 }
+ | expr LE expr { compare $startpos $endpos Less_equal $1 $3 }
+ | expr EQUAL expr { compare $startpos $endpos Equal $1 $3 }
+ | expr NE expr { compare $startpos $endpos Not_equal $1 $3 }
+ | expr MEMBER expr
+   { (match $1.form with
+      | Binary ((Less | Less_equal | Greater | Greater_equal | Equal | Not_equal), _, _) | Member _ | Chain _
+        when bare $startpos $1 -> Diagnostic.fail ~span:($startpos, $endpos) Syntax_error "Membership does not chain"
+      | _ -> ());
+     at $startpos $endpos (Member ($1,$3)) }
  | expr PIPE expr { at $startpos $endpos (Pipe ($1,$3)) }
  | expr TILDE expr { at $startpos $endpos (Formula (Some $1,$3)) }
  | TILDE expr %prec TILDE { at $startpos $endpos (Formula (None,$2)) }

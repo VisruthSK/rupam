@@ -51,7 +51,7 @@ let level x =
   | Binary (op, _, _) -> binary_level op
   | Unary (Negate, _) -> 3
   | Range _ -> 6
-  | Member _ -> 8
+  | Member _ | Chain _ -> 8
   | Unary (Not, _) -> 9
   | Formula _ -> 12
   | Pipe _ -> 13
@@ -131,6 +131,11 @@ and expr x =
   | Formula (lhs, rhs) ->
     Option.fold ~none:"" ~some:(fun l -> at 11 l ^ " ") lhs ^ "~ " ^ at 11 rhs
   | Range (a, b) -> at 5 a ^ ":" ^ at 5 b
+  | Chain (a, links) ->
+    at 7 a
+    ^ String.concat
+        ""
+        (List.map (fun (op, x) -> " " ^ binary_symbol op ^ " " ^ at 7 x) links)
   | Binary (Power, a, b) -> at 1 a ^ " ^ " ^ at 3 b
   | Binary (op, a, b) ->
     let l = binary_level op in

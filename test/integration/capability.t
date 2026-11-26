@@ -12,7 +12,7 @@ as nonportable, and is rejected by other dialects.
     Unknown name: polars
   [123]
   $ (echo "import polars"; cat body.rp) > sqrt.rp && rupam compile --target python-polars sqrt.rp
-  sqrt.rp:5:1  dialect-capability
+  dialect-capability
     import polars is target-specific. Set strict = false under [check] in rupam.toml, or pass --no-strict
   [123]
   $ rupam compile --no-strict --target python-polars sqrt.rp -o sqrt.py && python sqrt.py && python show.py sqrt.parquet

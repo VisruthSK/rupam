@@ -37,6 +37,12 @@ let elaborate path =
        (Frontend.parse (source path)))
 ;;
 
+let transform_ir path =
+  List.iter
+    (fun item -> print_endline (Sexplib0.Sexp.to_string_hum (Core.sexp_of_item item)))
+    (elaborate path)
+;;
+
 let typed path =
   List.iter
     (function
@@ -102,6 +108,7 @@ let () =
           [ stage "tokens" "Tokens with spans." tokens
           ; stage "syntax" "Syntax tree with spans." syntax
           ; stage "typed" "Inferred types or table schemas." typed
+          ; stage "transform-ir" "The checked TransformIR of every item." transform_ir
           ; Cmd.v
               (Cmd.info "code" ~doc:"Generated code and source map.")
               Term.(const (fun d -> guarded (code d)) $ dialect $ file)

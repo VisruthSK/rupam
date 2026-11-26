@@ -105,6 +105,7 @@ and form =
   | Formula of expr option * expr
   | Range of expr * expr
   | Binary of binary * expr * expr
+  | Chain of expr * (binary * expr) list
   | Unary of unary * expr
   | If of expr * expr * expr
   | Lambda of string list * expr

@@ -188,3 +188,5 @@ val files : table -> file list
 val contracts : table -> string list
 val substitute : id -> expr -> expr -> expr
 val tabular : item list -> bool
+val sexp_of_item : item -> Sexplib0.Sexp.t
+val sexp_of_table : table -> Sexplib0.Sexp.t

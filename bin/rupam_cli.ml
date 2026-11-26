@@ -2,9 +2,11 @@ open Rupam
 open Cmdliner
 
 let with_program path action =
-  let buf = Lexing.from_string (In_channel.with_open_text path In_channel.input_all) in
-  Lexing.set_filename buf path;
-  match Repl.diagnostic buf (fun () -> action (Frontend.parse buf)) with
+  match
+    Repl.diagnostic (fun () ->
+      action
+        (Frontend.read ~file:path (In_channel.with_open_text path In_channel.input_all)))
+  with
   | Ok () -> Cmd.Exit.ok
   | Error () -> Cmd.Exit.some_error
 ;;
@@ -73,23 +75,38 @@ let lock target strict path =
       (if List.length entry.inputs = 1 then "" else "s"))
 ;;
 
-let compile target strict path output =
-  targeted (Filename.dirname path) target strict
-  @@ fun project ->
-  with_program path (fun ds ->
-    let items = elaborate project path ds in
-    let entry = Lock.require ~project ~source:path items in
-    let code, locations = generate project items in
-    match output with
-    | None -> print_string code
-    | Some output ->
-      Artifact.write
-        ~entry
-        ~program_sha256:(Data_file.digest path)
-        ~locations
-        ~output
-        ~code
-        items)
+type emit =
+  | Script
+  | Transform_ir
+
+let transform_ir strict path =
+  guarded (fun () ->
+    let project = settings (Filename.dirname path) None strict in
+    with_program path (fun ds ->
+      List.iter
+        (fun item -> print_endline (Sexplib0.Sexp.to_string_hum (Core.sexp_of_item item)))
+        (elaborate project path ds)))
+;;
+
+let compile target strict path output = function
+  | Transform_ir -> transform_ir strict path
+  | Script ->
+    targeted (Filename.dirname path) target strict
+    @@ fun project ->
+    with_program path (fun ds ->
+      let items = elaborate project path ds in
+      let entry = Lock.require ~project ~source:path items in
+      let code, locations = generate project items in
+      match output with
+      | None -> print_string code
+      | Some output ->
+        Artifact.write
+          ~entry
+          ~program_sha256:(Data_file.digest path)
+          ~locations
+          ~output
+          ~code
+          items)
 ;;
 
 let check strict path =
@@ -137,8 +154,26 @@ let repl target strict path =
     Cmd.Exit.ok)
 ;;
 
+let session target strict path =
+  let directory = Option.fold ~none:(Sys.getcwd ()) ~some:Filename.dirname path in
+  guarded (fun () ->
+    let project = settings directory target strict in
+    let session = Session.create ~project ~directory in
+    Option.iter (Session.load session) path;
+    Server.run session stdin stdout;
+    Cmd.Exit.ok)
+;;
+
 let commands =
   [ command
+      "session"
+      "Serve the analysis session as JSON-RPC 2.0, one message per line."
+      Term.(
+        const session
+        $ target
+        $ strict
+        $ Arg.(value & pos 0 (some file) None & info [] ~docv:"FILE.rp"))
+  ; command
       "run"
       "Compile a program for the target dialect and run the generated script."
       Term.(const run $ target $ strict $ program)
@@ -174,7 +209,14 @@ let commands =
             & info
                 [ "o"; "output" ]
                 ~docv:"OUT"
-                ~doc:"Write the script with a manifest and source map."))
+                ~doc:"Write the script with a manifest and source map.")
+        $ Arg.(
+            value
+            & opt (enum [ "script", Script; "transform-ir", Transform_ir ]) Script
+            & info
+                [ "emit" ]
+                ~docv:"FORM"
+                ~doc:"$(b,script) (default) or $(b,transform-ir), the checked IR."))
   ; command
       "schema"
       "Describe the tables in a data-dict contract."

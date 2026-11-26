@@ -280,10 +280,39 @@ let elevation(x) = match? x {
 
 `elevation` requires every present argument to lie in `[1, 3000]`.
 
-### Sign and presence refinements
+### Sign, interval and presence refinements
 
 A numeric type may carry `> 0`, `>= 0` or `!= 0` after the type, e.g.
-`Float > 0` or `Float? > 0` (every present value is positive).
+`Float > 0` or `Float? > 0` (every present value is positive), or an interval
+written in range notation after `in`:
+
+| Interval | Rupam |
+| --- | --- |
+| [0, 1] | `Float in 0..=1` |
+| [0, 1) | `Float in 0..<1` |
+| (0, 1] | `Float in 0<..=1` |
+| (0, 1) | `Float in 0<..<1` |
+| [0, ∞) | `Int in 0..` |
+| (−∞, 1] | `Float in ..=1` |
+
+`a<..` excludes its lower bound; a bare lower bound includes it, as in
+patterns. Bounds are numeric literals. Common domains:
+
+```rupam
+type Probability = Float in 0..=1
+type Correlation = Float in -1..=1
+type Percentage = Float in 0..=100
+type Latitude = Float in -90..=90
+type Longitude = Float in -180..=180
+type Count = Int in 0..
+```
+
+An interval is a refinement like the sign forms (`Float > 0` is
+`Float in 0<..`): it has no runtime representation, flows through inference,
+discharges obligations, establishes match exhaustiveness and is established
+from the same sources below, including validated contract bounds.
+Applying a refined parameter to a value whose interval is
+not entailed is a `refinement-required` diagnostic naming the uncovered part.
 Integral-valuedness and presence are also inferred. These properties have no
 runtime representation. Exact constant and interval facts may be retained
 internally to discharge obligations, without adding user-defined refinements.

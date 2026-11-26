@@ -17,7 +17,8 @@ type host =
   }
 
 type t =
-  { mutable project : Project.t
+  { directory : string
+  ; mutable project : Project.t
   ; mutable path : string option
   ; mutable current : revision
   ; mutable past : revision list
@@ -36,7 +37,8 @@ type event =
 let history_limit = 100
 
 let create ~project ~directory =
-  { project
+  { directory
+  ; project
   ; path = None
   ; current =
       { number = 0
@@ -52,6 +54,7 @@ let create ~project ~directory =
 ;;
 
 let env t = t.current.env
+let directory t = t.directory
 let project t = t.project
 let path t = t.path
 let revision t = t.current.number
@@ -162,8 +165,16 @@ let declare t (env, accepted, events) d =
         | Show _ | Variant _ -> false)
       items
   in
+  let deferred =
+    target t = None
+    && List.for_all
+         (function
+           | Core.Define _ -> true
+           | _ -> false)
+         effects
+  in
   let events =
-    if effects = []
+    if effects = [] || deferred
     then events
     else (
       let h = establish t in
@@ -214,9 +225,10 @@ let submit t declarations =
 ;;
 
 let load t path =
-  let buf = Lexing.from_string (In_channel.with_open_text path In_channel.input_all) in
-  Lexing.set_filename buf path;
-  ignore (submit t (Frontend.parse buf));
+  ignore
+    (submit
+       t
+       (Frontend.read ~file:path (In_channel.with_open_text path In_channel.input_all)));
   t.path <- Some path;
   t.saved <- Some t.current.number
 ;;
@@ -224,7 +236,7 @@ let load t path =
 let check t (d : Syntax.declaration) = snd (Elaborate.item t.current.env d)
 
 let table t source =
-  match Frontend.parse (Lexing.from_string source) with
+  match Frontend.read source with
   | [ (Syntax.Evaluate _ as d) ] ->
     (match check t d with
      | [ Show { node = Table table; _ } ] -> table

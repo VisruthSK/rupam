@@ -227,3 +227,24 @@ let valid_prefix source =
        | Parser.Error | Diagnostic.Error _ -> None)
     (boundaries 0 [])
 ;;
+
+let read ?(file = "") source =
+  let buf = Lexing.from_string source in
+  Lexing.set_filename buf file;
+  let span () = buf.lex_start_p, buf.lex_curr_p in
+  match parse buf with
+  | declarations -> declarations
+  | exception Parser.Error ->
+    if Lexing.lexeme buf = ""
+    then Diagnostic.fail ~span:(span ()) Incomplete_input "The input ends too early"
+    else Diagnostic.fail ~span:(span ()) Syntax_error ("Unexpected " ^ Lexing.lexeme buf)
+  | exception Diagnostic.Error ({ span = None; _ } as d) ->
+    raise (Diagnostic.Error { d with span = Some (span ()) })
+;;
+
+let incomplete source =
+  match read source with
+  | _ -> false
+  | exception Diagnostic.Error { code = Incomplete_input; _ } -> true
+  | exception Diagnostic.Error _ -> false
+;;

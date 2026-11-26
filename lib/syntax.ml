@@ -112,6 +112,7 @@ and form =
   | Formula of expr option * expr
   | Range of expr * expr
   | Binary of binary * expr * expr
+  | Chain of expr * (binary * expr) list
   | Unary of unary * expr
   | If of expr * expr * expr
   | Lambda of string list * expr
@@ -180,6 +181,7 @@ let map f x =
     | Formula (a, b) -> Formula (Option.map f a, f b)
     | Range (a, b) -> Range (f a, f b)
     | Binary (op, a, b) -> Binary (op, f a, f b)
+    | Chain (a, links) -> Chain (f a, List.map (fun (op, x) -> op, f x) links)
     | Unary (op, a) -> Unary (op, f a)
     | If (c, a, b) -> If (f c, f a, f b)
     | Lambda (ps, b) -> Lambda (ps, f b)

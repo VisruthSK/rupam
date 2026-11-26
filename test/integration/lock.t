@@ -22,9 +22,9 @@ A compiled script refuses data changed since the lock, in both dialects.
   ls: cannot access 'regional.parquet': No such file or directory
   [2]
   $ rupam compile --target python-polars shop.rp
-  shop.rp:29:1  stale-lock
+  stale-lock
     orders.parquet changed since rupam lock. Run rupam lock shop.rp, then compile again.
   [123]
   $ rupam lock --target python-polars shop.rp 2>&1 | head -3
-  shop.rp:29:1  contract-failure
+  contract-failure
     data-dict.yaml does not match its data: has 1 null value

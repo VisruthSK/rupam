@@ -60,10 +60,12 @@ let rec expr ctx (x : Syntax.expr) : C.expr =
     (match op with
      | Not -> expect span T.Bool (T.present v.typ)
      | Negate -> expect span (T.fresh ~kind:Number ctx.level) (T.present v.typ));
-    lift span v.shape [ v ] (function
+    lift ctx.env span v.shape [ v ] (function
       | [ v ] -> make v.shape (T.present v.typ) (Unary (op, v))
       | _ -> assert false)
   | Binary (op, a, b) -> binary ctx span op (here a) (here b)
+  | Chain (first, links) ->
+    chain ctx span (here first) (List.map (fun (op, x) -> op, here x) links)
   | If (c, a, b) ->
     let c = here c in
     if T.is_optional c.typ
@@ -86,7 +88,7 @@ let rec expr ctx (x : Syntax.expr) : C.expr =
       match set.node with
       | List _ -> ()
       | _ -> fail set.span Wrong_arguments "%in% needs a list of values");
-    lift span v.shape [ v ] (function
+    lift ctx.env span v.shape [ v ] (function
       | [ v ] -> make v.shape T.Bool (Member (v, set))
       | _ -> assert false)
   | Interpolate pieces -> interpolate ctx span pieces
@@ -125,7 +127,7 @@ let rec expr ctx (x : Syntax.expr) : C.expr =
        expr { ctx with env = bind ctx.env n (Inline v) } body
      | None ->
        let v = expr { ctx with level = ctx.level + 1 } v in
-       let id = fresh_id n in
+       let id = fresh_id ctx.env n in
        let body =
          expr
            { ctx with
@@ -135,7 +137,7 @@ let rec expr ctx (x : Syntax.expr) : C.expr =
        in
        make body.shape body.typ (Let (id, v, body)))
   | Lambda (params, body) ->
-    let ids = List.map fresh_id params in
+    let ids = List.map (fresh_id ctx.env) params in
     let types = List.map (fun _ -> T.fresh ctx.level) params in
     let env =
       List.fold_left2
@@ -210,6 +212,39 @@ and name ctx span reference n =
              fail span Unknown_column ("No column named " ^ n ^ did_you_mean (Some m))
            | hint -> fail span Unknown_name ("Unknown name: " ^ n ^ did_you_mean hint))))
 
+and chain ctx span first links =
+  let shared (x : C.expr) =
+    match x.node with
+    | Constant _ | Variable _ | Column _ -> None, x
+    | _ ->
+      let id = fresh_id ctx.env "middle" in
+      Some (id, x), make x.span x.shape x.typ (Variable id)
+  in
+  let last = List.length links - 1 in
+  let bound, links =
+    List.mapi (fun i (op, x) -> if i = last then (None, x), op else shared x, op) links
+    |> List.map (fun ((binding, x), op) -> binding, (op, x))
+    |> List.split
+  in
+  let _, comparisons =
+    List.fold_left
+      (fun (left, acc) (op, right) -> right, binary ctx span op left right :: acc)
+      (first, [])
+      links
+  in
+  let conjunction =
+    match List.rev comparisons with
+    | [] -> assert false
+    | c :: rest -> List.fold_left (fun a b -> binary ctx span And a b) c rest
+  in
+  List.fold_right
+    (fun binding body ->
+       match binding with
+       | None -> body
+       | Some (id, value) -> make span body.C.shape body.typ (Let (id, value, body)))
+    bound
+    conjunction
+
 and binary ctx span op a b =
   let make = make span in
   let number t = expect span (T.fresh ~kind:Number ctx.level) t in
@@ -239,7 +274,7 @@ and binary ctx span op a b =
          | Div | Power -> assert false) )
   in
   let shape = shape_of span [ a; b ] in
-  lift span shape [ a; b ] (function
+  lift ctx.env span shape [ a; b ] (function
     | [ a; b ] -> make shape result (Binary (op, a, b))
     | _ -> assert false)
 
@@ -371,7 +406,7 @@ and apply ctx span (f : C.expr) values =
           (fun l (v : C.expr) ->
              if l
              then (
-               let id = fresh_id "v" in
+               let id = fresh_id ctx.env "v" in
                Some (id, v), { v with node = Variable id; typ = T.present v.typ })
              else None, v)
           lifted
@@ -442,7 +477,7 @@ and builtin ctx span n b args =
     (match row with
      | Present | Absent -> make shape T.Bool (Builtin (row, values))
      | _ ->
-       lift span shape values (fun values ->
+       lift ctx.env span shape values (fun values ->
          make shape (T.resolve result) (Builtin (row, values))))
   | Reduction Count, [] ->
     if ctx.columns = None then fail span Column_required "n() counts the rows of a table";
@@ -515,7 +550,7 @@ and interpolate ctx span pieces =
       pieces
   in
   let shape = shape_of span shown in
-  lift span shape shown (fun values ->
+  lift ctx.env span shape shown (fun values ->
     let rec rebuild values = function
       | [] -> []
       | `Fixed s :: rest -> C.Fixed s :: rebuild values rest
@@ -531,10 +566,10 @@ and match_ ctx span (subject : C.expr) syntax_arms =
   let rec pattern t = function
     | Syntax.Wildcard -> C.Wildcard, []
     | Bind n ->
-      let id = fresh_id n in
+      let id = fresh_id ctx.env n in
       C.Bind id, [ n, id, t ]
     | Pas (n, p) ->
-      let id = fresh_id n in
+      let id = fresh_id ctx.env n in
       let p, vars = pattern t p in
       C.Named (id, p), (n, id, t) :: vars
     | Pliteral Absent ->
@@ -561,7 +596,7 @@ and match_ ctx span (subject : C.expr) syntax_arms =
     | Precord names ->
       let fields = List.map (fun n -> n, T.fresh ctx.level) names in
       expect span (T.Record { fields; rest = Some (T.fresh ctx.level) }) t;
-      let ids = List.map (fun (n, ft) -> n, fresh_id n, ft) fields in
+      let ids = List.map (fun (n, ft) -> n, fresh_id ctx.env n, ft) fields in
       C.Fields (List.map (fun (n, id, _) -> n, id) ids), ids
     | Ptuple ps ->
       let ts = List.map (fun _ -> T.fresh ctx.level) ps in
@@ -967,7 +1002,7 @@ let function_ env name params body =
   let ctx = { env; level = 1; columns = None; missing = env.missing } in
   let host () =
     let lambda = expr ctx { body with form = Lambda (params, body) } in
-    let id = fresh_id name in
+    let id = fresh_id env name in
     ( bind
         env
         name
@@ -979,7 +1014,7 @@ let function_ env name params body =
     let inner =
       List.fold_left2
         (fun inner p t ->
-           bind inner p (Inline (make body.span Columnar t (Variable (fresh_id p)))))
+           bind inner p (Inline (make body.span Columnar t (Variable (fresh_id env p)))))
         env
         params
         types
@@ -1045,7 +1080,7 @@ let item env (d : Syntax.declaration) =
     -> function_ env name params body
   | Let (name, None, x) ->
     let e = finish ~default:true (expr ctx x) in
-    let id = fresh_id name in
+    let id = fresh_id env name in
     (match e.node with
      | Table t -> bind env name (Table_value { id; table = t }), [ C.Define (id, e) ]
      | _ ->

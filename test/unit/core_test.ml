@@ -144,3 +144,16 @@ let%expect_test "reserved and R forms" =
     r-range
     |}]
 ;;
+
+let%expect_test "comparisons chain in one direction" =
+  run "let x = 5\n0 < x * 2 <= 10";
+  run "1 < 2 > 0";
+  run "1 == 1 == 1";
+  [%expect
+    {|
+    x : Int64 = 5
+    TRUE : Bool
+    syntax-error
+    syntax-error
+    |}]
+;;

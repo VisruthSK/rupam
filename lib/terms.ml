@@ -97,7 +97,7 @@ let common span (a : C.expr) (b : C.expr) =
     a, b, ea
 ;;
 
-let lift span shape operands build =
+let lift env span shape operands build =
   let optional = List.exists (fun (x : C.expr) -> T.is_optional x.typ) operands in
   if (not optional) || shape = C.Columnar
   then (
@@ -109,7 +109,7 @@ let lift span shape operands build =
         (fun (x : C.expr) ->
            if T.is_optional x.typ
            then (
-             let id = fresh_id "v" in
+             let id = fresh_id env "v" in
              Some (id, x), make x.span x.shape (T.present x.typ) (C.Variable id))
            else None, x)
         operands

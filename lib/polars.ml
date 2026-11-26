@@ -142,6 +142,7 @@ let rec expression ~scalar (e : C.expr) : P.expr =
           ; P.Keyword ("separator", P.Str "")
           ] )
     | Reduce (r, policy, x) -> reduce ~scalar e r policy x
+    | Let (id, v, body) -> go (C.substitute id v body)
     | Lift (bound, body) ->
       go (List.fold_left (fun body (id, value) -> C.substitute id value body) body bound)
     | Foreign (m, f, _) ->

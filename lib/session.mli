@@ -10,6 +10,7 @@ val create : project:Project.t -> directory:string -> t
 val load : t -> string -> unit
 val close : t -> unit
 val env : t -> Scope.env
+val directory : t -> string
 val project : t -> Project.t
 val target : t -> Target.t option
 val set_target : t -> Target.t -> origin:string -> unit

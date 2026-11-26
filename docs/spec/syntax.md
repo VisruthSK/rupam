@@ -128,7 +128,10 @@ field_pattern = ident [ "=" pattern ] ;
 signed_number = [ "-" ] numeric_literal ;
 
 type          = refined_type [ "->" type ] ;
-refined_type  = optional_type [ ( ">" | ">=" | "!=" ) "0" ] ;
+refined_type  = optional_type [ ( ">" | ">=" | "!=" ) "0" | "in" interval ] ;
+interval      = signed_number [ "<" ] ( "..=" | "..<" ) signed_number
+              | signed_number [ "<" ] ".."
+              | ( "..=" | "..<" ) signed_number ;
 optional_type = atom_type [ "?" ] ;
 atom_type     = Ident [ "<" type_arg { "," type_arg } ">" ] | ident
               | "[" type "]"
@@ -188,7 +191,7 @@ Tightest first:
 5. `+` `-`
 6. `..=` `..<`, and `:` in column selectors
 7. `??`, right-associative
-8. comparisons, `~=`, `in` and `not in` (non-associative)
+8. comparisons, `~=`, `in` and `not in` (ordering comparisons chain; others are non-associative)
 9. `not`
 10. `and`
 11. `or`
@@ -196,7 +199,9 @@ Tightest first:
 13. `|>`
 14. `fn`, `if`, `match`, `let ... in` (extend right)
 
-`-x^y`, `a < b < c` and `a ~ b ~ c` are parse errors. The parser rejects
+`0 < x <= 10` chains: it means `0 < x and x <= 10` with `x` evaluated once.
+A chain uses only `<`/`<=` or only `>`/`>=`; `a < b > c`, `a == b == c` and
+chained `in` are parse errors, as are `-x^y` and `a ~ b ~ c`. The parser rejects
 an unparenthesised power directly under unary minus even though the EBNF
 recognises its token sequence; write `-(x^y)` or `(-x)^y`. `not x > 0` means
 `not (x > 0)`. `revenue ?? 0.0 > 100.0` means `(revenue ?? 0.0) > 100.0`;

@@ -180,6 +180,9 @@ check that proved obligations emit no redundant runtime assertions.
 | C143 | `match? score { 90.. => "A", ..<90 => "B" }` over `[95, None, 10]` | `["A", None, "B"]`, type `String?` |
 | C144 | `:target python-polars` after a `write` in an R session | no rewrite of the file; R-specific evidence discarded; values re-established only on demand |
 | C145 | pipeline with `!view()` and `!hist(revenue)` taps, then `:save` | taps run once in pipeline order, leave the value unchanged and are absent from saved source |
+| C146 | `0 < x <= 10` over `[0, 5, 10, 11]`; `1 < 2 > 0`; `1 == 1 == 1` | `[FALSE, TRUE, TRUE, FALSE]`; both others `syntax-error` |
+| C147 | `let p(x: Float in 0..=1) = x`; `p(0.5)`, `p(1.5)`, `p(mean(probs))` where `probs` has contract bounds [0, 1] | 0.5; `refinement-required` naming (1, 1.5]; checks |
+| C148 | `Float in 0<..<1` written as a parameter and displayed by `:type` | displayed as written |
 
 ## Additional implementation requirements
 

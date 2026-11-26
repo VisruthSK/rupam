@@ -178,15 +178,23 @@ whether that revision is still current. Values are returned as typed data:
 
 ## Session protocol
 
-`rupam session` speaks JSON-RPC 2.0 over standard input and output, one JSON
-object per line. The first exchange negotiates a protocol version and returns
-the capabilities of the running binary: operations, dialects, effect kinds,
-exposure level, diagnostic codes and standard-library names.
+`rupam session [FILE]` speaks JSON-RPC 2.0 over standard input and output, one
+JSON object per line, over the same session library as the REPL. `capabilities`
+returns the protocol version, methods, targets, effect kinds, exposure level,
+diagnostic codes and standard-library names; the method list is the protocol's
+own declaration table.
 
 | Operation | Result |
 | --- | --- |
 | `context` | the context description, text and structured |
+| `capabilities`, `version` | what this binary serves; its build identity |
 | `options` | effective settings and their sources |
+| `bindings` | accepted names and their types |
+| `complete` | completions at the end of a draft, from the REPL's completion |
+| `submit` | check and accept source items at an expected revision; their events |
+| `undo`, `redo` | move to the previous or next revision at an expected revision |
+| `target` | select a language and dialect without replaying effects |
+| `preview` | a bounded page of a table expression |
 | `check` | diagnostics, type, effects and holes for a draft; runs nothing |
 | `complete` | completions at a cursor in a draft |
 | `define` | install or replace an item; dependants and effects |
@@ -203,8 +211,11 @@ exposure level, diagnostic codes and standard-library names.
 | `lock`, `status` | lock the analysis; lock and staleness status |
 | `cancel` | cancel a request |
 
-- Every reply carries its request ID and the session revision it observed. A
-  reply for a superseded revision is marked stale.
+- Every reply carries its request ID and the session revision it observed.
+  A mutation whose expected revision is not current fails as `superseded`.
+- Errors carry `data.category`: `protocol` (malformed JSON, unknown method,
+  invalid params), `diagnostic` (code, message, span), `execution` (host or
+  runtime failure), `cancelled` or `superseded`.
 - Long operations report progress and accept `cancel`.
 - Program output, diagnostics and protocol messages are separate fields.
 - Request and reply types are defined once in OCaml; their JSON Schema is

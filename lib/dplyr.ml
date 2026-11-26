@@ -93,6 +93,7 @@ let rec expression names (e : C.expr) : R.expr =
   | Require x -> R.call "rp_present" [ go x ]
   | Count -> integer64 (R.qualified "dplyr" "n" [])
   | Reduce (r, policy, x) -> reduce names r policy x
+  | Let (id, v, body) -> R.Block ([ Host.name names id, go v ], go body)
   | Lift (bound, body) ->
     let substituted =
       List.fold_left
@@ -118,7 +119,6 @@ let rec expression names (e : C.expr) : R.expr =
   | Match _
   | Lambda _
   | Construct _
-  | Let _
   | Tuple _
   | List _
   | Record _

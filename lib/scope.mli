@@ -34,10 +34,11 @@ and env =
   ; group_missing : Core.policy option
   ; directory : string
   ; strict : bool
+  ; supply : int ref
   }
 
 val empty : directory:string -> strict:bool -> env
-val fresh_id : string -> Core.id
+val fresh_id : env -> string -> Core.id
 val fail : Diagnostic.span -> Diagnostic.code -> string -> 'a
 val bind : env -> string -> binding -> env
 val lookup : env -> string -> binding option

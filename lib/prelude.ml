@@ -21,6 +21,7 @@ type row =
   | Starts
   | Ends
   | Detect
+[@@deriving sexp_of]
 
 type reduction =
   | Sum
@@ -32,6 +33,7 @@ type reduction =
   | Max
   | Distinct
   | Count
+[@@deriving sexp_of]
 
 type builtin =
   | Row of row
