@@ -151,7 +151,7 @@ let grid_pipeline () =
   let dir = fresh [ "shop.rp"; "orders.parquet"; "data-dict.yaml" ] in
   session ~dir [ "repl"; "--target"; "python-polars"; "shop.rp" ] (fun c term ->
     submit c term ":view orders";
-    see c "i edit";
+    see c "╭";
     press c term K.Right;
     until c (highlighted "North");
     type_ c term "SSS";
@@ -185,7 +185,7 @@ let grid_pipeline () =
     C.send c (String.concat "" (List.init 11 (fun _ -> key term K.Backspace)));
     paste c term "kept_orders";
     press c term K.Enter;
-    gone c "i edit";
+    gone c "╭";
     submit c term ":save saved.rp";
     see c "Saved saved.rp";
     submit c term ":quit");
@@ -229,7 +229,6 @@ let multiline_draft () =
        see c "39.10";
        wheel_down c term "39.10";
        type_ c term "i";
-       gone c "i edit";
        press c term ~mods:{ K.no_mods with shift = true } K.Enter;
        press c term ~mods:{ K.no_mods with ctrl = true; shift = true } (char 'm');
        check "grid kept" (shows "344 rows" term);
@@ -243,9 +242,8 @@ let multiline_draft () =
        see c "not-a-table";
        check "no write" (not (Sys.file_exists (Filename.concat dir "unapproved.parquet")));
        press c term K.Escape;
-       see c "i edit";
        press c term K.Escape;
-       gone c "i edit";
+       gone c "╭";
        submit c term ":bindings";
        see c "penguins :";
        check "no implicit binding" (not (shows "view_result" term)))
@@ -320,7 +318,7 @@ let cancellation () =
     [ "repl"; "--target"; "python-polars"; "viewer-penguins.rp" ]
     (fun c term ->
        submit c term ":view penguins";
-       see c "i edit";
+       see c "╭";
        touch slow;
        type_ c term "s";
        let pid, ready = started_pid () in
@@ -331,9 +329,9 @@ let cancellation () =
        see c "ordered by (species desc)";
        check "superseded worker killed" (not (alive first));
        type_ c term "q";
-       gone c "i edit";
+       gone c "╭";
        submit c term ":view penguins";
-       see c "i edit";
+       see c "╭";
        Sys.remove started;
        touch slow;
        type_ c term "s";
@@ -341,15 +339,34 @@ let cancellation () =
        poll c ready;
        let second = Option.get !pid in
        press c term K.Escape;
-       gone c "i edit";
+       gone c "╭";
        check "cancelled worker killed" (not (alive second));
        Sys.remove slow;
        submit c term ":preview penguins";
        see c "344 rows")
 ;;
 
+let paste_formats () =
+  let dir = fresh [ "viewer-penguins.rp"; "penguins.csv" ] in
+  session
+    ~dir
+    [ "repl"; "--target"; "python-polars"; "viewer-penguins.rp" ]
+    (fun c term ->
+       paste
+         c
+         term
+         "penguins |> arrange($bill_len, desc($bill_dep)) |> filter(some(bill_dep) and \
+          bill_dep > 17.9)";
+       until c (fun term ->
+         List.exists
+           (fun line ->
+              contains ~affix:"|> filter(" line && not (contains ~affix:"penguins" line))
+           (lines term)))
+;;
+
 let tests =
-  [ "escape cancels a preview without killing the REPL worker", cancellation
+  [ "paste formats a complete pipeline", paste_formats
+  ; "escape cancels a preview without killing the REPL worker", cancellation
   ; "completion menu filters while typing", completion
   ; "grid pipeline and saved source", grid_pipeline
   ; "multiline draft keeps the grid and defers writes", multiline_draft

@@ -77,11 +77,14 @@ The grid has focus on opening. Arrows or `hjkl` move the selected cell,
 PgUp/PgDn and space page, `g`/`G` jump to the ends, `s`/`S` sort by the
 current column, `=` keeps rows equal to the selected cell (asking for a
 missing policy only when one is unresolved), `u` undoes the last edit and `d`
-shows column details beside the grid. Each grid action rewrites the prompt's
+describes the column in a panel beside the grid, with missing counts in the missing-value colour. Each grid action rewrites the prompt's
 pipeline as typed Rupam syntax. `i` or Tab moves to the prompt and Esc moves
 back; `q` or Esc on the grid closes it and restores the REPL. Enter on a
 `let name = …` draft binds it; a bare pipeline first asks for a name. The
-binding joins the accepted source saved by `:save`. The grid and prompt are
+binding joins the accepted source saved by `:save`. Keys are not shown by
+default: `?` on the grid or `:help` at the viewer prompt lists them. Ctrl+G
+opens the draft in `$VISUAL` or `$EDITOR` and formats it on return; a
+complete pasted item is formatted the same way. The grid and prompt are
 placed by a layout parameter, so the prompt can sit below or beside the grid.
 
 - **Grid:** virtualised rows and columns over the Arrow snapshot; only visible pages

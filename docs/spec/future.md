@@ -231,6 +231,12 @@ Types* (POPL 2019).
 
 ## Horizontal reductions
 
+`all(columns, predicate)` and `any(columns, predicate)` reduce a predicate
+across columns within each row, giving a present `Bool` per row:
+`filter(all(bill_len:sex, some))`. `columns` is explicit names, a range or
+a predicate selector such as `where(is_number)`, resolved against the schema
+at that stage.
+
 Reductions across selected columns within each observation (questionnaire
 scores, composite indicators, row-level missingness), with an explicit axis
 that fits shape inference and missing policies, preserves the observation
@@ -258,3 +264,10 @@ compatibility, temporal types, cardinality guarantees and evidence. Direction,
 tolerance, ambiguity and coverage are explicit; established facts such as
 non-overlapping intervals inform cardinality. Precedents: Polars non-equi and
 as-of joins; dplyr inequality, rolling and overlap joins.
+
+## Inline help
+
+`?name` at the prompt shows documentation for a function, verb, binding,
+column or type, as R's `?`, from the same declarations that drive completion
+and `rupam explain`. `??term` searches names and descriptions. In the viewer,
+`?` on its own shows the key bindings.

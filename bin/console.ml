@@ -19,6 +19,10 @@ type msg =
   | Focus_grid
   | Newline
   | Insert_pipe
+  | Pasted of string
+  | Toggle_help
+  | External_edit
+  | Edited of string
   | Ignore
   | Name_edit of Editor.t
   | Name_confirm
@@ -39,6 +43,7 @@ type model =
   ; viewer : Viewer.t option
   ; editing : bool
   ; naming : Editor.t option
+  ; help : bool
   ; placement : placement
   ; working : work option
   ; closing : bool
@@ -315,6 +320,7 @@ let prompt_editor ?key ?on_focus_request ~focused ~label ~state ~on_change () =
     ~size:full
     [ text ~style:(style ~bold:true accent) label
     ; textarea
+        ~wrap:`Word
         ?key
         ?on_focus_request
         ~size:full
@@ -329,7 +335,14 @@ let prompt_editor ?key ?on_focus_request ~focused ~label ~state ~on_change () =
 ;;
 
 let input_pane model ~focused =
-  let lines = List.length (String.split_on_char '\n' (Editor.text model.input)) in
+  let columns = max 1 (fst model.size - 9) in
+  let lines =
+    List.fold_left
+      (fun total line ->
+         total + max 1 ((Rupam.Display.width line + columns - 1) / columns))
+      0
+      (String.split_on_char '\n' (Editor.text model.input))
+  in
   box
     ~flex_direction:Row
     ~size:{ width = pct 100; height = px (max 1 (min 8 lines)) }
@@ -389,7 +402,10 @@ let grid model (v : Viewer.t) =
   let body =
     box
       ~flex_direction:Column
-      ~size:{ width = pct 100; height = px (max 1 (height - Viewer.panel_height)) }
+      ~size:
+        { width = pct (if model.help || Viewer.bars ~digits v <> [] then 68 else 100)
+        ; height = px (max 1 (height - Viewer.panel_height))
+        }
       [ text ~style:(style subtle) (Rupam.Page.summary ~ordering page)
       ; grid_table ~digits v page
       ]
@@ -414,17 +430,38 @@ let grid model (v : Viewer.t) =
              (String.split_on_char '\n' (Rupam.Diagnostic.render diagnostic)))
       | None, None -> text "")
   in
-  let hint =
-    if model.editing
-    then []
-    else
-      [ text
-          ~style:(style faint)
-          "s/S sort \xc2\xb7 = filter to value \xc2\xb7 d describe column \xc2\xb7 u \
-           undo \xc2\xb7 i edit \xc2\xb7 q close"
-      ]
+  let keys =
+    [ "arrows, hjkl   move"
+    ; "PgUp/PgDn      page"
+    ; "g / G          first / last row"
+    ; "s / S          sort ascending / descending"
+    ; "=              filter to value"
+    ; "d              describe column"
+    ; "u              undo"
+    ; "i, Tab         edit at the prompt"
+    ; "Esc            back to the grid"
+    ; "Shift+Enter    new line"
+    ; "Ctrl+Shift+M   insert |>"
+    ; "Ctrl+G         edit in $EDITOR"
+    ; "Enter          run"
+    ; "q              close"
+    ]
   in
-  let details = List.map (text ~style:(style typed)) (Viewer.bars ~digits v) in
+  let line text_ =
+    match Astring.String.cut ~sep:"   Missing " text_ with
+    | Some (before, count) ->
+      box
+        ~flex_direction:Row
+        [ text ~style:(style typed) (before ^ "   ")
+        ; text ~style:(style missing) ("Missing " ^ count)
+        ]
+    | None -> text ~style:(style typed) text_
+  in
+  let side =
+    if model.help
+    then List.map (text ~style:(style subtle)) keys
+    else List.map line (Viewer.bars ~digits v)
+  in
   let naming =
     match model.naming with
     | None -> []
@@ -450,7 +487,15 @@ let grid model (v : Viewer.t) =
     box
       ~flex_direction:Column
       ~size:{ width = pct 100; height = auto }
-      ((body :: details) @ hint)
+      [ box
+          ~flex_direction:Row
+          ~size:{ width = pct 100; height = auto }
+          (body
+           ::
+           (if side = []
+            then []
+            else [ box ~flex_direction:Column ~margin:(margin_lrtb 2 0 1 0) side ]))
+      ]
   in
   match model.placement with
   | Below ->
@@ -707,14 +752,26 @@ let result_of f =
   | exception exn -> Error (Rupam.Diagnostic.of_exn exn)
 ;;
 
-let update msg model =
+let step msg model =
   match msg with
   | Ignore -> model, Cmd.none
   | Edit input ->
     let model = { model with input; menu = filter_menu model.session input model.menu } in
-    change_draft model (fun v -> Viewer.edit v (Editor.text input)), Cmd.none
+    if String.starts_with ~prefix:":" (String.trim (Editor.text input))
+    then model, Cmd.none
+    else change_draft model (fun v -> Viewer.edit v (Editor.text input)), Cmd.none
   | Newline ->
     let input = Editor.insert "\n" model.input in
+    ( change_draft { model with input; menu = None } (fun v ->
+        Viewer.edit v (Editor.text input))
+    , Cmd.none )
+  | Pasted text ->
+    let input = Editor.insert text model.input in
+    let input =
+      match Rupam.Frontend.read (Editor.text input) with
+      | [ item ] -> Editor.of_string (Rupam.Format.program [ item ])
+      | _ | (exception _) -> input
+    in
     ( change_draft { model with input; menu = None } (fun v ->
         Viewer.edit v (Editor.text input))
     , Cmd.none )
@@ -777,6 +834,42 @@ let update msg model =
         | None -> model, Cmd.none)
      | _ -> model, Cmd.none)
   | Act action -> change_draft model (fun v -> Viewer.act v action), Cmd.none
+  | Toggle_help -> { model with help = not model.help }, Cmd.none
+  | External_edit ->
+    let text = Editor.text model.input in
+    ( model
+    , Cmd.exec (fun () ->
+        let file = Filename.temp_file "rupam" ".rp" in
+        Out_channel.with_open_text file (fun oc -> output_string oc text);
+        let editor =
+          match Sys.getenv_opt "VISUAL", Sys.getenv_opt "EDITOR" with
+          | Some e, _ when e <> "" -> e
+          | _, Some e when e <> "" -> e
+          | _ -> "vi"
+        in
+        ignore (Sys.command (editor ^ " " ^ Filename.quote file));
+        let edited = In_channel.with_open_text file In_channel.input_all in
+        Sys.remove file;
+        Edited (String.trim edited)) )
+  | Edited text ->
+    let input =
+      match Rupam.Frontend.read text with
+      | [ item ] -> Editor.of_string (String.trim (Rupam.Format.program [ item ]))
+      | _ | (exception _) -> Editor.of_string text
+    in
+    ( change_draft { model with input; menu = None } (fun v ->
+        Viewer.edit v (Editor.text input))
+    , Cmd.none )
+  | Return when model.viewer <> None && String.trim (Editor.text model.input) = ":help" ->
+    ( { model with
+        help = true
+      ; input =
+          Option.fold
+            ~none:Editor.empty
+            ~some:(fun v -> Editor.of_string (Viewer.source v))
+            model.viewer
+      }
+    , Cmd.none )
   | Return ->
     (match model.viewer with
      | Some v when model.working = None && v.generation = v.displayed ->
@@ -841,6 +934,12 @@ let update msg model =
       finish_viewer_work { model with viewer })
 ;;
 
+let paste_formatting =
+  Sub.on_paste ~phase:Capture (fun event ->
+    Event.Paste.prevent_default event;
+    Some (Pasted (Event.Paste.text event)))
+;;
+
 let editing_keys =
   Sub.on_key ~phase:Capture (fun event ->
     let key = Event.Key.data event in
@@ -850,11 +949,35 @@ let editing_keys =
     match key.key with
     | Enter when key.mods.shift && (not key.mods.ctrl) && only_shift -> Some Newline
     | Char c
+      when Uchar.to_int c = Char.code 'g'
+           && key.mods.ctrl
+           && (not key.mods.shift)
+           && only_shift -> Some External_edit
+    | Char c
       when (Uchar.to_int c = Char.code 'm' || Uchar.to_int c = Char.code 'M')
            && key.mods.ctrl
            && key.mods.shift
            && only_shift -> Some Insert_pipe
     | _ -> None)
+;;
+
+let fit model =
+  match model.viewer with
+  | None -> model
+  | Some v ->
+    let width, height = model.size in
+    let digits = Repl.digits model.session in
+    let width =
+      if model.help || Viewer.bars ~digits v <> [] then width * 68 / 100 else width
+    in
+    if v.width = width && v.height = height
+    then model
+    else { model with viewer = Some (Viewer.resize v ~width ~height) }
+;;
+
+let update msg model =
+  let model, cmd = step msg model in
+  fit model, cmd
 ;;
 
 let subscriptions model =
@@ -865,6 +988,7 @@ let subscriptions model =
     Sub.batch
       [ resize
       ; (if model.editing && model.naming = None then editing_keys else Sub.none)
+      ; (if model.editing && model.naming = None then paste_formatting else Sub.none)
       ; (if model.working <> None || v.generation = v.settled
          then Sub.none
          else Sub.every ~id:"viewer-preview" 0.05 (fun _ -> Draft_tick))
@@ -901,6 +1025,7 @@ let subscriptions model =
                 ; Shortcut.char 'u', Act Undo
                 ; Shortcut.char 'd', Act Distribution
                 ; Shortcut.char 'i', Focus_prompt
+                ; Shortcut.char '?', Toggle_help
                 ; Shortcut.tab, Focus_prompt
                 ; Shortcut.enter, Return
                 ; Shortcut.char 'q', Close
@@ -919,6 +1044,7 @@ let subscriptions model =
     Sub.batch
       [ resize
       ; editing_keys
+      ; paste_formatting
       ; Sub.on_keys
           ~phase:Capture
           ([ Shortcut.up, Recall (-1)
@@ -961,6 +1087,7 @@ let start ~project ?path () =
               ; viewer = None
               ; editing = false
               ; naming = None
+              ; help = false
               ; placement = Below
               ; working = None
               ; closing = false
