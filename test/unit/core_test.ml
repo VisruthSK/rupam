@@ -4,13 +4,13 @@ let run source =
   match
     let env, items =
       Elaborate.program
-        (Elaborate.empty ~directory:"." ~strict:true)
+        (Scope.empty ~directory:"." ~strict:true)
         (Frontend.parse (Lexing.from_string source))
     in
     let values, shown = Reference.run [] items in
     List.iter
       (fun (name, binding, description) ->
-         match (binding : Elaborate.binding) with
+         match (binding : Scope.binding) with
          | Value { id; _ } ->
            Printf.printf
              "%s : %s = %s\n"
@@ -19,7 +19,7 @@ let run source =
              (Reference.display (List.assoc id.stamp values))
          | Function _ -> Printf.printf "%s : %s\n" name description
          | _ -> ())
-      (Elaborate.bindings env);
+      (Scope.bindings env);
     List.iter
       (fun ((e : Core.expr), v) ->
          Printf.printf "%s : %s\n" (Reference.display v) (Types.display e.typ))

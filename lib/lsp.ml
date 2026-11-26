@@ -64,7 +64,7 @@ let inspect text =
       let env =
         List.fold_left
           (fun env d -> fst (Elaborate.item env d))
-          (Elaborate.empty ~directory:"." ~strict:false)
+          (Scope.empty ~directory:"." ~strict:false)
           ds
       in
       symbols
@@ -72,8 +72,8 @@ let inspect text =
            (function
              | Let (n, _, _) ->
                Option.map
-                 (fun b -> n, Option.value (Elaborate.describe b) ~default:"")
-                 (Elaborate.lookup env n)
+                 (fun b -> n, Option.value (Scope.describe b) ~default:"")
+                 (Scope.lookup env n)
              | _ -> None)
            ds;
       []

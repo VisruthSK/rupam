@@ -57,7 +57,7 @@ let evaluate source =
   match
     let declarations = Frontend.parse (Lexing.from_string source) in
     let _, items =
-      Elaborate.program (Elaborate.empty ~directory:"." ~strict:true) declarations
+      Elaborate.program (Scope.empty ~directory:"." ~strict:true) declarations
     in
     let env, shown = Reference.run [] items in
     match List.rev items with

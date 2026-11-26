@@ -11,6 +11,7 @@ The REPL previews the same table in both persistent workers.
      <String>       <Int64>    <Float64?>
   1  North                2         10.00
   2  South                1          5.00
+  r-dplyr
   2 rows × 3 columns, ordered
      region    transactions  total_margin
      <String>       <Int64>    <Float64?>

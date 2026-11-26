@@ -218,10 +218,10 @@ adapter, not a second session engine or checker.
 
 ### Protocol
 
-- Supported revisions are `2026-07-28` (stateless; session identity travels in
-  request metadata) and the preceding stateful revisions `2025-06-18` and
-  `2025-11-25`, negotiated at initialisation. Older clients receive the
-  stateful lifecycle over the same session.
+- The supported revision is `2026-07-28` only: stateless, with no
+  initialisation handshake or transport session. Every request carries the
+  protocol version and the Rupam session handle in its metadata. Clients on
+  older revisions are refused with a protocol error naming the supported one.
 - Analytical state is independent of the transport. Requests address a
   session handle and result handles explicitly, each scoped to the
   authenticated client. A dropped connection keeps the session for a bounded

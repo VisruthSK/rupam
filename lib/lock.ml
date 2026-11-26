@@ -1,6 +1,6 @@
 open Ppx_yojson_conv_lib.Yojson_conv.Primitives
 
-let compiler = "rupam 0.1.0"
+let compiler = "rupam " ^ Version.version
 let file_name = "rupam.lock"
 
 type input =
@@ -23,7 +23,7 @@ type schema =
 
 type entry =
   { source : string
-  ; dialect : Project.dialect
+  ; target : Target.t
   ; compiler : string
   ; strict : bool
   ; inputs : input list
@@ -115,7 +115,7 @@ let analysis ~(project : Project.t) ~source items =
   in
   let entry =
     { source = relative root source
-    ; dialect = Project.require_dialect project
+    ; target = Project.require_target project
     ; compiler
     ; strict = project.strict.value
     ; inputs =
@@ -132,7 +132,7 @@ let analysis ~(project : Project.t) ~source items =
 let write root entry =
   let others =
     List.filter
-      (fun e -> not (e.source = entry.source && e.dialect = entry.dialect))
+      (fun e -> not (e.source = entry.source && e.target = entry.target))
       (load root)
   in
   save root (others @ [ entry ])
@@ -162,7 +162,7 @@ let require ~project ~source items =
   let root, current, contracts = analysis ~project ~source items in
   match
     List.find_opt
-      (fun e -> e.source = current.source && e.dialect = current.dialect)
+      (fun e -> e.source = current.source && e.target = current.target)
       (load root)
   with
   | Some locked ->

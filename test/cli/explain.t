@@ -17,6 +17,7 @@
          pattern-bindings, join-keys, join-collision, join-relationship,
          pivot-shape, duplicate-pivot-cell, restricted-output,
          unsupported-feature, dialect-capability, unreadable-input,
-         unsupported-column-type, contract-failure, invalid-config,
-         missing-dialect, stale-lock, host-failure, r-range or internal-error
+         unsaved-analysis, unsupported-column-type, contract-failure,
+         invalid-config, missing-target, stale-lock, host-failure, r-range or
+         internal-error
   [124]

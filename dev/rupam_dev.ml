@@ -33,7 +33,7 @@ let elaborate path =
   let project = Project.load (Filename.dirname path) in
   snd
     (Elaborate.program
-       (Elaborate.empty ~directory:(Filename.dirname path) ~strict:project.strict.value)
+       (Scope.empty ~directory:(Filename.dirname path) ~strict:project.strict.value)
        (Frontend.parse (source path)))
 ;;
 
@@ -90,8 +90,8 @@ let stage name doc f = Cmd.v (Cmd.info name ~doc) Term.(const (guarded f) $ file
 let dialect =
   Arg.(
     value
-    & opt (enum Project.dialects) Project.R_dplyr
-    & info [ "t"; "target" ] ~docv:"DIALECT")
+    & opt (enum Target.targets) Target.r_dplyr
+    & info [ "t"; "target" ] ~docv:"TARGET")
 ;;
 
 let () =

@@ -50,13 +50,13 @@ freely, and every file and schema format stays at version 1.
 | --- | --- | --- |
 | dplyr | 1.1.0 | `.by` grouping in generated code |
 | tidyr | 1.0.0 | `pivot_wider` |
-| arrow (R) | the release supporting `read_delim_arrow(schema =)` and int64 | ingestion and Parquet |
+| arrow (R) | current CRAN release | ingestion and Parquet; requires R ≥ 4.2 |
 | bit64 | 4.0 | exact `Int` |
-| R | the maximum of its packages' `Depends` at those floors | dplyr 1.1.0 needs R ≥ 3.5; arrow raises it |
+| R | 4.2 | arrow's `Depends`; dplyr 1.1.0 alone needs 3.5 |
 | Polars | 1.0 | stable 1.x expression API |
 | pyarrow | 20 | Arrow transfer |
 | Python | 3.9 | Polars 1.0; generated code needs 3.8 (`:=`) |
-| OCaml | 5.3 | build only |
+| OCaml | 5.5 | build only |
 
 The R and Python floors are derived, not yet tested; they become supported
 once CI passes the oldest combination. Minimum supported, tested and recommended versions are listed separately in

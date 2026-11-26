@@ -45,10 +45,11 @@ type code =
   | Unsupported_feature
   | Dialect_capability
   | Unreadable_input
+  | Unsaved_analysis
   | Unsupported_column_type
   | Contract_failure
   | Invalid_config
-  | Missing_dialect
+  | Missing_target
   | Stale_lock
   | Host_failure
   | R_range

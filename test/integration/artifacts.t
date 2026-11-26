@@ -18,7 +18,7 @@ a source map that points back to the program.
   $ grep -c map_elements checked.py
   0
   [1]
-  $ python -c "import json; m = json.load(open('checked.py.manifest.json')); print(m['dialect'], [i['path'] for i in m['inputs']], m['nonportable'])"
+  $ python -c "import json; m = json.load(open('checked.py.manifest.json')); print(m['target'], [i['path'] for i in m['inputs']], m['nonportable'])"
   python-polars ['data-dict.yaml', 'orders.parquet'] []
   $ python -c "import json; lines = open('checked.py').read().splitlines(); print(any(m['start']['line'] == 3 and '.with_columns(' in lines[m['generated_line'] - 1] for m in json.load(open('checked.py.map.json'))['mappings']))"
   True

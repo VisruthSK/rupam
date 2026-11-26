@@ -45,10 +45,11 @@ type code =
   | Unsupported_feature
   | Dialect_capability
   | Unreadable_input
+  | Unsaved_analysis
   | Unsupported_column_type
   | Contract_failure
   | Invalid_config
-  | Missing_dialect
+  | Missing_target
   | Stale_lock
   | Host_failure
   | R_range
@@ -125,10 +126,11 @@ let name = function
   | Unsupported_feature -> "unsupported-feature"
   | Dialect_capability -> "dialect-capability"
   | Unreadable_input -> "unreadable-input"
+  | Unsaved_analysis -> "unsaved-analysis"
   | Unsupported_column_type -> "unsupported-column-type"
   | Contract_failure -> "contract-failure"
   | Invalid_config -> "invalid-config"
-  | Missing_dialect -> "missing-dialect"
+  | Missing_target -> "missing-target"
   | Stale_lock -> "stale-lock"
   | Host_failure -> "host-failure"
   | R_range -> "r-range"
@@ -233,6 +235,8 @@ let explanation = function
   | Dialect_capability ->
     "The selected dialect cannot run this operation, or it requires an explicit import \
      and `strict = false`."
+  | Unsaved_analysis ->
+    "Locking records a saved program. Save the session with `:save FILE` first."
   | Unreadable_input ->
     "The data file is missing, has an unsupported extension, or cannot be read by this \
      reader."
@@ -241,8 +245,9 @@ let explanation = function
   | Contract_failure -> "The data-dict contract could not be loaded or validated."
   | Invalid_config ->
     "A `rupam.toml` key has an invalid value or the file is not valid TOML."
-  | Missing_dialect ->
-    "No dialect is set. Pass `--target` or set `[target] dialect` in `rupam.toml`."
+  | Missing_target ->
+    "No target is set. Pass `--target` or set `[target] language` and `dialect` in \
+     `rupam.toml`."
   | Stale_lock ->
     "An input, setting or dependency changed since the analysis was locked. Run `rupam \
      lock` and recompile."

@@ -16,7 +16,7 @@ type schema =
 
 type entry =
   { source : string
-  ; dialect : Project.dialect
+  ; target : Target.t
   ; compiler : string
   ; strict : bool
   ; inputs : input list

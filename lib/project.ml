@@ -1,20 +1,3 @@
-type dialect =
-  | R_dplyr
-  | Python_polars
-
-let dialect_name = function
-  | R_dplyr -> "r-dplyr"
-  | Python_polars -> "python-polars"
-;;
-
-let dialects = List.map (fun d -> dialect_name d, d) [ R_dplyr; Python_polars ]
-let yojson_of_dialect d = `String (dialect_name d)
-
-let dialect_of_yojson = function
-  | `String name when List.mem_assoc name dialects -> List.assoc name dialects
-  | json -> Ppx_yojson_conv_lib.Yojson_conv.of_yojson_error "expected a dialect name" json
-;;
-
 type origin =
   | Default
   | Global of string
@@ -28,7 +11,7 @@ type 'a setting =
 
 type t =
   { root : string option
-  ; dialect : dialect option setting
+  ; target : Target.t option setting
   ; preview_digits : int setting
   ; strict : bool setting
   }
@@ -38,7 +21,7 @@ let default value = { value; origin = Default }
 
 let standalone =
   { root = None
-  ; dialect = default None
+  ; target = default None
   ; preview_digits = default 2
   ; strict = default true
   }
@@ -72,7 +55,15 @@ let options t =
     in
     name, display setting.value, origin
   in
-  [ row "target.dialect" (Option.fold ~none:"unset" ~some:dialect_name) t.dialect
+  let part f = Option.fold ~none:"unset" ~some:f in
+  [ row
+      "target.language"
+      (part (fun (t : Target.t) -> Target.language_name t.language))
+      t.target
+  ; row
+      "target.dialect"
+      (part (fun (t : Target.t) -> Target.dialect_name t.dialect))
+      t.target
   ; row "check.strict" string_of_bool t.strict
   ; row "preview.digits" string_of_int t.preview_digits
   ]
@@ -109,17 +100,39 @@ let read path origin previous =
        | Some raw -> { value = parse raw invalid; origin })
     | Some _ -> Diagnostic.fail Invalid_config (path ^ ": " ^ section ^ " must be a table")
   in
+  let text section name names =
+    field
+      section
+      name
+      (fun raw invalid ->
+         match raw with
+         | Toml.Types.TString n when List.mem_assoc n names -> Some (List.assoc n names)
+         | _ -> invalid (String.concat " or " (List.map fst names)))
+      (default None)
+  in
+  let language = text "target" "language" Target.languages in
+  let dialect = text "target" "dialect" Target.dialects in
+  let target =
+    let invalid message = Diagnostic.fail Invalid_config (path ^ ": " ^ message) in
+    match language.value, dialect.value with
+    | None, None -> previous.target
+    | Some l, None ->
+      (match Target.dialects_of l with
+       | [ d ] -> { value = Target.make l d; origin }
+       | _ -> invalid "target.language needs a target.dialect")
+    | None, Some d -> { value = Target.make (Target.language_of d) d; origin }
+    | Some l, Some d ->
+      (match Target.make l d with
+       | Some t -> { value = Some t; origin }
+       | None ->
+         invalid
+           (Printf.sprintf
+              "%s is not a dialect of %s"
+              (Target.dialect_name d)
+              (Target.language_name l)))
+  in
   { previous with
-    dialect =
-      field
-        "target"
-        "dialect"
-        (fun raw invalid ->
-           match raw with
-           | Toml.Types.TString n when List.mem_assoc n dialects ->
-             List.assoc_opt n dialects
-           | _ -> invalid (String.concat " or " (List.map fst dialects)))
-        previous.dialect
+    target
   ; strict =
       field
         "check"
@@ -160,12 +173,12 @@ let load directory =
     read path (Project_file path) { base with root = Some root }
 ;;
 
-let require_dialect project =
-  match project.dialect.value with
+let require_target project =
+  match project.target.value with
   | Some d -> d
   | None ->
     Diagnostic.fail
-      Missing_dialect
+      Missing_target
       "No target dialect. Pass --target r-dplyr (or python-polars), or set [target] \
        dialect in rupam.toml"
 ;;

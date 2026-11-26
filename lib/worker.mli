@@ -1,1 +1,6 @@
-val evaluate : Runtime.t -> Runtime.language -> string -> string
+type t
+
+val start : Runtime.t -> Target.language -> t
+val language : t -> Target.language
+val evaluate : t -> string -> string
+val stop : t -> unit

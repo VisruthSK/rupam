@@ -14,7 +14,8 @@ type reply =
 [@@deriving of_yojson]
 
 type t =
-  { pid : int
+  { language : Target.language
+  ; pid : int
   ; requests : out_channel
   ; replies : in_channel
   ; mutable revision : int
@@ -60,10 +61,10 @@ repeat {
 |}
 ;;
 
-let start (runtime : Runtime.t) language =
+let start (runtime : Runtime.t) (language : Target.language) =
   let argv =
     match language with
-    | Runtime.Python -> Array.append runtime.command [| "-u"; "-c"; python |]
+    | Python -> Array.append runtime.command [| "-u"; "-c"; python |]
     | R -> Array.append runtime.command [| "-e"; runtime.prelude ^ r |]
   in
   let input, requests = Unix.pipe ~cloexec:true () in
@@ -76,7 +77,8 @@ let start (runtime : Runtime.t) language =
   in
   Unix.close input;
   Unix.close output;
-  { pid
+  { language
+  ; pid
   ; requests = Unix.out_channel_of_descr requests
   ; replies = Unix.in_channel_of_descr replies
   ; revision = 0
@@ -88,9 +90,6 @@ let stop w =
   close_in_noerr w.replies;
   ignore (Unix.waitpid [] w.pid)
 ;;
-
-let active = Hashtbl.create 2
-let () = at_exit (fun () -> Hashtbl.iter (fun _ w -> stop w) active)
 
 let host_error message =
   let contains needle = Astring.String.is_infix ~affix:needle message in
@@ -106,16 +105,9 @@ let host_error message =
        | [] -> message))
 ;;
 
-let evaluate runtime language script =
-  let key = runtime, language in
-  let w =
-    match Hashtbl.find_opt active key with
-    | Some w -> w
-    | None ->
-      let w = start runtime language in
-      Hashtbl.add active key w;
-      w
-  in
+let language w = w.language
+
+let evaluate w script =
   w.revision <- w.revision + 1;
   let reply =
     try
@@ -127,7 +119,6 @@ let evaluate runtime language script =
       reply_of_yojson (Yojson.Safe.from_string (input_line w.replies))
     with
     | exn ->
-      Hashtbl.remove active key;
       stop w;
       raise exn
   in

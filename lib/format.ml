@@ -34,7 +34,41 @@ let rec pattern = function
   | Pas (n, p) -> n ^ " @ " ^ pattern p
 ;;
 
-let rec expr x =
+let binary_level : binary -> int = function
+  | Power -> 2
+  | Mul | Div | Mod -> 4
+  | Add | Sub -> 5
+  | Less | Greater | Less_equal | Greater_equal | Equal | Not_equal -> 8
+  | And -> 10
+  | Or -> 11
+;;
+
+let level x =
+  match x.form with
+  | Name _ | Literal _ | Call _ | Field _ | Tuple _ | List _ | Record _ | Interpolate _ ->
+    1
+  | Annotated _ -> 1
+  | Binary (op, _, _) -> binary_level op
+  | Unary (Negate, _) -> 3
+  | Range _ -> 6
+  | Member _ -> 8
+  | Unary (Not, _) -> 9
+  | Formula _ -> 12
+  | Pipe _ -> 13
+  | Match _ | Local _ | If _ | Lambda _ -> 14
+;;
+
+let rec stages x =
+  match x.form with
+  | Pipe (a, b) -> stages a @ [ b ]
+  | _ -> [ x ]
+;;
+
+let rec at limit x =
+  let text = expr x in
+  if level x > limit then "(" ^ text ^ ")" else text
+
+and expr x =
   match x.form with
   | Name (scope, name) ->
     (match scope with
@@ -44,7 +78,7 @@ let rec expr x =
     ^ Identifier.quote name
   | Match (x, bs) ->
     "match "
-    ^ expr x
+    ^ at 13 x
     ^ " {"
     ^ comma
         (fun a ->
@@ -54,7 +88,7 @@ let rec expr x =
            ^ expr a.body)
         bs
     ^ "}"
-  | Member (a, b) -> "(" ^ expr a ^ " %in% " ^ expr b ^ ")"
+  | Member (a, b) -> at 7 a ^ " %in% " ^ at 7 b
   | Interpolate pieces ->
     "\""
     ^ String.concat
@@ -77,25 +111,35 @@ let rec expr x =
   | List xs -> "[" ^ comma expr xs ^ "]"
   | Record fields ->
     "{" ^ comma (fun (n, x) -> Identifier.quote n ^ " = " ^ expr x) fields ^ "}"
-  | Local (n, x, y) -> "(let " ^ n ^ " = " ^ expr x ^ " in " ^ expr y ^ ")"
+  | Local (n, x, y) -> "let " ^ n ^ " = " ^ expr x ^ " in " ^ expr y
   | Literal l -> literal_text l
-  | Field (record, name) -> expr record ^ "." ^ Identifier.quote name
+  | Field (record, name) -> at 1 record ^ "." ^ Identifier.quote name
   | Call (callee, args) ->
-    expr callee
+    at 1 callee
     ^ "("
     ^ comma
         (fun (label, x) ->
            Option.fold ~none:"" ~some:(fun l -> Identifier.quote l ^ " = ") label ^ expr x)
         args
     ^ ")"
-  | Pipe (a, b) -> "(" ^ expr a ^ " |> " ^ expr b ^ ")"
+  | Pipe _ ->
+    let parts = List.map (at 12) (stages x) in
+    let inline = String.concat " |> " parts in
+    if List.length parts <= 2 && String.length inline <= 72
+    then inline
+    else "\n    " ^ String.concat "\n    |> " parts
   | Formula (lhs, rhs) ->
-    "(" ^ Option.fold ~none:"" ~some:(fun l -> expr l ^ " ") lhs ^ "~ " ^ expr rhs ^ ")"
-  | Range (a, b) -> expr a ^ ":" ^ expr b
-  | Binary (op, a, b) -> "(" ^ expr a ^ " " ^ binary_symbol op ^ " " ^ expr b ^ ")"
-  | Unary (op, a) -> "(" ^ unary_symbol op ^ " " ^ expr a ^ ")"
-  | If (c, y, n) -> "(if " ^ expr c ^ " then " ^ expr y ^ " else " ^ expr n ^ ")"
-  | Lambda (ps, body) -> "(fn(" ^ String.concat ", " ps ^ ") => " ^ expr body ^ ")"
+    Option.fold ~none:"" ~some:(fun l -> at 11 l ^ " ") lhs ^ "~ " ^ at 11 rhs
+  | Range (a, b) -> at 5 a ^ ":" ^ at 5 b
+  | Binary (Power, a, b) -> at 1 a ^ " ^ " ^ at 3 b
+  | Binary (op, a, b) ->
+    let l = binary_level op in
+    let left, right = if l = 8 then l - 1, l - 1 else l, l - 1 in
+    at left a ^ " " ^ binary_symbol op ^ " " ^ at right b
+  | Unary (Negate, a) -> "-" ^ at 1 a
+  | Unary (op, a) -> unary_symbol op ^ " " ^ at 9 a
+  | If (c, y, n) -> "if (" ^ expr c ^ ") " ^ expr y ^ " else " ^ expr n
+  | Lambda (ps, body) -> "fn(" ^ String.concat ", " ps ^ ") => " ^ expr body
 ;;
 
 let declaration = function
@@ -130,8 +174,38 @@ let declaration = function
     let params =
       Option.fold ~none:"" ~some:(fun ps -> "(" ^ String.concat ", " ps ^ ")") ps
     in
-    "let " ^ Identifier.quote name ^ params ^ " = " ^ expr body
-  | Evaluate x -> expr x
+    let body = expr body in
+    "let "
+    ^ Identifier.quote name
+    ^ params
+    ^ if String.starts_with ~prefix:"\n" body then " =" ^ body else " = " ^ body
+  | Evaluate x ->
+    let text = expr x in
+    if String.starts_with ~prefix:"\n" text
+    then String.sub text 5 (String.length text - 5)
+    else text
 ;;
 
-let program ds = String.concat "\n" (List.map declaration ds)
+let kind = function
+  | Import _ | Contract _ -> `Use
+  | Setting _ -> `Set
+  | Alias _ | Type _ -> `Type
+  | Let _ -> `Let
+  | Evaluate _ -> `Evaluate
+;;
+
+let program ds =
+  let rec go previous = function
+    | [] -> []
+    | d :: rest ->
+      let text = declaration d in
+      let multiline = String.contains text '\n' in
+      let separate =
+        match previous with
+        | None -> ""
+        | Some (k, wide) -> if k = kind d && not (wide || multiline) then "\n" else "\n\n"
+      in
+      (separate ^ text) :: go (Some (kind d, multiline)) rest
+  in
+  String.concat "" (go None ds)
+;;

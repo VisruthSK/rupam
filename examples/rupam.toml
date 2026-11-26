@@ -1,5 +1,6 @@
 [target]
-dialect = "r-dplyr"
+language = "r"
+dialect = "dplyr"
 
 [preview]
 digits = 2

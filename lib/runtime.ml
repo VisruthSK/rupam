@@ -1,20 +1,11 @@
-type language =
-  | Python
-  | R
-
 type t =
   { command : string array
   ; prelude : string
   }
 
-let of_dialect = function
-  | Project.R_dplyr -> R
-  | Python_polars -> Python
-;;
-
 let has root file = Sys.file_exists (Filename.concat root file)
 
-let resolve (project : Project.t) language =
+let resolve (project : Project.t) (language : Target.language) =
   match language, project.root with
   | Python, Some root when has root "uv.lock" || has root "pyproject.toml" ->
     { command = [| "uv"; "run"; "--project"; root; "python" |]; prelude = "" }
@@ -26,7 +17,7 @@ let resolve (project : Project.t) language =
   | R, _ -> { command = [| "Rscript"; "--vanilla" |]; prelude = "" }
 ;;
 
-let suffix = function
+let suffix : Target.language -> string = function
   | Python -> ".py"
   | R -> ".R"
 ;;

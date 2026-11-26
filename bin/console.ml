@@ -11,7 +11,7 @@ type msg =
   | Quit
 
 type model =
-  { session : Repl.session
+  { session : Repl.t
   ; input : Editor.t
   ; pending : string list
   ; history : string list
@@ -127,9 +127,9 @@ let transcript ~digits source output pages =
 
 let status session =
   let dialect =
-    match session.Repl.project.dialect.value with
-    | Some d -> Rupam.Project.dialect_name d
-    | None -> "no dialect"
+    match Rupam.Session.target session.Repl.session with
+    | Some t -> Rupam.Target.name t
+    | None -> "no target"
   in
   text
     ~style:(style faint)
@@ -216,7 +216,7 @@ let banner session =
            ]
        ; text
            ~style:(style faint)
-           (match session.Repl.source_path with
+           (match Rupam.Session.path session.Repl.session with
             | Some path -> "loaded " ^ path
             | None -> "type an expression, or :help")
        ])
@@ -237,27 +237,28 @@ let evaluate model source =
         match Repl.parse entry with
         | Error message ->
           Repl.report message;
-          Some model.session
+          true
         | Ok command -> Repl.run model.session command)
     in
     let committed =
       Cmd.static_commit
         (transcript
-           ~digits:model.session.project.preview_digits.value
+           ~digits:(Repl.digits model.session)
            entry
            output
            (List.rev !(model.pages)))
     in
-    match next with
-    | None -> model, Cmd.batch [ committed; Cmd.quit ]
-    | Some session ->
-      ( { session
-        ; input = Editor.empty
+    if not next
+    then (
+      Rupam.Session.close model.session.session;
+      model, Cmd.batch [ committed; Cmd.quit ])
+    else
+      ( { model with
+          input = Editor.empty
         ; pending = []
         ; history
         ; recalled = None
         ; menu = None
-        ; pages = model.pages
         }
       , committed ))
 ;;
@@ -330,7 +331,9 @@ let update msg model =
   | Recall step -> { (recall model step) with menu = None }, Cmd.none
   | Complete -> complete model, Cmd.none
   | Clear -> { model with input = Editor.empty; pending = [] }, Cmd.static_clear
-  | Quit -> model, Cmd.quit
+  | Quit ->
+    Rupam.Session.close model.session.session;
+    model, Cmd.quit
 ;;
 
 let subscriptions model =

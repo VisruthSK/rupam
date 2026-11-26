@@ -19,7 +19,7 @@ type source_map = { mappings : mapping list } [@@deriving yojson_of]
 
 type manifest =
   { compiler : string
-  ; dialect : Project.dialect
+  ; target : Target.t
   ; source : string
   ; program_sha256 : string
   ; inputs : Lock.input list
@@ -32,12 +32,12 @@ let point (p : Lexing.position) =
   { line = p.pos_lnum; column = 1 + p.pos_cnum - p.pos_bol }
 ;;
 
-let dependencies (dialect : Project.dialect) ~tabular =
-  match dialect, tabular with
-  | R_dplyr, true -> [ "dplyr"; "tidyr"; "bit64"; "jsonlite"; "arrow" ]
-  | R_dplyr, false -> [ "bit64"; "jsonlite" ]
-  | Python_polars, true -> [ "polars"; "pyarrow" ]
-  | Python_polars, false -> []
+let dependencies (target : Target.t) ~tabular =
+  match target.dialect, tabular with
+  | Dplyr, true -> [ "dplyr"; "tidyr"; "bit64"; "jsonlite"; "arrow" ]
+  | Dplyr, false -> [ "bit64"; "jsonlite" ]
+  | Polars, true -> [ "polars"; "pyarrow" ]
+  | Polars, false -> []
 ;;
 
 let write_json path json =
@@ -46,8 +46,8 @@ let write_json path json =
 ;;
 
 let write ~(entry : Lock.entry) ~program_sha256 ~locations ~output ~code items =
-  let dialect = entry.dialect in
-  let extension = Runtime.suffix (Runtime.of_dialect dialect) in
+  let target = entry.target in
+  let extension = Runtime.suffix target.language in
   if not (Filename.check_suffix output extension)
   then Diagnostic.fail Unreadable_input ("Expected a " ^ extension ^ " output file");
   let mappings =
@@ -64,11 +64,11 @@ let write ~(entry : Lock.entry) ~program_sha256 ~locations ~output ~code items =
   in
   let manifest =
     { compiler = entry.compiler
-    ; dialect = entry.dialect
+    ; target = entry.target
     ; source = entry.source
     ; program_sha256
     ; inputs = entry.inputs
-    ; dependencies = dependencies dialect ~tabular:(Core.tabular items)
+    ; dependencies = dependencies target ~tabular:(Core.tabular items)
     ; nonportable = Host.nonportable items
     }
   in

@@ -37,3 +37,10 @@
     (echo "|rupam}\n\nlet polars = {rupam|")
     (cat runtime/polars.py)
     (echo "|rupam}\n")))))
+
+(rule
+ (target build_id.ml)
+ (action
+  (with-stdout-to
+   %{target}
+   (echo "let revision = \"%{env:RUPAM_REVISION=}\"\n"))))

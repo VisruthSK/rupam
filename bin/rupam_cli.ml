@@ -12,9 +12,9 @@ let with_program path action =
 let settings directory target strict =
   let project = Project.load directory in
   { project with
-    dialect =
+    target =
       (match target with
-       | None -> project.dialect
+       | None -> project.target
        | Some _ -> { value = target; origin = Session "--target" })
   ; strict =
       (if strict
@@ -34,19 +34,19 @@ let guarded action =
 let targeted directory target strict action =
   guarded (fun () ->
     let project = settings directory target strict in
-    ignore (Project.require_dialect project);
+    ignore (Project.require_target project);
     action project)
 ;;
 
 let elaborate (project : Project.t) path ds =
   snd
     (Elaborate.program
-       (Elaborate.empty ~directory:(Filename.dirname path) ~strict:project.strict.value)
+       (Scope.empty ~directory:(Filename.dirname path) ~strict:project.strict.value)
        ds)
 ;;
 
 let generate (project : Project.t) items =
-  Dialect.script (Project.require_dialect project) items
+  Dialect.script (Project.require_target project) items
 ;;
 
 let run target strict path =
@@ -55,7 +55,7 @@ let run target strict path =
   with_program path (fun ds ->
     let items = elaborate project path ds in
     ignore (Lock.require ~project ~source:path items);
-    let language = Runtime.of_dialect (Project.require_dialect project) in
+    let language = (Project.require_target project).language in
     Runtime.run (Runtime.resolve project language) language (fst (generate project items)))
 ;;
 
@@ -68,7 +68,7 @@ let lock target strict path =
     Printf.printf
       "Locked %s for %s: %d input%s\n"
       entry.source
-      (Project.dialect_name entry.dialect)
+      (Target.name entry.target)
       (List.length entry.inputs)
       (if List.length entry.inputs = 1 then "" else "s"))
 ;;
@@ -104,13 +104,13 @@ let program = Arg.(required & pos 0 (some file) None & info [] ~docv:"FILE.rp")
 let target =
   Arg.(
     value
-    & opt (some (enum Project.dialects)) None
+    & opt (some (enum Target.targets)) None
     & info
         [ "t"; "target" ]
-        ~docv:"DIALECT"
+        ~docv:"TARGET"
         ~doc:
-          "Target dialect: $(b,r-dplyr) or $(b,python-polars). Overrides [target] \
-           dialect in rupam.toml.")
+          "Target language and dialect: $(b,r-dplyr) or $(b,python-polars). Overrides \
+           [target] in rupam.toml.")
 ;;
 
 let strict =
@@ -130,7 +130,7 @@ let repl target strict path =
   let directory = Option.fold ~none:(Sys.getcwd ()) ~some:Filename.dirname path in
   guarded (fun () ->
     let project = settings directory target strict in
-    Option.iter (fun _ -> ignore (Project.require_dialect project)) path;
+    Option.iter (fun _ -> ignore (Project.require_target project)) path;
     if Lazy.force Line.interactive
     then Console.start ~project ?path ()
     else Repl.start ~project ?path ();
@@ -210,6 +210,11 @@ let commands =
 
 let () =
   let default = Term.(const repl $ target $ strict $ const None) in
-  let info = Cmd.info "rupam" ~doc:"A typed language for interactive data analysis." in
+  let info =
+    Cmd.info
+      "rupam"
+      ~version:Version.version
+      ~doc:"A typed language for interactive data analysis."
+  in
   exit (Cmd.eval' (Cmd.group ~default info commands))
 ;;

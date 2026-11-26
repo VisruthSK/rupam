@@ -1,12 +1,3 @@
-type dialect =
-  | R_dplyr
-  | Python_polars
-
-val dialect_name : dialect -> string
-val dialects : (string * dialect) list
-val yojson_of_dialect : dialect -> [> `String of string ]
-val dialect_of_yojson : Yojson.Safe.t -> dialect
-
 type origin =
   | Default
   | Global of string
@@ -20,7 +11,7 @@ type 'a setting =
 
 type t =
   { root : string option
-  ; dialect : dialect option setting
+  ; target : Target.t option setting
   ; preview_digits : int setting
   ; strict : bool setting
   }
@@ -28,4 +19,4 @@ type t =
 val standalone : t
 val options : t -> (string * string * string) list
 val load : string -> t
-val require_dialect : t -> dialect
+val require_target : t -> Target.t
