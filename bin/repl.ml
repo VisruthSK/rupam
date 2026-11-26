@@ -139,7 +139,7 @@ type t =
   { session : Session.t
   ; directory : string
   ; show : digits:int -> Page.t -> unit
-  ; view : title:string -> Session.result -> unit
+  ; view : Syntax.expr -> Session.result -> unit
   }
 
 let digits r = (Session.project r.session).preview_digits.value
@@ -187,7 +187,8 @@ let present r (event : Session.event) =
   | Output text -> print_string text
   | Value (text, typ) -> Printf.printf "%s : %s\n" text (Types.display typ)
   | Table page -> r.show ~digits:(digits r) page
-  | Viewed (title, result) -> r.view ~title result
+  | Viewed (subject, result) -> r.view subject result
+  | Inspection_failed d -> report_diagnostic d
   | Schema columns ->
     let width = List.fold_left (fun w (n, _) -> max w (String.length n)) 0 columns in
     List.iter (fun (n, t) -> Printf.printf "%-*s  %s\n" width n (Types.display t)) columns
@@ -365,7 +366,10 @@ let dispatch r = function
            List.iteri (fun i s -> Printf.printf "%2d  %s\n" (i + 1) s) (Plan.explain t)
          | Preview ->
            r.show ~digits:(digits r) (Session.preview r.session t ~offset:0 ~limit:20)
-         | Grid -> r.view ~title:source (Session.result r.session t)));
+         | Grid ->
+           (match Frontend.read source with
+            | [ { declaration = Evaluate e; _ } ] -> r.view e (Session.result r.session t)
+            | _ -> Diagnostic.fail Not_a_table "Expected a table expression")));
     true
   | Source "" -> true
   | Source source ->
@@ -392,8 +396,7 @@ let open_session ~project ?path () =
     { session
     ; directory
     ; show = plain
-    ; view =
-        (fun ~title:_ result -> plain ~digits:2 (Session.page result ~offset:0 ~limit:20))
+    ; view = (fun _ result -> plain ~digits:2 (Session.page result ~offset:0 ~limit:20))
     }
   in
   match path with

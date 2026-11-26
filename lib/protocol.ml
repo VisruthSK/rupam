@@ -182,9 +182,12 @@ let event : Session.event -> Yojson.Safe.t = function
   | Value (text, t) ->
     `Assoc [ "kind", `String "value"; "value", `String text; "type", typ t ]
   | Table p -> `Assoc [ "kind", `String "table"; "page", page p ]
-  | Viewed (title, r) ->
+  | Viewed (subject, r) ->
     `Assoc
-      [ "kind", `String "view"; "title", `String title; "rows", `Int (Session.total r) ]
+      [ "kind", `String "view"
+      ; "source", `String (Format.expression subject)
+      ; "rows", `Int (Session.total r)
+      ]
   | Schema columns ->
     `Assoc
       [ "kind", `String "schema"
@@ -194,6 +197,8 @@ let event : Session.event -> Yojson.Safe.t = function
         )
       ]
   | Typed t -> `Assoc [ "kind", `String "type"; "type", typ t ]
+  | Inspection_failed d ->
+    `Assoc [ "kind", `String "inspection-failed"; "diagnostic", snd (diagnostic d) ]
   | Histogram (column, h) ->
     `Assoc
       [ "kind", `String "histogram"

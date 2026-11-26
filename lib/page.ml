@@ -9,6 +9,7 @@ type t =
   ; offset : int
   ; total : int
   ; ordered : bool
+  ; width : int
   }
 
 type part =
@@ -53,6 +54,7 @@ let of_arrow ?columns arrow ~ordered ~offset ~limit fields =
   ; offset
   ; total = Arrow_result.rows arrow
   ; ordered
+  ; width = Array.length names
   }
 ;;
 
@@ -71,7 +73,7 @@ let read ~path ~total ~ordered ~offset ~limit fields =
       let typ = List.assoc name fields in
       { name; typ; cells = Array.map (fun row -> cell typ row.(i)) rows })
   in
-  { columns; offset; total; ordered }
+  { columns; offset; total; ordered; width = List.length columns }
 ;;
 
 let width = Display.width
@@ -147,8 +149,8 @@ let lines ?(limit = 100) ~digits page =
       "%d %s × %d %s, %s"
       page.total
       (if page.total = 1 then "row" else "rows")
-      (List.length page.columns)
-      (if List.length page.columns = 1 then "column" else "columns")
+      page.width
+      (if page.width = 1 then "column" else "columns")
       (if page.ordered then "ordered" else "unordered")
   in
   let remaining = page.total - page.offset - shown in

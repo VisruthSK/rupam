@@ -9,6 +9,7 @@ type t =
   ; offset : int
   ; total : int
   ; ordered : bool
+  ; width : int
   }
 
 type part =

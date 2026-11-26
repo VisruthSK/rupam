@@ -2,8 +2,8 @@ open Rupam
 
 type t =
   { session : Session.t
-  ; base : string
-  ; steps : string list
+  ; base : Syntax.expr
+  ; steps : Syntax.expr list
   ; result : Session.result
   ; names : string list
   ; pinned : string list
@@ -29,7 +29,15 @@ type action =
   | Distribution
 
 let rows t = max 1 (t.height - 6)
-let source t = String.concat " |> " (t.base :: List.rev t.steps)
+let node form = { Syntax.form; span = Lexing.dummy_pos, Lexing.dummy_pos }
+let name n = node (Syntax.Name (Bare, n))
+let call f args = node (Syntax.Call (name f, List.map (fun a -> None, a) args))
+
+let pipeline base steps =
+  List.fold_left (fun acc step -> node (Syntax.Pipe (acc, step))) base (List.rev steps)
+;;
+
+let source t = Format.expression (pipeline t.base t.steps)
 let current t = List.nth_opt t.names t.column
 
 let visible_names t =
@@ -55,9 +63,14 @@ let covered t =
       || t.window.offset + length >= Session.total t.result)
 ;;
 
-let load session ~base ~steps ~width ~height =
-  let table = Session.table session (String.concat " |> " (base :: List.rev steps)) in
-  let result = Session.result session table in
+let load ?result session ~base ~steps ~width ~height =
+  let table, result =
+    match result with
+    | Some r -> Session.table_of_result r, r
+    | None ->
+      let table = Session.table_of session (pipeline base steps) in
+      table, Session.result session table
+  in
   let pinned =
     match table.keys with
     | key :: _ -> List.filter (fun k -> List.mem_assoc k table.schema) key
@@ -80,8 +93,8 @@ let load session ~base ~steps ~width ~height =
     }
 ;;
 
-let open_ session ~title ~width ~height =
-  load session ~base:title ~steps:[] ~width ~height
+let open_ session base result ~width ~height =
+  load ~result session ~base ~steps:[] ~width ~height
 ;;
 
 let resize t ~width ~height = fetch { t with width; height }
@@ -102,11 +115,12 @@ let move t step =
   | _ -> if covered t then t else fetch t
 ;;
 
-let literal (column : Page.column) value =
+let literal (column : Page.column) value : Syntax.literal =
   match Types.repr (Types.present column.typ) with
-  | String -> Printf.sprintf "%S" value
-  | Bool -> String.uppercase_ascii value
-  | _ -> value
+  | String -> Text value
+  | Bool -> Bool (String.lowercase_ascii value = "true")
+  | Int -> Int value
+  | _ -> Float value
 ;;
 
 let refine t steps =
@@ -117,31 +131,31 @@ let refine t steps =
 
 let act t action =
   match action, current t with
-  | Sort ascending, Some name ->
-    let key = Identifier.quote name in
+  | Sort ascending, Some column ->
+    let key = name column in
     refine
       t
-      ((if ascending then "arrange(" ^ key ^ ")" else "arrange(desc(" ^ key ^ "))")
-       :: t.steps)
-  | Keep_value, Some name ->
-    let column = List.find (fun (c : Page.column) -> c.name = name) t.window.columns in
+      (call "arrange" [ (if ascending then key else call "desc" [ key ]) ] :: t.steps)
+  | Keep_value, Some column ->
+    let page = List.find (fun (c : Page.column) -> c.name = column) t.window.columns in
     let i = t.row - t.window.offset in
-    (match column.cells.(i) with
-     | Some value ->
-       refine
-         t
-         (Printf.sprintf "filter(%s == %s)" (Identifier.quote name) (literal column value)
-          :: t.steps)
-     | None ->
-       refine t (Printf.sprintf "filter(none(%s))" (Identifier.quote name) :: t.steps)
-     | exception Invalid_argument _ -> t)
+    if i < 0 || i >= Array.length page.cells
+    then t
+    else (
+      let condition =
+        match page.cells.(i) with
+        | Some value ->
+          node (Syntax.Binary (Equal, name column, node (Literal (literal page value))))
+        | None -> call "none" [ name column ]
+      in
+      refine t (call "filter" [ condition ] :: t.steps))
   | Undo, _ ->
     (match t.steps with
      | _ :: steps -> refine t steps
      | [] -> t)
-  | Distribution, Some name ->
-    (match Session.histogram t.result name with
-     | h -> { t with distribution = Some (name, h) }
+  | Distribution, Some column ->
+    (match Session.histogram t.result column with
+     | h -> { t with distribution = Some (column, h) }
      | exception exn ->
        { t with message = Some (Diagnostic.render (Diagnostic.of_exn exn)) })
   | _, None -> t
@@ -184,9 +198,7 @@ let status t =
       (Printf.sprintf
          "%s  rows %d-%d of %d  %s  s/S sort  f keep value  u undo  d distribution  \
           Enter to prompt  q close"
-         (match t.steps with
-          | [] -> t.base
-          | steps -> t.base ^ " |> " ^ String.concat " |> " (List.rev steps))
+         (source t)
          (t.row + 1)
          (min (Session.total t.result) (t.row + rows t))
          (Session.total t.result)

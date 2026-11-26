@@ -21,14 +21,24 @@ and result handles in the protocol, as steps 3 and 6 need them.
 
 ## 3. Results and the viewer (before MVP)
 
-- Completed results as immutable Arrow batches behind result handles:
-  one collect per Polars binding, one pass per preview, no Parquet or string
-  round trip. Scrolling runs no analysis.
-- Full-screen viewer on any binding, stage or tap: virtual two-axis grid,
-  pinned keys, drill-in and back, sort, filter, search, distributions cached
-  per revision. Paint at the display's refresh with no idle redraw.
-- `!print`, `!view`, `!schema`, `!hist` taps as syntax nodes.
-- Grid transformations edit Rupam source through the session.
+Done: memory-mapped Arrow results through nanoarrow, projected viewport pages,
+taps, a full-screen grid with sort, value filter, undo, distribution, pinned
+keys and Enter-to-prompt built as typed syntax. Remaining, in order:
+
+- Result ownership: consumers retain results; eviction and target switches
+  never unmap a retained handle. Grid steps run against the retained result,
+  not by re-executing the source pipeline.
+- Selection separate from viewport, with a visible current cell; actions keep
+  the analyst's place.
+- An editable Rupam pipeline beside the grid sharing the REPL's parser,
+  checker, completion and diagnostics; shortcuts edit the same syntax; an
+  invalid draft keeps the last good result.
+- Type-aware literals (exact floats, enums, dates); unresolved missing
+  policies offered as explicit choices, never defaulted.
+- Range filter, multi-key sort, count, select, search; a column details panel
+  whose statistics are generated Rupam; frequencies for categorical columns.
+- Asynchronous execution with cancellation off the UI loop; stable column
+  widths and cached formatting; measured frame time and input latency.
 
 ## 4. Evidence and locking
 

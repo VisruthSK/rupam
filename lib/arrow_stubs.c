@@ -307,8 +307,9 @@ CAMLprim value rupam_arrow_histogram(value handle, value v_column, value v_bins)
           if (present == 0 || x > high) high = x;
           present++;
         } else {
-          int64_t k = high > low ? (int64_t)((x - low) / (high - low) * bins) : 0;
-          if (k >= bins) k = bins - 1;
+          double span = high / 2 - low / 2;
+          double position = span > 0 ? (x / 2 - low / 2) / span * bins : 0;
+          int64_t k = position >= bins ? bins - 1 : position > 0 ? (int64_t)position : 0;
           tally[k]++;
         }
       }

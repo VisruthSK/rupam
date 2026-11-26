@@ -40,10 +40,11 @@ type event =
   | Output of string
   | Value of string * Types.t
   | Table of Page.t
-  | Viewed of string * result
+  | Viewed of Syntax.expr * result
   | Schema of (string * Types.t) list
   | Typed of Types.t
   | Histogram of string * Arrow_result.histogram
+  | Inspection_failed of Diagnostic.t
 
 let history_limit = 100
 let result_limit = 8
@@ -196,6 +197,7 @@ let histogram r name =
 ;;
 
 let total r = Arrow_result.rows r.arrow
+let table_of_result r = r.table
 let preview t table ~offset ~limit = page (result t table) ~offset ~limit
 
 let describe env (d : Syntax.declaration) =
@@ -274,8 +276,7 @@ let inspect t env (tap : Tap.t) =
     Table (preview t table ~offset:0 ~limit:20)
   | Print, [ (Show e as item) ], [] ->
     Value (String.trim (run (establish t) [ item ]), e.typ)
-  | View, [ Show { node = Table table; _ } ], [] ->
-    Viewed (Format.expression tap.subject, result t table)
+  | View, [ Show { node = Table table; _ } ], [] -> Viewed (tap.subject, result t table)
   | Schema, [ Show { node = Table table; _ } ], [] -> Schema table.schema
   | Schema, [ Show e ], [] -> Typed e.typ
   | Hist, [ Show { node = Table table; _ } ], [ (None, { form = Name (_, column); _ }) ]
@@ -297,7 +298,12 @@ let inspect t env (tap : Tap.t) =
 
 let step t (env, accepted, events) item =
   let item, taps = Tap.split item in
-  let events = List.rev_append (List.map (inspect t env) taps) events in
+  let observe tap =
+    match inspect t env tap with
+    | event -> event
+    | exception exn -> Inspection_failed (Diagnostic.of_exn exn)
+  in
+  let events = List.rev_append (List.map observe taps) events in
   match item with
   | Some item -> declare t (env, accepted, events) item
   | None -> env, accepted, events
@@ -322,6 +328,12 @@ let load t path =
 ;;
 
 let check t (i : Syntax.item) = snd (Elaborate.item t.current.env i)
+
+let table_of t (e : Syntax.expr) =
+  match check t { declaration = Evaluate e; span = e.span } with
+  | [ Show { node = Table table; _ } ] -> table
+  | _ -> Diagnostic.fail ~span:e.span Not_a_table "Expected a table expression"
+;;
 
 let table t source =
   match Frontend.read source with

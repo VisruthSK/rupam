@@ -23,7 +23,7 @@ type model =
   ; recalled : int option
   ; menu : menu option
   ; pages : Rupam.Page.t list ref
-  ; opened : string option ref
+  ; opened : (Rupam.Syntax.expr * Rupam.Session.result) option ref
   ; viewer : Viewer.t option
   ; size : int * int
   }
@@ -142,6 +142,12 @@ let status session =
   text
     ~style:(style faint)
     (Printf.sprintf "  %s \xc2\xb7 :help \xc2\xb7 Ctrl+D quits" dialect)
+;;
+
+let terminal () =
+  match Tty.window Unix.stdout with
+  | Some (width, height) -> width, max 8 (height - 1)
+  | None -> 100, 30
 ;;
 
 let grid model (v : Viewer.t) =
@@ -293,9 +299,9 @@ let evaluate model source =
         ; menu = None
         ; viewer =
             Option.map
-              (fun title ->
+              (fun (subject, result) ->
                  let width, height = model.size in
-                 Viewer.open_ model.session.session ~title ~width ~height)
+                 Viewer.open_ model.session.session subject result ~width ~height)
               !(model.opened)
         }
       , committed ))
@@ -372,7 +378,8 @@ let update msg model =
   | Quit ->
     Rupam.Session.close model.session.session;
     model, Cmd.quit
-  | Resize (width, height) ->
+  | Resize _ ->
+    let width, height = terminal () in
     ( { model with
         size = width, height
       ; viewer = Option.map (Viewer.resize ~width ~height) model.viewer
@@ -452,7 +459,7 @@ let start ~project ?path () =
     let session =
       { session with
         show = (fun ~digits:_ page -> pages := page :: !pages)
-      ; view = (fun ~title _ -> opened := Some title)
+      ; view = (fun subject result -> opened := Some (subject, result))
       }
     in
     let config = Matrix.config ~mode:`Primary ~mouse:`Off () in
@@ -469,7 +476,7 @@ let start ~project ?path () =
               ; pages
               ; opened
               ; viewer = None
-              ; size = 100, 30
+              ; size = terminal ()
               }
             , banner session ))
       ; update

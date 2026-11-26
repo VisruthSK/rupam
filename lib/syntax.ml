@@ -164,7 +164,12 @@ type item =
 
 let literal_text = function
   | Int s | Float s -> s
-  | Text s -> Printf.sprintf "%S" s
+  | Text s ->
+    Printf.sprintf "%S" s
+    |> String.split_on_char '{'
+    |> String.concat "{{"
+    |> String.split_on_char '}'
+    |> String.concat "}}"
   | Bool true -> "TRUE"
   | Bool false -> "FALSE"
   | Absent -> "None"
