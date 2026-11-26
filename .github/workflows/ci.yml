@@ -27,18 +27,6 @@ jobs:
           ocaml-compiler: "5.5"
       - uses: ocaml/setup-ocaml/lint-fmt@v3.9.1
 
-  workflows:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v7.0.1
-        with:
-          persist-credentials: false
-      - uses: astral-sh/setup-uv@v10.4.0
-      - run: uvx zizmor --format=github .github/workflows
-
   test:
     strategy:
       fail-fast: false
