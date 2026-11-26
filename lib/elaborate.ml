@@ -390,7 +390,7 @@ let uncovered env level subject (arms : Syntax.arm list) =
 let policy_of (x : Syntax.expr) =
   match x.form with
   | Name (_, n) when List.mem_assoc n C.policies -> List.assoc n C.policies
-  | _ -> fail x.span Invalid_policy "A missing policy is skip, propagate or error"
+  | _ -> fail x.span Invalid_policy "A missing policy is skip, keep or error"
 ;;
 
 let rec expr ctx (x : Syntax.expr) : C.expr =
@@ -835,7 +835,7 @@ and builtin ctx span n b args =
           Missing_policy_required
           (n
            ^ " reads a column that can be missing. Say what to do with missing values: \
-              missing = skip ignores them, missing = propagate makes the result missing, \
+              missing = skip ignores them, missing = keep makes the result missing, \
               missing = error stops the run")
     in
     let element = T.present v.typ in
@@ -845,7 +845,7 @@ and builtin ctx span n b args =
         expect span (T.fresh ~kind:Number ctx.level) element;
         v, T.Option element
       | Mean | Median | Var | Sd -> to_float v, T.Option T.Float64
-      | Distinct -> v, if policy = Propagate then T.Option T.Int64 else T.Int64
+      | Distinct -> v, T.Int64
       | Count -> v, T.Int64
     in
     make Scalar result (Reduce (r, policy, v))
@@ -1504,8 +1504,7 @@ let item env (d : Syntax.declaration) =
     let policy =
       match List.assoc_opt value C.policies with
       | Some p -> p
-      | None ->
-        Diagnostic.fail Invalid_policy "A missing policy is skip, propagate or error"
+      | None -> Diagnostic.fail Invalid_policy "A missing policy is skip, keep or error"
     in
     (match name with
      | "missing" -> { env with missing = Some policy }, []

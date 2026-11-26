@@ -153,7 +153,7 @@ let builtin e (row : Prelude.row) args =
 let aggregate e (reduction : Prelude.reduction) policy values =
   if policy = C.Fail && Array.mem Missing values
   then fail e Missing_under_error "A reduction met a missing value and missing = error"
-  else if policy = C.Propagate && Array.mem Missing values
+  else if policy = C.Keep && reduction <> Distinct && Array.mem Missing values
   then Missing
   else (
     let xs = List.filter (( <> ) Missing) (Array.to_list values) in
@@ -166,8 +166,10 @@ let aggregate e (reduction : Prelude.reduction) policy values =
       /. float_of_int (n - 1)
     in
     match reduction, xs with
-    | Distinct, _ -> Int (Int64.of_int (List.length (List.sort_uniq compare xs)))
     | Count, _ -> Int (Int64.of_int (Array.length values))
+    | Distinct, _ ->
+      let kept = if policy = C.Keep then Array.to_list values else xs in
+      Int (Int64.of_int (List.length (List.sort_uniq compare kept)))
     | _, [] -> Missing
     | (Var | Sd), [ _ ] -> Missing
     | Sum, Int _ :: _ ->

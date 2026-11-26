@@ -285,7 +285,7 @@ type suggestion =
   }
 
 let verbs =
-  [ "filter", "condition, missing = skip | propagate | error", [ "missing" ]
+  [ "filter", "condition, missing = skip | keep | error", [ "missing" ]
   ; "select", "columns to keep, in order", []
   ; "mutate", "name = value, ..., by = key", [ "by"; "missing"; "group_missing" ]
   ; "rename", "new = old", []
@@ -312,7 +312,7 @@ let verbs =
 ;;
 
 let choices = function
-  | "missing" | "group_missing" -> [ "skip"; "propagate"; "error" ]
+  | "missing" | "group_missing" -> [ "skip"; "keep"; "error" ]
   | "relationship" -> [ "one_to_one"; "many_to_one"; "one_to_many"; "many_to_many" ]
   | _ -> []
 ;;

@@ -152,10 +152,12 @@ and reduce names r policy x =
         (R.qualified
            "dplyr"
            "n_distinct"
-           [ R.Positional x; R.Named ("na.rm", R.Logical true) ])
+           [ R.Positional x; R.Named ("na.rm", R.Logical (policy <> C.Keep)) ])
     | Count -> integer64 (R.qualified "dplyr" "n" [])
   in
-  if policy = C.Propagate then if_else (R.call "anyNA" [ source ]) R.Na value else value
+  if policy = C.Keep && r <> Distinct
+  then if_else (R.call "anyNA" [ source ]) R.Na value
+  else value
 
 and text names pieces =
   let shown =

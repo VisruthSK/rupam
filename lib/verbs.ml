@@ -206,7 +206,7 @@ let options (arguments : arguments) =
       (fun (x : Syntax.expr) ->
          match x.form with
          | Name (_, n) when List.mem_assoc n C.policies -> List.assoc n C.policies
-         | _ -> fail x.span Invalid_policy "A missing policy is skip, propagate or error")
+         | _ -> fail x.span Invalid_policy "A missing policy is skip, keep or error")
       (List.assoc_opt (Some label) arguments)
   in
   ( policy "missing"
@@ -257,7 +257,7 @@ let group_policy context span (t : C.table) ~missing ~group_missing keys =
          ("The grouping key "
           ^ first
           ^ " can be missing. Say what to do with those rows: group_missing = skip \
-             leaves them out, propagate makes missing a group, error stops the run"))
+             leaves them out, keep makes missing a group, error stops the run"))
 ;;
 
 let apply_group_policy span policy (t : C.table) keys =
@@ -272,7 +272,7 @@ let apply_group_policy span policy (t : C.table) keys =
     }
   | Some Fail ->
     add span (Filter (make span Columnar T.Bool (Require (present span t keys)))) t
-  | Some Propagate | None -> t
+  | Some Keep | None -> t
 ;;
 
 let summarize context span (t : C.table) arguments =
@@ -365,7 +365,7 @@ let filter context span (t : C.table) = function
       | [ (Some "missing", p) ] ->
         (match p.form with
          | Name (_, n) when List.mem_assoc n C.policies -> Some (List.assoc n C.policies)
-         | _ -> fail p.span Invalid_policy "A missing policy is skip, propagate or error")
+         | _ -> fail p.span Invalid_policy "A missing policy is skip, keep or error")
       | _ ->
         fail span Wrong_arguments "filter takes one condition and an optional missing ="
     in
@@ -380,16 +380,15 @@ let filter context span (t : C.table) = function
       | false, _ -> predicate
       | true, Some Skip ->
         make span Columnar T.Bool (Coalesce (predicate, constant false))
-      | true, Some Propagate ->
-        make span Columnar T.Bool (Coalesce (predicate, constant true))
+      | true, Some Keep -> make span Columnar T.Bool (Coalesce (predicate, constant true))
       | true, Some Fail -> make span Columnar T.Bool (Require predicate)
       | true, None ->
         fail
           x.span
           Optional_condition
           "This condition is missing where its inputs are missing. Say what happens to \
-           those rows: missing = skip drops them, missing = propagate keeps them, \
-           missing = error stops the run"
+           those rows: missing = skip drops them, missing = keep keeps them, missing = \
+           error stops the run"
     in
     let rec present (x : Syntax.expr) =
       match x.form with

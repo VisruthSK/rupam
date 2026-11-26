@@ -9,7 +9,7 @@ type shape =
 
 type policy =
   | Skip
-  | Propagate
+  | Keep
   | Fail
 
 type constant =
@@ -201,11 +201,11 @@ let relationships =
 
 let policy_name = function
   | Skip -> "skip"
-  | Propagate -> "propagate"
+  | Keep -> "keep"
   | Fail -> "error"
 ;;
 
-let policies = List.map (fun p -> policy_name p, p) [ Skip; Propagate; Fail ]
+let policies = List.map (fun p -> policy_name p, p) [ Skip; Keep; Fail ]
 let names table = List.map fst table.schema
 let row table = { Types.fields = table.schema; rest = table.rest }
 

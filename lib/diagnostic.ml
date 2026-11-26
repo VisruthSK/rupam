@@ -174,13 +174,12 @@ let explanation = function
     "A function was used where a value is required. Call it with arguments."
   | Not_a_table -> "A table expression is required here."
   | Optional_condition ->
-    "A condition can be missing for some rows. `filter` needs `missing = skip`, \
-     `propagate` or `error`; `if` needs a present Bool, for example from `coalesce` or \
-     `some(x)`."
-  | Invalid_policy -> "A missing-value policy is `skip`, `propagate` or `error`."
+    "A condition can be missing for some rows. `filter` needs `missing = skip`, `keep` \
+     or `error`; `if` needs a present Bool, for example from `coalesce` or `some(x)`."
+  | Invalid_policy -> "A missing-value policy is `skip`, `keep` or `error`."
   | Missing_policy_required ->
     "A reduction or grouping reads values that can be missing. Choose `missing =` (or \
-     `group_missing =` for grouping keys): `skip` leaves them out, `propagate` makes the \
+     `group_missing =` for grouping keys): `skip` leaves them out, `keep` makes the \
      result missing, `error` stops the run."
   | Missing_under_error ->
     "A missing value reached an operation whose policy is `missing = error`."

@@ -177,10 +177,11 @@ and reduce ~scalar (e : C.expr) r policy x =
     | Min -> P.meth a "min" []
     | Max -> P.meth a "max" []
     | Count -> length
+    | Distinct when policy = C.Keep -> cast (P.meth a "n_unique" []) "Int64"
     | Distinct -> cast (P.meth (P.meth a "drop_nulls" []) "n_unique" []) "Int64"
   in
   ignore e;
-  if policy = C.Propagate
+  if policy = C.Keep && r <> Distinct
   then choose (P.Binary (Equal, P.meth source "null_count" [], P.Int "0")) value P.Null
   else value
 ;;
