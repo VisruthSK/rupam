@@ -841,6 +841,15 @@ and builtin ctx span n b args =
               missing = skip ignores them, missing = keep makes the result missing, \
               missing = error stops the run")
     in
+    let v =
+      match r, T.repr (T.present v.typ) with
+      | Sum, Bool ->
+        let constant i = make Scalar T.Int (Constant (Int (Int64.of_int i))) in
+        lift ctx.env span v.shape [ v ] (function
+          | [ b ] -> make v.shape T.Int (If (b, constant 1, constant 0))
+          | _ -> assert false)
+      | _ -> v
+    in
     let element = T.present v.typ in
     let v, result =
       match r with

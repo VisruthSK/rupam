@@ -63,8 +63,13 @@ In order of conformance cases unlocked:
 - Emit runtime adapters only when the generated code uses them, so
   `:code --full` and exports carry no unused helpers.
 - A TextMate grammar; LSP completion and hover from the shared checker.
-- Record viewer frame times on large results with `scripts/dev frames` and
-  set a regression budget from them.
+- Start the target worker in the background when the REPL opens and send its
+  preamble without waiting, so the first command does not pay the measured
+  ~740 ms interpreter and package start (`rupam-dev bench`).
+- Reading CSV in R takes ~435 ms for penguins against ~117 ms in Python;
+  profile the R reader and the separate schema scan.
+- Set regression budgets from `frames.exe` (1M rows: PgDn/PgUp p95 2.5 ms,
+  viewer open 21 ms) and `rupam-dev bench`, and run both in CI.
 
 ## 4. Public MVP
 

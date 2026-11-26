@@ -465,6 +465,28 @@ let load t path =
   t.saved <- Some t.current.number
 ;;
 
+let verify t items =
+  let h = host t in
+  let definitions =
+    List.filter
+      (function
+        | TransformIR.Define _ -> true
+        | _ -> false)
+      items
+  in
+  ignore (run h definitions);
+  List.iter
+    (function
+      | TransformIR.Define (id, { node = Table table; _ }) ->
+        let r =
+          materialize h ~ordering:"" { table with source = Bound id; stages = [] }
+        in
+        Arrow_result.close r.arrow;
+        remove r.file
+      | _ -> ())
+    definitions
+;;
+
 let check t (i : Syntax.item) = snd (Elaborate.item t.current.env i)
 
 let table_of t (e : Syntax.expr) =

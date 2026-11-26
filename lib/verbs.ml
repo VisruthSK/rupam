@@ -423,6 +423,7 @@ let filter context span (t : C.table) arguments =
       | _ -> fail span Wrong_arguments "filter takes conditions and an optional missing ="
     in
     let predicate = context.expression ?missing:policy (C.row t) x in
+    let condition = predicate in
     if predicate.shape <> Columnar
     then
       fail x.span Row_domain_mismatch "filter needs a condition on this table's columns";
@@ -451,7 +452,24 @@ let filter context span (t : C.table) arguments =
       | Binary (And, a, b) -> present a @ present b
       | _ -> []
     in
-    let refined = present x in
+    let rec strict (e : C.expr) =
+      match e.node with
+      | Column n -> [ n ]
+      | Binary ((And | Or), _, _) -> []
+      | Binary (_, a, b) -> strict a @ strict b
+      | Unary (_, a) | Convert a -> strict a
+      | Builtin ((Present | Absent), _) -> []
+      | Builtin (_, args) -> List.concat_map strict args
+      | Lift (bound, body) -> List.concat_map (fun (_, v) -> strict v) bound @ strict body
+      | _ -> []
+    in
+    let rec blocks (e : C.expr) =
+      match e.node with
+      | Binary (And, a, b) -> blocks a @ blocks b
+      | Binary (Or, a, b) -> List.filter (fun n -> List.mem n (blocks b)) (blocks a)
+      | _ -> strict e
+    in
+    let refined = present x @ if policy = Some Skip then blocks condition else [] in
     let t = add span (Filter predicate) t in
     let t =
       { t with

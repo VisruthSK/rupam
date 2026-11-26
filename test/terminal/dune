@@ -1,5 +1,11 @@
 (executable
+ (name frames)
+ (modules frames)
+ (libraries matrix matrix.test astring unix))
+
+(executable
  (name terminal_test)
+ (modules terminal_test)
  (libraries matrix matrix.test astring unix))
 
 (rule

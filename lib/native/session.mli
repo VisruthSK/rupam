@@ -26,6 +26,7 @@ val path : t -> string option
 val revision : t -> int
 val items : t -> TransformIR.item list
 val submit : t -> Syntax.item list -> event list
+val verify : t -> TransformIR.item list -> unit
 val check : t -> Syntax.item -> TransformIR.item list
 val table : t -> string -> TransformIR.table
 val table_of : t -> Syntax.expr -> TransformIR.table

@@ -200,6 +200,37 @@ let mcp () =
     stdout
 ;;
 
+let bench examples =
+  let time f =
+    let start = Unix.gettimeofday () in
+    ignore (f ());
+    (Unix.gettimeofday () -. start) *. 1000.
+  in
+  let percentile xs p =
+    let a = Array.of_list (List.sort compare xs) in
+    a.(min (Array.length a - 1) (int_of_float (p *. float_of_int (Array.length a))))
+  in
+  let startup = List.init 10 (fun _ -> time (fun () -> Sys.command "rupam --version > /dev/null")) in
+  Printf.printf "%-28s p50 %7.1f ms\n%!" "rupam --version" (percentile startup 0.5);
+  List.iter
+    (fun name ->
+       let session = Session.create ~project:Project.standalone ~directory:examples in
+       Session.set_target session (List.assoc name Target.targets) ~origin:"bench";
+       let submit source = Session.submit session (Frontend.read source) in
+       let report label ms = Printf.printf "%-28s %7.1f ms\n%!" (name ^ " " ^ label) ms in
+       report "worker cold start" (time (fun () -> submit "1 + 1"));
+       let warm = List.init 30 (fun _ -> time (fun () -> submit "1 + 1")) in
+       Printf.printf
+         "%-28s p50 %7.1f ms  p95 %7.1f ms\n%!"
+         (name ^ " round trip")
+         (percentile warm 0.5)
+         (percentile warm 0.95);
+       report "read_csv penguins" (time (fun () -> submit {|let p = read_csv("penguins.csv")|}));
+       report "show table" (time (fun () -> submit "p"));
+       Session.close session)
+    Rupam_fixture.Fixture.targets
+;;
+
 let eval source =
   let reference = Rupam_fixture.Fixture.evaluate source in
   let show (o : Rupam_fixture.Fixture.outcome) =
@@ -387,6 +418,11 @@ let () =
               Term.(
                 const (fun s -> guarded eval s)
                 $ Arg.(required & pos 0 (some string) None & info [] ~docv:"SOURCE"))
+          ; Cmd.v
+              (Cmd.info "bench" ~doc:"Time startup, worker start and round trips on every target.")
+              Term.(
+                const (fun d -> guarded bench d)
+                $ Arg.(value & pos 0 dir "examples" & info [] ~docv:"EXAMPLES"))
           ; Cmd.v
               (Cmd.info "activate" ~doc:"Mark fixture ID active once it passes on every target.")
               Term.(

@@ -67,7 +67,12 @@ let lock target strict path =
   targeted (Filename.dirname path) target strict
   @@ fun project ->
   with_program path (fun ds ->
-    let entry = Lock.establish ~project ~source:path (elaborate project path ds) in
+    let items = elaborate project path ds in
+    let session = Session.create ~project ~directory:(Filename.dirname path) in
+    Fun.protect
+      ~finally:(fun () -> Session.close session)
+      (fun () -> Session.verify session items);
+    let entry = Lock.establish ~project ~source:path items in
     Lock.print_schemas entry;
     Printf.printf
       "Locked %s for %s: %d input%s\n"

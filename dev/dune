@@ -2,4 +2,4 @@
  (name rupam_dev)
  (public_name rupam-dev)
  (package rupam-dev)
- (libraries rupam rupam_native reference rupam_fixture cmdliner sexplib0 yojson))
+ (libraries rupam rupam_native reference rupam_fixture cmdliner sexplib0 yojson unix))
