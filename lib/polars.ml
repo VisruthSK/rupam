@@ -113,8 +113,9 @@ let columnar =
     | _ -> false)
 ;;
 
-let rec expression ~checked ~scalar (e : C.expr) : P.expr =
-  let go = expression ~checked ~scalar in
+let rec expression ?(deferred = false) ~checked ~scalar (e : C.expr) : P.expr =
+  let go = expression ~deferred ~checked ~scalar in
+  let narrow x = if deferred then x else narrow x in
   let integer = T.repr (T.present e.typ) = Int in
   if not (columnar e)
   then
@@ -122,6 +123,17 @@ let rec expression ~checked ~scalar (e : C.expr) : P.expr =
   else (
     match e.node with
     | Column n -> col n
+    | If (c, a, b) when C.reduces a || C.reduces b ->
+      let guard selects (x : C.expr) =
+        let any = P.meth selects "any" [] in
+        if not (C.reduces x)
+        then go x
+        else if checked && T.repr (T.present x.typ) = Int
+        then
+          narrow (choose any (expression ~deferred:true ~checked ~scalar x) P.Null)
+        else choose any (go x) P.Null
+      in
+      choose (go c) (guard (go c) a) (guard (P.Unary (Invert, go c)) b)
     | If (c, a, b) -> choose (go c) (go a) (go b)
     | Coalesce (a, b) -> P.Call (pl "coalesce", positional [ go a; go b ])
     | Builtin (Parse_date, [ s; { node = Constant (Text f); _ } ]) ->
@@ -189,7 +201,7 @@ let rec expression ~checked ~scalar (e : C.expr) : P.expr =
         , [ P.Positional (P.List (List.map part pieces))
           ; P.Keyword ("separator", P.Str "")
           ] )
-    | Reduce (r, policy, x) -> reduce ~checked ~scalar e r policy x
+    | Reduce (r, policy, x) -> reduce ~deferred ~checked ~scalar e r policy x
     | Let (id, v, body) -> go (C.substitute id v body)
     | Lift (bound, body) ->
       go (List.fold_left (fun body (id, value) -> C.substitute id value body) body bound)
@@ -204,7 +216,7 @@ let rec expression ~checked ~scalar (e : C.expr) : P.expr =
         Unsupported_feature
         "This expression has no Polars lowering")
 
-and reduce ~checked ~scalar (e : C.expr) r policy x =
+and reduce ?(deferred = false) ~checked ~scalar (e : C.expr) r policy x =
   let source = expression ~checked ~scalar x in
   let a =
     if policy = C.Fail && checked
@@ -217,7 +229,12 @@ and reduce ~checked ~scalar (e : C.expr) r policy x =
     | Sum ->
       let total =
         if T.repr (T.present x.typ) = Int
-        then if checked then narrow (P.meth (wide a) "sum" []) else P.meth a "sum" []
+        then
+          if checked && deferred
+          then P.meth (wide a) "sum" []
+          else if checked
+          then narrow (P.meth (wide a) "sum" [])
+          else P.meth a "sum" []
         else P.meth a "sum" []
       in
       choose (P.Binary (Greater, P.meth a "count" [], P.Int "0")) total P.Null

@@ -1,4 +1,16 @@
 id = "C110"
-status = "pending"
+status = "active"
 case = '''fully inactive conditional branch containing integer sum of `[MAX,1]`'''
 expected = '''no overflow; if any row selects branch, full-group sum runs and fails'''
+
+[run]
+source = '''
+let s = read_csv("conformance/data/overflow.csv")
+let t = s |> mutate(r = if (x < 0) sum(x) else 0, by = g) |> select(r)
+'''
+
+[expect]
+value = '''r
+0
+0
+0'''
