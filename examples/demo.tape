@@ -44,6 +44,14 @@ Type 'penguins |> profile(bill_len / bill_dep, island)'
 Enter
 Sleep 3.5s
 
+Type ':target python-polars'
+Enter
+Sleep 3s
+
+Type 'penguins |> profile(bill_len / bill_dep, island)'
+Enter
+Sleep 3.5s
+
 Type 'let imputed = penguins |> mutate(mass = body_mass ?? mean(body_mass, missing = skip), by = species)'
 Enter
 Sleep 2.5s
