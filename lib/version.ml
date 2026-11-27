@@ -1,4 +1,4 @@
-let package = "0.0.0-dev"
+let package = Build_id.package
 let revision = if Build_id.revision = "" then None else Some Build_id.revision
 
 let version =

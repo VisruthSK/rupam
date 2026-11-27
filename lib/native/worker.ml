@@ -62,7 +62,11 @@ repeat {
   reply <- tryCatch({
     output <- capture.output(eval(parse(text = request$script), envir = session))
     list(output = paste(c(output, ""), collapse = "\n"))
-  }, error = function(e) c(list(error = conditionMessage(e)), if (is.character(e$code)) list(code = e$code)))
+  }, error = function(e) {
+    cause <- e
+    while (!is.null(cause) && !is.character(cause$code)) cause <- cause$parent
+    c(list(error = conditionMessage(e)), if (!is.null(cause)) list(code = cause$code))
+  })
   reply$revision <- request$revision
   delivered <- tryCatch({
     cat(jsonlite::toJSON(reply, auto_unbox = TRUE), "\n", sep = "")
@@ -124,10 +128,11 @@ let cancel w =
          | Unix.Unix_error (Unix.ESRCH, _, _) -> ()))
 ;;
 
+let overflow message = Astring.String.is_infix ~affix:"to `i64` failed" message
+
 let host_error message =
-  let contains needle = Astring.String.is_infix ~affix:needle message in
   let lines = String.split_on_char '\n' message |> List.map String.trim in
-  if contains "to `i64` failed"
+  if overflow message
   then "arithmetic overflow: Int out of range"
   else (
     match List.rev (List.filter (String.starts_with ~prefix:"! ") lines) with
@@ -179,7 +184,10 @@ let evaluate w script =
   match reply.error, reply.output with
   | Some message, _ ->
     Diagnostic.fail
-      (Option.value (Option.bind reply.code Diagnostic.of_name) ~default:Diagnostic.Host_failure)
+      (match Option.bind reply.code Diagnostic.of_name with
+       | Some code -> code
+       | None when overflow message -> Arithmetic_overflow
+       | None -> Host_failure)
       (host_error message)
   | None, output -> Option.value output ~default:""
 ;;

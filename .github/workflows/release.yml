@@ -42,7 +42,9 @@ jobs:
         with:
           ocaml-compiler: "5.5"
       - run: opam install . --deps-only
-      - run: opam exec -- dune build --profile release bin/rupam_cli.exe
+      - run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then export RUPAM_VERSION=${GITHUB_REF_NAME#v}; fi
+          opam exec -- dune build --profile release bin/rupam_cli.exe
 
       - name: Package
         run: |
@@ -77,6 +79,9 @@ jobs:
         with:
           path: dist
           merge-multiple: true
-      - run: gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes
+      - run: |
+          prerelease=$([[ "$GITHUB_REF_NAME" == *-* ]] && echo --prerelease || true)
+          gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" \
+            --title "$GITHUB_REF_NAME" --generate-notes $prerelease
         env:
           GH_TOKEN: ${{ github.token }}

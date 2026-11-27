@@ -39,4 +39,5 @@
  (action
   (with-stdout-to
    %{target}
-   (echo "let revision = \"%{env:RUPAM_REVISION=}\"\n"))))
+   (echo
+    "let revision = \"%{env:RUPAM_REVISION=}\"\nlet package = \"%{env:RUPAM_VERSION=0.0.0-dev}\"\n"))))
