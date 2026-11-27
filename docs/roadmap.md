@@ -52,19 +52,17 @@ not yet built.
 
 In order of conformance cases unlocked:
 
-1. A fixture runner for the session protocol: drafts, holes, decisions,
-   `define`, `fork`, `save`, target switches and taps (about 11 cases).
-2. Contract validation: required, range, NaN and infinity in sources, keys
+1. Contract validation: required, range, NaN and infinity in sources, keys
    and foreign keys, malformed fields (about 9 cases).
-3. Evidence and locking: incremental `:lock`, `:unlock`, `:refresh`, schema
+2. Evidence and locking: incremental `:lock`, `:unlock`, `:refresh`, schema
    discovery accepted by lock, and obligations discharged by locked evidence
    (about 13 cases).
-4. Reshaping: `bind_rows`, `complete`, `expand`, pivot duplicates and
+3. Reshaping: `bind_rows`, `complete`, `expand`, pivot duplicates and
    `values_fn` (about 7 cases).
-5. `across` and the remaining column transforms (C77, C106).
-6. Ordered windows: `lag`, `lead`, `slice_min` with total-order obligations
+4. `across` and the remaining column transforms (C77, C106).
+5. Ordered windows: `lag`, `lead`, `slice_min` with total-order obligations
    (5 cases).
-7. Strict mode and effect sets (5 cases); restricted columns (3 cases).
+6. Strict mode and effect sets (5 cases); restricted columns (3 cases).
 
 ## 4. Interactive experience
 
@@ -115,5 +113,8 @@ with R and Python only as reference backends.
   `ppxlib` ([Future](spec/future.md#test-coverage)).
 - Lean 4 proofs of the [metatheory](theory/metatheory.md) in `formal/`,
   checked against the reference evaluator on shared fixtures.
+- The agent session protocol and its fixture runner: `define`, `remove`,
+  `evaluate`, `page`, `fork`, `discard`, `context`, `status`, `cancel`,
+  holes and decisions on diagnostics (about 11 cases).
 - The analyst MCP on MCP 2026-07-28 ([Agents](spec/agent-interface.md)) and
   the [notebook](spec/notebook.md) over the same session.
