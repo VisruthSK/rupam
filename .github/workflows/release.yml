@@ -50,11 +50,23 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@v7.0.1
-      - run: scripts/fetch-deps
+      - id: vendor
+        uses: actions/cache@v6.1.0
+        with:
+          path: |
+            vendor/duckdb
+            vendor/nanoarrow
+          key: vendor-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/fetch-deps') }}
+      - if: steps.vendor.outputs.cache-hit != 'true'
+        run: scripts/fetch-deps
 
       - uses: ocaml/setup-ocaml@v3.9.1
         with:
           ocaml-compiler: "5.5"
+      - uses: actions/cache@v6.1.0
+        with:
+          path: ${{ runner.os == 'Windows' && 'C:\.opam' || '~/.opam' }}
+          key: opam-${{ runner.os }}-${{ runner.arch }}-5.5-${{ hashFiles('*.opam') }}
       - run: opam install . --deps-only
       - run: |
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then export RUPAM_VERSION=${GITHUB_REF_NAME#v}; fi

@@ -42,17 +42,39 @@ jobs:
     defaults:
       run:
         shell: bash
+    env:
+      DUNE_CACHE: enabled
+      DUNE_CACHE_ROOT: ${{ github.workspace }}/../dune-cache
     steps:
       - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
-      - run: scripts/fetch-deps
+
+      - id: vendor
+        uses: actions/cache@v6.1.0
+        with:
+          path: |
+            vendor/duckdb
+            vendor/nanoarrow
+          key: vendor-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/fetch-deps') }}
+      - if: steps.vendor.outputs.cache-hit != 'true'
+        run: scripts/fetch-deps
 
       - uses: ocaml/setup-ocaml@v3.9.1
         with:
           ocaml-compiler: ${{ matrix.ocaml || '5.5' }}
-          dune-cache: true
-      - run: opam install . --deps-only --with-test
+      - id: opam
+        uses: actions/cache@v6.1.0
+        with:
+          path: ${{ runner.os == 'Windows' && 'C:\.opam' || '~/.opam' }}
+          key: opam-${{ runner.os }}-${{ runner.arch }}-${{ matrix.ocaml || '5.5' }}-${{ hashFiles('*.opam') }}
+      - if: steps.opam.outputs.cache-hit != 'true'
+        run: opam install . --deps-only --with-test
+      - uses: actions/cache@v6.1.0
+        with:
+          path: ${{ github.workspace }}/../dune-cache
+          key: dune-${{ runner.os }}-${{ runner.arch }}-${{ matrix.ocaml || '5.5' }}-${{ github.sha }}
+          restore-keys: dune-${{ runner.os }}-${{ runner.arch }}-${{ matrix.ocaml || '5.5' }}-
       - run: opam exec -- dune build @all
 
       - uses: astral-sh/setup-uv@v10.4.0
