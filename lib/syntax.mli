@@ -8,6 +8,13 @@ type reference =
   | Column
 [@@deriving sexp_of]
 
+type label =
+  | Plain of string
+  | Quoted of string
+[@@deriving sexp_of]
+
+val label_name : label -> string
+
 type tap =
   | Print
   | View
@@ -132,7 +139,7 @@ and form =
   | Local of string * expr * expr
   | Literal of literal
   | Field of expr * string
-  | Call of expr * (string option * expr) list
+  | Call of expr * (label option * expr) list
   | Pipe of expr * expr
   | Formula of expr option * expr
   | Range of expr * expr
@@ -142,7 +149,7 @@ and form =
   | Sequence of interval
   | Index of expr * index
   | Last
-  | Tap of tap * (string option * expr) list
+  | Tap of tap * (label option * expr) list
   | Match_present of expr * arm list
   | Unary of unary * expr
   | If of expr * expr * expr

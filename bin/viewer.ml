@@ -290,7 +290,9 @@ let filter t condition policy =
   let args =
     arg condition
     :: Option.to_list
-         (Option.map (fun p -> Some "missing", name (TransformIR.policy_name p)) policy)
+         (Option.map
+            (fun p -> Some (Syntax.Plain "missing"), name (TransformIR.policy_name p))
+            policy)
   in
   let base = expression t in
   let step = call "filter" args in

@@ -419,17 +419,20 @@ and binary ctx span op a b =
 
 and arguments ctx span callee args =
   let missing =
-    match List.assoc_opt (Some "missing") args with
+    match List.assoc_opt (Some (Plain "missing")) args with
     | Some p -> Some (policy_of p)
     | None -> ctx.missing
   in
   ( missing
   , List.filter_map
       (function
-        | Some "missing", _ -> None
+        | Some (Plain "missing"), _ -> None
         | None, a -> Some a
         | Some label, _ ->
-          fail span Unknown_option (callee ^ " takes no argument named " ^ label))
+          fail
+            span
+            Unknown_option
+            (callee ^ " takes no argument named " ^ label_name label))
       args )
 
 and call ctx span (f : Syntax.expr) args =
@@ -551,7 +554,7 @@ and call ctx span (f : Syntax.expr) args =
             match closure.missing with
             | Some p -> Some p
             | None ->
-              (match List.assoc_opt (Some "missing") args with
+              (match List.assoc_opt (Some (Plain "missing")) args with
                | Some p -> Some (policy_of p)
                | None -> ctx.missing)
           in
@@ -606,9 +609,9 @@ and transform ctx span n args =
   let node form : Syntax.expr = { form; span } in
   let name n = node (Name (Bare, n)) in
   let binary op a b = node (Binary (op, a, b)) in
-  let policy = List.filter (fun (label, _) -> label = Some "missing") args in
+  let policy = List.filter (fun (label, _) -> label = Some (Plain "missing")) args in
   let x =
-    match List.filter (fun (label, _) -> label <> Some "missing") args with
+    match List.filter (fun (label, _) -> label <> Some (Plain "missing")) args with
     | [ (None, x) ] -> x
     | _ -> fail span Wrong_arguments (n ^ " takes one column or vector and missing =")
   in
@@ -951,15 +954,15 @@ and interpolate ctx span pieces =
 
 and match_ ctx span (subject : C.expr) syntax_arms =
   let result = T.fresh ctx.level in
-  let rec pattern t = function
+  let rec pattern (source : C.expr) t = function
     | Syntax.Wildcard -> C.Wildcard, []
     | Bind n ->
       let id = fresh_id ctx.env n in
-      C.Bind id, [ n, id, t ]
+      C.Bind id, [ n, id, t, source ]
     | Pas (n, p) ->
       let id = fresh_id ctx.env n in
-      let p, vars = pattern t p in
-      C.Named (id, p), (n, id, t) :: vars
+      let p, vars = pattern source t p in
+      C.Named (id, p), (n, id, t, source) :: vars
     | Pliteral Absent ->
       expect span (T.Option (T.fresh ctx.level)) t;
       C.Missing, []
@@ -988,23 +991,31 @@ and match_ ctx span (subject : C.expr) syntax_arms =
     | Precord names ->
       let fields = List.map (fun n -> n, T.fresh ctx.level) names in
       expect span (T.Record { fields; rest = Some (T.fresh ctx.level) }) t;
-      let ids = List.map (fun (n, ft) -> n, fresh_id ctx.env n, ft) fields in
-      C.Fields (List.map (fun (n, id, _) -> n, id) ids), ids
+      let ids = List.map (fun (n, ft) -> n, fresh_id ctx.env n, ft, source) fields in
+      C.Fields (List.map (fun (n, id, _, _) -> n, id) ids), ids
     | Ptuple ps ->
       let ts = List.map (fun _ -> T.fresh ctx.level) ps in
       expect span (T.Tuple ts) t;
-      let ps, vars = List.split (List.map2 pattern ts ps) in
+      let sources =
+        match source.node with
+        | Tuple xs when List.length xs = List.length ps -> xs
+        | _ -> List.map (fun _ -> source) ps
+      in
+      let ps, vars =
+        List.split
+          (List.map2 (fun (src, t) p -> pattern src t p) (List.combine sources ts) ps)
+      in
       C.Elements ps, List.concat vars
     | Palt [] -> C.Either [], []
     | Palt (first :: rest) ->
-      let p, vars = pattern t first in
+      let p, vars = pattern source t first in
       let others =
         List.map
           (fun alt ->
-             let q, more = pattern t alt in
+             let q, more = pattern source t alt in
              if
-               List.sort compare (List.map (fun (n, _, _) -> n) more)
-               <> List.sort compare (List.map (fun (n, _, _) -> n) vars)
+               List.sort compare (List.map (fun (n, _, _, _) -> n) more)
+               <> List.sort compare (List.map (fun (n, _, _, _) -> n) vars)
              then fail span Pattern_bindings "Every alternative must bind the same names";
              q)
           rest
@@ -1013,7 +1024,7 @@ and match_ ctx span (subject : C.expr) syntax_arms =
     | Tag ("Some", [ p ]) ->
       let inner = T.fresh ctx.level in
       expect span (T.Option inner) t;
-      let p, vars = pattern inner p in
+      let p, vars = pattern source inner p in
       C.Present p, vars
     | Tag ("None", []) ->
       expect span (T.Option (T.fresh ctx.level)) t;
@@ -1032,25 +1043,25 @@ and match_ ctx span (subject : C.expr) syntax_arms =
       if List.length fields <> List.length ps
       then fail span Wrong_arguments (tag ^ " has a different number of fields");
       expect span variant t;
-      let ps, vars = List.split (List.map2 pattern fields ps) in
+      let ps, vars = List.split (List.map2 (pattern source) fields ps) in
       C.Tag (tag, ps), List.concat vars
   in
   let column = subject.shape = Columnar || ctx.columns <> None in
   let arms =
     List.map
       (fun (arm : Syntax.arm) ->
-         let p, vars = pattern subject.typ arm.pattern in
-         let names = List.map (fun (n, _, _) -> n) vars in
+         let p, vars = pattern subject subject.typ arm.pattern in
+         let names = List.map (fun (n, _, _, _) -> n) vars in
          if List.length names <> List.length (List.sort_uniq compare names)
          then fail span Pattern_bindings "A pattern binds a name twice";
          let env =
            List.fold_left
-             (fun env (n, id, t) ->
+             (fun env (n, id, t, (source : C.expr)) ->
                 bind
                   env
                   n
                   (if column
-                   then Inline { subject with typ = t }
+                   then Inline { source with typ = t }
                    else Value { id; scheme = T.mono t }))
              ctx.env
              vars
@@ -1097,7 +1108,7 @@ and decide _ctx span subject arms typ shape =
     | Some (a : C.expr), Some (b : C.expr) ->
       Some (make span (shape_of span [ a; b ]) T.Bool (Binary (And, a, b)))
   in
-  let compare op (c : C.constant) =
+  let compare (s : C.expr) op (c : C.constant) =
     let literal =
       make
         span
@@ -1105,30 +1116,37 @@ and decide _ctx span subject arms typ shape =
         (match c with
          | Text _ -> T.String
          | Bool _ -> T.Bool
-         | _ -> T.present subject.typ)
+         | _ -> T.present s.typ)
         (Constant c)
     in
-    known (make span subject.shape T.Bool (Binary (op, subject, literal)))
+    known (make span s.shape T.Bool (Binary (op, s, literal)))
   in
-  let rec test = function
+  let rec test (s : C.expr) = function
     | C.Wildcard | Bind _ | Fields _ -> None
-    | Named (_, p) -> test p
-    | Missing -> Some (make span subject.shape T.Bool (Builtin (Absent, [ subject ])))
+    | Named (_, p) -> test s p
+    | Missing -> Some (make span s.shape T.Bool (Builtin (Absent, [ s ])))
     | Present p ->
-      both
-        (Some (make span subject.shape T.Bool (Builtin (Present, [ subject ]))))
-        (test p)
-    | Equals c -> Some (compare Equal c)
+      both (Some (make span s.shape T.Bool (Builtin (Present, [ s ])))) (test s p)
+    | Equals c -> Some (compare s Equal c)
     | Between (low, high) ->
       both
         (Option.map
-           (fun (c, closed) -> compare (if closed then Greater_equal else Greater) c)
+           (fun (c, closed) -> compare s (if closed then Greater_equal else Greater) c)
            low)
         (Option.map
-           (fun (c, closed) -> compare (if closed then Less_equal else Less) c)
+           (fun (c, closed) -> compare s (if closed then Less_equal else Less) c)
            high)
+    | Elements ps ->
+      (match s.node with
+       | Tuple xs when List.length xs = List.length ps ->
+         List.fold_left2 (fun acc x p -> both acc (test x p)) None xs ps
+       | _ ->
+         fail
+           span
+           Unsupported_feature
+           "Inside a table verb, match several values with match a, b { ... }")
     | Either ps ->
-      let tests = List.map test ps in
+      let tests = List.map (test s) ps in
       if List.mem None tests
       then None
       else (
@@ -1141,7 +1159,7 @@ and decide _ctx span subject arms typ shape =
                t
                rest)
         | [] -> None)
-    | Tag _ | Elements _ ->
+    | Tag _ ->
       fail
         span
         Unsupported_feature
@@ -1152,7 +1170,7 @@ and decide _ctx span subject arms typ shape =
   | (last : C.arm) :: earlier ->
     List.fold_left
       (fun (otherwise : C.expr) (arm : C.arm) ->
-         match both (test arm.pattern) (Option.map known arm.guard) with
+         match both (test subject arm.pattern) (Option.map known arm.guard) with
          | Some t -> make span shape typ (If (t, arm.body, otherwise))
          | None -> arm.body)
       last.body

@@ -1,5 +1,5 @@
 id = "C127"
-status = "pending"
+status = "active"
 case = '''`match x, y { 0, _ => A, _, 0 => B, _, _ => C }`'''
 expected = '''exhaustive; selects per row'''
 

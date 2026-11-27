@@ -11,6 +11,8 @@ Errors report a code and a span, and the session continues.
   > birds |> make_key(species)
   > 1:3
   > square(3)
+  > match 0, 1 { 0, _ => "A", _, 0 => "B", _, _ => "C" }
+  > birds |> mutate(`x` = 1, x = 2)
   > INPUT
   $ rupam repl --target r-dplyr < session.txt
   square : (Number) -> Number
@@ -35,3 +37,6 @@ Errors report a code and a span, and the session continues.
   1:1  r-range
     `a:b` selects columns. For integers write `a=..=b`
   9 : Int
+  "A" : String
+  1:30  duplicate-name
+    mutate repeats the column x

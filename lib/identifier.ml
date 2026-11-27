@@ -34,8 +34,8 @@ let valid s =
   scan 0
 ;;
 
+let backtick name = "`" ^ String.concat "``" (String.split_on_char '`' name) ^ "`"
+
 let quote name =
-  if valid name && not (List.mem name keywords)
-  then name
-  else "`" ^ String.concat "``" (String.split_on_char '`' name) ^ "`"
+  if valid name && not (List.mem name keywords) then name else backtick name
 ;;

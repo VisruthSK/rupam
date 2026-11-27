@@ -2,6 +2,11 @@ open Syntax
 
 let comma f xs = String.concat ", " (List.map f xs)
 
+let label_text = function
+  | Plain name -> Identifier.quote name
+  | Quoted name -> Identifier.backtick name
+;;
+
 let rec annotation = function
   | Atuple ts -> "(" ^ comma annotation ts ^ ")"
   | Alist t -> "[" ^ annotation t ^ "]"
@@ -117,7 +122,7 @@ and expr x =
     ^ "("
     ^ comma
         (fun (label, x) ->
-           Option.fold ~none:"" ~some:(fun l -> Identifier.quote l ^ " = ") label ^ expr x)
+           Option.fold ~none:"" ~some:(fun l -> label_text l ^ " = ") label ^ expr x)
         args
     ^ ")"
   | Match_present (x, bs) ->
@@ -162,7 +167,7 @@ and expr x =
     ^ "("
     ^ comma
         (fun (label, x) ->
-           Option.fold ~none:"" ~some:(fun l -> Identifier.quote l ^ " = ") label ^ expr x)
+           Option.fold ~none:"" ~some:(fun l -> label_text l ^ " = ") label ^ expr x)
         args
     ^ ")"
   | Pipe _ ->

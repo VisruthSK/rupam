@@ -30,7 +30,7 @@ let subject start finish = function [x] -> x | xs -> at start finish (Tuple xs)
 %token SET FALLBACK MATCH_PRESENT LAST
 %token CLOSED_CLOSED CLOSED_OPEN OPEN_CLOSED OPEN_OPEN CLOSED_FROM OPEN_FROM
 %token LET USE CONTRACT AS FN IF ELSE
-%token <string> NAME INT FLOAT STRING TAP DATE
+%token <string> NAME QUOTED INT FLOAT STRING TAP DATE
 %token TRUE FALSE NONE
 %token IN LB RB LC RC
 %token LP RP COMMA EQ DOT PIPE DOLLAR CARET ARROW END EOF
@@ -59,36 +59,36 @@ from: CLOSED_FROM { true } | OPEN_FROM { false };
 program: items EOF { List.rev $1 };
 items: /* empty */ { [] } | items separator { $1 } | items decl separator { { declaration = $2; span = $startpos($2), $endpos($2) } :: $1 };
 separator: END {};
-decl: IMPORT NAME { Import ($2,$2) } | IMPORT NAME AS NAME { Import ($2,$4) }
- | TYPE NAME type_params EQ annotation { Alias ($2,$3,$5) }
- | TYPE NAME type_params EQ variants { Type ($2,$3,List.rev $5) }
- | USE CONTRACT STRING AS NAME { Contract ($3,$5) }
- | SET NAME EQ NAME { Setting ($2,$4) }
- | LET NAME COLON annotation EQ expr { Let ($2,None,at $startpos $endpos (Annotated ($6,$4))) }
- | LET NAME EQ expr { Let ($2,None,$4) }
- | LET NAME LP params RP return_type EQ expr { Let ($2,Some (List.map fst $4),parameters $4 (result_annotation $6 $8)) }
+decl: IMPORT ident { Import ($2,$2) } | IMPORT ident AS ident { Import ($2,$4) }
+ | TYPE ident type_params EQ annotation { Alias ($2,$3,$5) }
+ | TYPE ident type_params EQ variants { Type ($2,$3,List.rev $5) }
+ | USE CONTRACT STRING AS ident { Contract ($3,$5) }
+ | SET ident EQ ident { Setting ($2,$4) }
+ | LET ident COLON annotation EQ expr { Let ($2,None,at $startpos $endpos (Annotated ($6,$4))) }
+ | LET ident EQ expr { Let ($2,None,$4) }
+ | LET ident LP params RP return_type EQ expr { Let ($2,Some (List.map fst $4),parameters $4 (result_annotation $6 $8)) }
  | expr { Evaluate $1 };
 type_params: /* empty */ { [] } | LT names GT { List.rev $2 };
-annotation: NAME { Named ($1,[]) } | NAME LT annotations GT { Named ($1,List.rev $3) }
+annotation: ident { Named ($1,[]) } | ident LT annotations GT { Named ($1,List.rev $3) }
  | annotation QUESTION { Optional $1 }
  | annotation TYPEARROW annotation { Aarrow ($1,$3) }
  | LP annotations RP { match List.rev $2 with [t] -> t | ts -> Atuple ts }
  | LB annotation RB { Alist $2 }
  | LC RC { Arow ([],None) }
  | LC typed_fields RC { Arow (List.rev $2,None) }
- | LC DOTDOT NAME RC { Arow ([],Some $3) }
- | LC typed_fields COMMA DOTDOT NAME RC { Arow (List.rev $2,Some $5) };
+ | LC DOTDOT ident RC { Arow ([],Some $3) }
+ | LC typed_fields COMMA DOTDOT ident RC { Arow (List.rev $2,Some $5) };
 annotations: annotation { [$1] } | annotations COMMA annotation { $3 :: $1 };
 variants: BAR variant { [$2] } | variants BAR variant { $3 :: $1 };
-variant: NAME { $1,[] } | NAME LP typed_fields RP { $1,List.rev $3 };
-typed_fields: NAME COLON annotation { [$1,$3] } | typed_fields COMMA NAME COLON annotation { ($3,$5) :: $1 };
+variant: ident { $1,[] } | ident LP typed_fields RP { $1,List.rev $3 };
+typed_fields: ident COLON annotation { [$1,$3] } | typed_fields COMMA ident COLON annotation { ($3,$5) :: $1 };
 arms: arm { [$1] } | arms COMMA arm { $3 :: $1 };
 arm: patterns ARROW expr { { pattern = product (List.rev $1); guard = None; body = $3 } }
  | patterns IF expr ARROW expr { { pattern = product (List.rev $1); guard = Some $3; body = $5 } };
 pattern: alternative { $1 } | pattern BAR alternative { alternatives $1 $3 };
-alternative: NAME { if $1="_" then Wildcard else if Char.uppercase_ascii $1.[0]=$1.[0] then Tag ($1,[]) else Bind $1 }
- | NAME AT alternative { Pas ($1,$3) }
- | NAME LP patterns RP { Tag ($1,List.rev $3) }
+alternative: ident { if $1="_" then Wildcard else if Char.uppercase_ascii $1.[0]=$1.[0] then Tag ($1,[]) else Bind $1 }
+ | ident AT alternative { Pas ($1,$3) }
+ | ident LP patterns RP { Tag ($1,List.rev $3) }
  | LC names RC { Precord (List.rev $2) }
  | LC names COMMA DOTDOT RC { Precord (List.rev $2) }
  | literal { Pliteral $1 }
@@ -104,19 +104,19 @@ patterns: pattern { [$1] } | patterns COMMA pattern { $3 :: $1 };
 literal: INT { Int $1 } | FLOAT { Float $1 } | STRING { Text $1 } | DATE { Date $1 }
  | TRUE { Bool true } | FALSE { Bool false } | NONE { Absent };
 return_type: /* empty */ { None } | COLON annotation { Some $2 };
-param: NAME { $1,None } | NAME COLON annotation { $1,Some $3 };
+param: ident { $1,None } | ident COLON annotation { $1,Some $3 };
 params: /* empty */ { [] } | param_list { List.rev $1 };
 param_list: param { [$1] } | param_list COMMA param { $3 :: $1 };
-names: NAME { [$1] } | names COMMA NAME { $3 :: $1 };
+names: ident { [$1] } | names COMMA ident { $3 :: $1 };
 args: /* empty */ { [] } | arguments { List.rev $1 } | arguments COMMA { List.rev $1 };
 arguments: arg { [$1] } | arguments COMMA arg { $3 :: $1 };
-arg: expr { None,$1 } | NAME EQ expr { Some $1,$3 };
+arg: expr { None,$1 } | NAME EQ expr { Some (Plain $1),$3 } | QUOTED EQ expr { Some (Quoted $1),$3 };
 values: expr { [$1] } | values COMMA expr { $3 :: $1 };
 fields: field { [$1] } | fields COMMA field { $3 :: $1 };
-field: NAME EQ expr { $1,$3 } | NAME { $1,at $startpos $endpos (Name (Bare,$1)) };
+field: ident EQ expr { $1,$3 } | ident { $1,at $startpos $endpos (Name (Bare,$1)) };
 rest: expr { $1 } | expr separator { $1 } | block { $1 };
-block: LET NAME EQ expr separator rest { at $startpos $endpos (Local ($2,$4,$6)) }
- | LET NAME LP params RP EQ expr separator rest
+block: LET ident EQ expr separator rest { at $startpos $endpos (Local ($2,$4,$6)) }
+ | LET ident LP params RP EQ expr separator rest
    { at $startpos $endpos (Local ($2,at $startpos($7) $endpos($7) (Lambda (List.map fst $4,parameters $4 $7)),$9)) };
 expr: MATCH_PRESENT expr LC arms RC { at $startpos $endpos (Match_present ($2,List.rev $4)) }
  | MATCH_PRESENT expr LC arms COMMA RC { at $startpos $endpos (Match_present ($2,List.rev $4)) }
@@ -130,9 +130,9 @@ expr: MATCH_PRESENT expr LC arms RC { at $startpos $endpos (Match_present ($2,Li
  | LC fields COMMA RC { at $startpos $endpos (Record (List.rev $2)) }
  | LC block RC { $2 }
  | LP expr COMMA values RP { at $startpos $endpos (Tuple ($2 :: List.rev $4)) }
- | NAME { at $startpos $endpos (Name (Bare,$1)) } | DOLLAR NAME { at $startpos $endpos (Name (Column,$2)) }
- | CARET NAME { at $startpos $endpos (Name (Lexical,$2)) } | literal { at $startpos $endpos (Literal $1) }
- | LP expr RP { $2 } | expr DOT NAME { at $startpos $endpos (Field ($1,$3)) }
+ | ident { at $startpos $endpos (Name (Bare,$1)) } | DOLLAR ident { at $startpos $endpos (Name (Column,$2)) }
+ | CARET ident { at $startpos $endpos (Name (Lexical,$2)) } | literal { at $startpos $endpos (Literal $1) }
+ | LP expr RP { $2 } | expr DOT ident { at $startpos $endpos (Field ($1,$3)) }
  | expr LP args RP {
      let callee = match $1.form with
        | Name (r, n) -> { $1 with form = Name (r, american n) }
@@ -190,3 +190,4 @@ expr: MATCH_PRESENT expr LC arms RC { at $startpos $endpos (Match_present ($2,Li
  | expr OR expr { at $startpos $endpos (Binary (Or,$1,$3)) }
  | expr COLON expr { at $startpos $endpos (Range ($1,$3)) }
 ;
+ident: NAME { $1 } | QUOTED { $1 };

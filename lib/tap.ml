@@ -1,7 +1,7 @@
 type t =
   { kind : Syntax.tap
   ; subject : Syntax.expr
-  ; arguments : (string option * Syntax.expr) list
+  ; arguments : (Syntax.label option * Syntax.expr) list
   }
 
 let rec strip (e : Syntax.expr) =

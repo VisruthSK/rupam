@@ -6,7 +6,7 @@ type context =
   ; group_missing : TransformIR.policy option
   }
 
-type arguments = (string option * Syntax.expr) list
+type arguments = (Syntax.label option * Syntax.expr) list
 
 val names : string list
 val mem : string -> bool

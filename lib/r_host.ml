@@ -222,7 +222,7 @@ and match_ names subject arms =
     | Present p ->
       let tests, bound = pattern path p in
       R.Not (is_null path) :: tests, bound
-    | Equals c -> [ R.call "identical" [ path; constant c ] ], []
+    | Equals c -> [ R.call "isTRUE" [ R.Binary (Equal, path, constant c) ] ], []
     | Between (low, high) ->
       ( Option.to_list
           (Option.map

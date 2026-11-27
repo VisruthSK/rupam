@@ -9,7 +9,7 @@ type context =
   ; group_missing : C.policy option
   }
 
-type arguments = (string option * Syntax.expr) list
+type arguments = (Syntax.label option * Syntax.expr) list
 
 let names =
   [ "filter"
@@ -56,7 +56,11 @@ let typ (t : C.table) name =
 let column_name (x : Syntax.expr) =
   match x.form with
   | Name ((Bare | Column), n) | Literal (Text n) -> n
-  | _ -> fail x.span Invalid_selector "Expected a column name"
+  | _ ->
+    fail
+      x.span
+      Invalid_selector
+      (Printf.sprintf "Expected a column name, not %s" (Format.expression x))
 ;;
 
 let column_names (x : Syntax.expr) =
@@ -168,7 +172,7 @@ let select span (t : C.table) (arguments : arguments) =
   let changes =
     List.filter_map
       (function
-        | Some fresh, x -> Some (fresh, resolve x)
+        | Some fresh, x -> Some (label_name fresh, resolve x)
         | None, _ -> None)
       included
   in
@@ -191,10 +195,20 @@ let select span (t : C.table) (arguments : arguments) =
 ;;
 
 let grouping span (t : C.table) (arguments : arguments) =
-  match List.filter (fun (label, _) -> label = Some "by") arguments with
+  match List.filter (fun (label, _) -> label = Some (Plain "by")) arguments with
   | [] -> []
   | [ (_, x) ] ->
-    let keys = column_names x in
+    let keys =
+      try column_names x with
+      | Diagnostic.Error { code = Invalid_selector; _ } ->
+        fail
+          x.span
+          Invalid_selector
+          (Printf.sprintf
+             "by = takes a column name or a vector of them, like by = species or by = \
+              [species, island], not %s. Use by = [] for no grouping"
+             (Format.expression x))
+    in
     List.iter (fun k -> ignore (column span t k)) keys;
     keys
   | _ -> fail span Wrong_arguments "by is given twice"
@@ -207,12 +221,13 @@ let options (arguments : arguments) =
          match x.form with
          | Name (_, n) when List.mem_assoc n C.policies -> List.assoc n C.policies
          | _ -> fail x.span Invalid_policy "A missing policy is skip, keep or error")
-      (List.assoc_opt (Some label) arguments)
+      (List.assoc_opt (Some (Plain label)) arguments)
   in
   ( policy "missing"
   , policy "group_missing"
   , List.filter
-      (fun (label, _) -> label <> Some "missing" && label <> Some "group_missing")
+      (fun (label, _) ->
+         label <> Some (Plain "missing") && label <> Some (Plain "group_missing"))
       arguments )
 ;;
 
@@ -298,13 +313,13 @@ let summarize context span (t : C.table) arguments =
   let measures =
     List.filter_map
       (function
-        | Some "by", _ -> None
-        | Some n, x ->
+        | Some (Plain "by"), _ -> None
+        | Some label, x ->
           let value = context.expression ?missing (C.row t) x in
           if value.shape <> Scalar
           then fail x.span Scalar_required "A summary needs one value per group";
           ordered x.span t value;
-          Some (n, value)
+          Some (label_name label, value)
         | None, x -> fail x.span Wrong_arguments "summarize needs named summaries")
       rest
   in
@@ -330,6 +345,17 @@ let summarize context span (t : C.table) arguments =
 
 let mutate context span (t : C.table) arguments =
   let missing, group_missing, rest = options arguments in
+  ignore
+    (List.fold_left
+       (fun seen -> function
+          | Some label, (x : Syntax.expr) when label <> Plain "by" ->
+            let name = label_name label in
+            if List.mem name seen
+            then fail x.span Duplicate_name ("mutate repeats the column " ^ name);
+            name :: seen
+          | _ -> seen)
+       []
+       rest);
   let keys = grouping span t rest in
   let policy = group_policy context span t ~missing ~group_missing keys in
   let t =
@@ -340,7 +366,7 @@ let mutate context span (t : C.table) arguments =
   let reassigned =
     List.exists
       (function
-        | Some name, _ -> name <> "by" && List.mem name keys
+        | Some label, _ -> label <> Plain "by" && List.mem (label_name label) keys
         | None, _ -> false)
       rest
   in
@@ -360,10 +386,11 @@ let mutate context span (t : C.table) arguments =
   let t =
     List.fold_left
       (fun (t : C.table) -> function
-         | Some "by", _ -> t
+         | Some (Plain "by"), _ -> t
          | None, (x : Syntax.expr) ->
            fail x.span Wrong_arguments "mutate needs named columns"
-         | Some name, x ->
+         | Some label, x ->
+           let name = label_name label in
            let value = context.expression ?missing (C.row t) x in
            ordered x.span t value;
            let value =
@@ -417,7 +444,7 @@ let filter context span (t : C.table) arguments =
     let policy =
       match options with
       | [] -> context.missing
-      | [ (Some "missing", p) ] ->
+      | [ (Some (Plain "missing"), p) ] ->
         (match p.form with
          | Name (_, n) when List.mem_assoc n C.policies -> Some (List.assoc n C.policies)
          | _ -> fail p.span Invalid_policy "A missing policy is skip, keep or error")
@@ -517,7 +544,7 @@ let rename span (t : C.table) arguments =
         | Some fresh, (x : Syntax.expr) ->
           let old = column_name x in
           ignore (column x.span t old);
-          fresh, old
+          label_name fresh, old
         | None, x -> fail x.span Wrong_arguments "rename takes new = old")
       arguments
   in
@@ -529,7 +556,7 @@ let rename span (t : C.table) arguments =
 
 let pivot span (t : C.table) wider arguments =
   let argument n =
-    match List.assoc_opt (Some n) arguments with
+    match List.assoc_opt (Some (Plain n)) arguments with
     | Some x -> x
     | None -> fail span Wrong_arguments ("pivot needs " ^ n ^ " =")
   in
@@ -607,7 +634,7 @@ let join context span kind (left : C.table) arguments : C.table =
   in
   let verb = C.join_name kind ^ "_join" in
   let key, right_key =
-    match List.assoc_opt (Some "by") options with
+    match List.assoc_opt (Some (Plain "by")) options with
     | Some { form = Name (_, k); _ } -> k, k
     | Some
         { form = Binary (Equal, { form = Name (_, l); _ }, { form = Name (_, r); _ }); _ }
@@ -615,7 +642,7 @@ let join context span kind (left : C.table) arguments : C.table =
     | _ -> fail span Join_keys (verb ^ " needs by = key, or by = (left_key == right_key)")
   in
   let covered =
-    match List.assoc_opt (Some "unmatched") options, kind with
+    match List.assoc_opt (Some (Plain "unmatched")) options, kind with
     | None, _ | Some { form = Name (_, "allow"); _ }, _ -> false
     | Some { form = Name (_, "error"); _ }, (Semi | Anti) ->
       fail span Wrong_arguments ("unmatched = error is not available on " ^ verb)
@@ -623,7 +650,7 @@ let join context span kind (left : C.table) arguments : C.table =
     | Some _, _ -> fail span Wrong_arguments "unmatched is allow or error"
   in
   let declared =
-    match List.assoc_opt (Some "relationship") options with
+    match List.assoc_opt (Some (Plain "relationship")) options with
     | Some { form = Name (_, name); _ } when List.mem_assoc name C.relationships ->
       Some (List.assoc name C.relationships)
     | Some _ ->
@@ -635,16 +662,24 @@ let join context span kind (left : C.table) arguments : C.table =
   in
   (match
      List.find_opt
-       (fun (n, _) -> n <> Some "by" && n <> Some "relationship" && n <> Some "unmatched")
+       (fun (n, _) ->
+          n <> Some (Plain "by")
+          && n <> Some (Plain "relationship")
+          && n <> Some (Plain "unmatched"))
        options
    with
-   | Some (Some n, _) -> fail span Unknown_option (verb ^ " takes no option named " ^ n)
+   | Some (Some n, _) ->
+     fail span Unknown_option (verb ^ " takes no option named " ^ label_name n)
    | Some (None, _) -> fail span Wrong_arguments (verb ^ " takes one table")
    | None -> ());
   let right =
     if key = right_key
     then right
-    else rename span right [ Some key, { Syntax.form = Name (Bare, right_key); span } ]
+    else
+      rename
+        span
+        right
+        [ Some (Plain key), { Syntax.form = Name (Bare, right_key); span } ]
   in
   let lk = column span left key
   and rk = column span right key in
@@ -727,11 +762,11 @@ let apply context span name (t : C.table) arguments =
       context
       span
       t
-      [ Some "n", at (Call (at (Name (Bare, "n")), []))
-      ; Some "by", at (List (List.map snd arguments))
+      [ Some (Plain "n"), at (Call (at (Name (Bare, "n")), []))
+      ; Some (Plain "by"), at (List (List.map snd arguments))
       ]
   | "arrange", _ -> arrange context span t arguments
-  | "slice_head", [ (Some "n", { form = Literal (Int n); _ }) ] ->
+  | "slice_head", [ (Some (Plain "n"), { form = Literal (Int n); _ }) ] ->
     if not (total t)
     then
       fail

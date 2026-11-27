@@ -36,6 +36,6 @@ rule token = parse
  | eof { EOF } | _ as c { Diagnostic.fail Syntax_error (Printf.sprintf "Unexpected character %C" c) }
 and quoted buffer = parse
  | "``" { Buffer.add_char buffer '`'; quoted buffer lexbuf }
- | '`' { NAME (Buffer.contents buffer) }
+ | '`' { QUOTED (Buffer.contents buffer) }
  | [^'`' '\n' '\r']+ as s { Buffer.add_string buffer s; quoted buffer lexbuf }
  | eof | '\n' | '\r' { Diagnostic.fail Syntax_error "Unterminated quoted identifier" }
