@@ -1,5 +1,6 @@
 import Rupam.Context
 import Rupam.Pointwise
+import Rupam.Application
 
 namespace Rupam
 
@@ -158,6 +159,19 @@ theorem ContextTerm.forward_preserves_call (context : ConsumptionContext)
     ((ContextTerm.forward latent input output).eval context environment .nil .nil function)
       supplies argument = function supplies argument :=
   rfl
+
+theorem ContextTerm.forward_lifted_call (context : ConsumptionContext)
+    (environment : ContextEnvironment Ty.denote context locals)
+    (function : (ContextType.function latent (.calculation input) output).denote Ty.denote context)
+    (supplies : Supplies context latent)
+    (call : CheckedCall actuals parameters context.scope.shape)
+    (body : ScalarBody parameters input) (values : ArgumentValues actuals) :
+    ((ContextTerm.forward latent (.calculation input) output).eval context environment .nil .nil function)
+      supplies (call.asCalculation body values) =
+      function supplies (ScopedCalculation.pointwise (fun position =>
+        body.eval (fun param => .ok (call.passing.valuesAt call.alignment values position param)))) := by
+  change function supplies (call.asCalculation body values) = _
+  exact congrArg (function supplies) (call.asCalculation_eq body values)
 
 theorem ContextTerm.forwarded_application
     (fn : ContextTerm payload locals (.function latent input output) [])

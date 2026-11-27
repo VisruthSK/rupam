@@ -618,7 +618,110 @@ private def vectorArithmeticSource : SourceExpr :=
 
 private def emptySourceContext : SourceContext := { lexical := fun _ => none }
 
+private def observeIntVector : (shape : Shape) → (type : Ty) →
+    (List (Position shape) → Outcome (List type.denote)) → Option (Outcome (List Int))
+  | .vector size, .required .int, run => some (List.map Subtype.val <$> run (List.finRange size))
+  | _, _, _ => none
+
+private def c165 : Except String String := do
+  let square : PointwiseFunction := ⟨1, .multiply (.parameter 0) (.parameter 0)⟩
+  let .ok inferred := square.inferCall emptySourceContext [.integerVector [1, 2, 3]]
+    | .error "square call failed to infer"
+  let some (.ok squared) := observeIntVector inferred.shape inferred.type inferred.run
+    | .error "square call failed to produce an integer vector"
+  let addition : SourceExpr := .add (.integerVector [1, 2]) (.integerVector [3, 4])
+  let .ok inferred := addition.infer emptySourceContext
+    | .error "vector addition failed to infer"
+  let some (.ok added) := observeIntVector inferred.shape inferred.type
+      (fun positions => positions.mapM inferred.derivation.core.eval)
+    | .error "addition failed to produce an integer vector"
+  let render := fun values : List Int => "[" ++ String.intercalate ", " (values.map toString) ++ "]"
+  pure (tuple [render squared, render added])
+
+private def mixedLiftingContext : SourceContext :=
+  { lexical := fun name => if name = "flags" then
+      some ⟨.vector 2, .required .bool, .vector #v[true, false]⟩
+    else none }
+
+example :
+    let helper : PointwiseFunction := ⟨2, .conditional (.parameter 1) (.parameter 0) (.parameter 0)⟩
+    let inferred := helper.inferCall mixedLiftingContext
+      [.integerVector [1, 2, 3], .reference (.lexical "flags")]
+    inferred.toOption.map (fun call => (call.shape, call.parameters)) =
+      some (.vector 2, [.vector 3 (.required .int), .required .bool]) := by decide
+
+example :
+    let helper : PointwiseFunction := ⟨2, .parameter 0⟩
+    helper.inferCall emptySourceContext [.integer 1] = .error (.arity 2 1) := rfl
+
+example :
+    let helper : PointwiseFunction := ⟨2, .add (.parameter 0) (.parameter 1)⟩
+    let inferred := helper.inferCall emptySourceContext [.integerVector [1, 2], .missing .int]
+    inferred.toOption.map (fun call => (call.shape, call.type)) =
+      some (.vector 2, .optional .int) := by decide
+
+private def pointwiseFunctionContext : SourceContext :=
+  { lexical := fun _ => some ⟨.scalar, .function (.required .int) (.required .int),
+      .literal (fun value => multiplyInt value value)⟩ }
+
+private def liftedHigherOrder : Option (List Int) := do
+  let helper : PointwiseFunction := ⟨2, .apply (.parameter 0) (.parameter 1)⟩
+  let inferred ← (helper.inferCall pointwiseFunctionContext
+    [.reference (.lexical "square"), .integerVector [1, 2, 3]]).toOption
+  let result ← observeIntVector inferred.shape inferred.type inferred.run
+  result.toOption
+
+example :
+    CheckedVectorCall.infer [.lifted (.known 2), .lifted (.known 3)] = none := rfl
+
+example :
+    let sources : VectorCallSources [.required .int, .required .int]
+        [.lifted (.known 2), .lifted .runtime] :=
+      .lifted (.known 2) (fun _ => .ok #v[integer 1, integer 2])
+        (.lifted .runtime (fun _ => .ok ⟨3, #v[integer 3, integer 4, integer 5]⟩) .nil)
+    let body : ScalarBody [.required .int, .required .int] (.required .int) :=
+      .add (.arg .first) (.arg (.next .first))
+    (CheckedVectorCall.infer [.lifted (.known 2), .lifted .runtime]).map
+      (fun call => call.run body sources (fun _ => [])) =
+      some (.error .vectorLengthMismatch) := rfl
+
+private def squareCertificate (input output : Ty) : QualificationCertificate :=
+  let parameter := QualifiedType.data .scalar input
+  let operand := QualifiedJudgment.value parameter
+  let reference := QualificationCertificate.type parameter (.both .fact .fact)
+  .type parameter (.judgment (.value (.data .scalar output))
+    (.both (.judgment operand (.judgment operand (.both reference (.both reference .fact)))) .fact))
+
+private def checkSquareQualification (input output : Ty) : Bool :=
+  QualifiedSource.square.verify [] (.value (.pointwise input output)) (squareCertificate input output)
+
+example : checkSquareQualification (.optional .int) (.optional .int) = true := by decide
+example : checkSquareQualification (.optional .int) (.required .int) = false := by decide
+
+example :
+    let function : ContextTerm Ty.denote [optionalInt] (.function sumNeeds optionalInt optionalInt) [] :=
+      .apply (.forward sumNeeds optionalInt optionalInt) (.reducer .group .unresolved sumInt)
+    let argument : ContextTerm Ty.denote [optionalInt] optionalInt [] := .variable .first
+    (Supplies.discharge acceptedContext sumNeeds).map (fun supplies =>
+      function.runQualifiedApplication argument acceptedContext (sumEnvironment acceptedContext)
+        supplies groupScope.members) = .ok (.ok [some (integer 4), some (integer 4)]) := rfl
+
+example :
+    let cell := Ty.required .int
+    let checked : CheckedCall [.vector 2 cell] [cell] (.vector 2) :=
+      ⟨[.vector 2], .cons .vector .nil, .cons .vectorRight .nil⟩
+    let call : QualifiedApplies (.pointwise cell cell) (.data (.vector 2) cell)
+        (.data (.vector 2) cell) [] true := .pointwise checked
+    let square := fun value => multiplyInt value value
+    let input := #v[integer 1, integer intMax]
+    call.run acceptedContext square input .nil [0] = .ok [integer 1] ∧
+      (List.take 1 <$> call.run acceptedContext square input .nil [0, 1]) =
+        .error .arithmeticOverflow :=
+  ⟨rfl, rfl⟩
+
 def main : IO Unit := do
+  unless liftedHigherOrder == some [1, 4, 9] do
+    throw (IO.userError "pointwise forwarding failed to lift the vector argument")
   match mixedScopeResult with
   | some (.ok values) =>
     unless values.map (Option.map Subtype.val) == [some 13, some 13] do
@@ -633,6 +736,9 @@ def main : IO Unit := do
     IO.println (Lean.Json.arr #[.str "C55", .str "type", .str "Int"]).compress
     IO.println (Lean.Json.arr #[.str "C55", .str "value", .str (toString value.val)]).compress
   | .error failure => throw (IO.userError s!"C55: {repr failure}")
+  match c165 with
+  | .ok value => IO.println (Lean.Json.arr #[.str "C165", .str "value", .str value]).compress
+  | .error failure => throw (IO.userError s!"C165: {failure}")
   for (id, result) in [("C52", c52), ("C53", c53), ("C56", c56), ("C110", c110), ("C119", c119),
       ("C123", c123), ("C124", c124), ("C138", c138), ("C139", c139)] do
     match result with

@@ -26,7 +26,7 @@ def main() -> None:
             raise SystemExit(f"{case}: duplicate outcome field {field}")
         observed[field] = value
     if set(cases) != {
-        "C110", "C119", "C123", "C124", "C138", "C139", "C37", "C52", "C53", "C55", "C56"
+        "C110", "C119", "C123", "C124", "C138", "C139", "C165", "C37", "C52", "C53", "C55", "C56"
     }:
         raise SystemExit(f"Unexpected Lean fixtures: {cases}")
     for case, observed in cases.items():

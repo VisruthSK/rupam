@@ -4,7 +4,8 @@
 | --- | --- | --- |
 | Type preservation | evaluation preserves types, shapes and domains | checked pointwise terms carry their result type and shape in Lean. General preservation remains a conjecture |
 | Domain safety | incompatible observations cannot combine implicitly | proved for column alignment, equal-length vector alignment, and the separation of vectors and columns |
-| Lifting | a lifted pointwise helper agrees with its scalar body at each aligned position | proved for the checked Bool and Int fragment. Whole-vector and grouped evaluation scope are modeled separately |
+| Lifting | a lifted pointwise helper agrees with its scalar body at each aligned position and receives exact-type arguments whole | proved for checked calls and connected to inference for resolved, unannotated first-order helpers with integer arithmetic and Boolean guards. Grouped calls are modeled separately |
+| Principality | every sound scheme is an instance of the inferred scheme under the same lexical environment | proved for residual schemes in the shared qualified fragment with unary pointwise and contextual application and let-bound values. Normalization and the full source judgment remain open |
 | Context safety | requirements are discharged at consumption sites | proved for checked contextual terms with explicit scope and policy requirements. Source inference remains open |
 | Source elaboration | accepted source has a checked elaboration and a coherent meaning | proved for the modeled scalar and column expressions and the ordinary lambda fragment |
 | Deferred argument linking | resolving deferred columns at each consuming stage preserves execution | proved for finite checked pipelines in the contextual source fragment |
@@ -52,7 +53,10 @@ evaluate in order, with the scope of each argument preserved. The helper
 receives their values at each position. An argument can fail even when
 the body ignores it. The checked higher-order calculus carries each
 callee's latent requirements through application. The substitution proof
-preserves those requirements and lexical bindings. Deferred columns recheck
+preserves those requirements and lexical bindings. [Pointwise source inference](../../formal/Rupam/PointwiseSource.lean)
+infers parameter types from the resolved helper body and source arguments,
+then proves that the resulting call preserves the source body evaluation at
+each demanded position. Deferred columns recheck
 their named fields against the consuming stage, while captured lexical
 values retain their identity. Source argument evaluation and inference of
 these roles and requirements remain outside the checked calculus.
@@ -97,7 +101,7 @@ ranges.
 
 Run `lake build` in `formal/` to check the proofs. From the repository root,
 `python formal/check.py` (Python 3.11+) runs C37, C52, C53, C55, C56, C110,
-C119, C123, C124, C138 and C139 against the same TOML expectations used by the OCaml reference runner.
+C119, C123, C124, C138, C139 and C165 against the same TOML expectations used by the OCaml reference runner.
 C124 passes in Lean and remains pending in the OCaml reference suite.
 The Lean cases translate the fixture inputs by hand. The check also compiles
 a Lean example for C111, which remains pending in the OCaml reference suite.

@@ -15,8 +15,14 @@ inductive ScalarBody (parameters : List Ty) : Ty → Type where
   | optional : ScalarBody parameters (.required b) → ScalarBody parameters (.optional b)
   | add : ScalarBody parameters (.required .int) → ScalarBody parameters (.required .int) →
       ScalarBody parameters (.required .int)
+  | multiply : ScalarBody parameters (.required .int) → ScalarBody parameters (.required .int) →
+      ScalarBody parameters (.required .int)
   | addOptional : ScalarBody parameters (.optional .int) → ScalarBody parameters (.optional .int) →
       ScalarBody parameters (.optional .int)
+  | multiplyOptional : ScalarBody parameters (.optional .int) → ScalarBody parameters (.optional .int) →
+      ScalarBody parameters (.optional .int)
+  | apply : ScalarBody parameters (.function input output) → ScalarBody parameters input →
+      ScalarBody parameters output
   | ifThenElse : ScalarBody parameters (.required .bool) → ScalarBody parameters t →
       ScalarBody parameters t → ScalarBody parameters t
   | coalesce : ScalarBody parameters (.optional b) → ScalarBody parameters (.required b) →
@@ -41,7 +47,13 @@ def ScalarBody.eval (arguments : ScalarArguments parameters) :
   | .literal value => .ok value
   | .optional value => some <$> value.eval arguments
   | .add left right => do addInt (← left.eval arguments) (← right.eval arguments)
+  | .multiply left right => do multiplyInt (← left.eval arguments) (← right.eval arguments)
   | .addOptional left right => do lift₂ addInt (← left.eval arguments) (← right.eval arguments)
+  | .multiplyOptional left right => do
+    lift₂ multiplyInt (← left.eval arguments) (← right.eval arguments)
+  | .apply function argument => do
+    let invoke ← function.eval arguments
+    invoke (← argument.eval arguments)
   | .ifThenElse condition yes no => do
     choose (← condition.eval arguments) (fun _ => yes.eval arguments) (fun _ => no.eval arguments)
   | .coalesce left right => Rupam.coalesce (left.eval arguments) (fun _ => right.eval arguments)
@@ -57,8 +69,13 @@ def ScalarBody.lower (arguments : CoreArguments parameters shape) :
   | .literal value => (Expr.literal value).broadcastTo shape
   | .optional value => .optional (value.lower arguments)
   | .add left right => .add (Align.pointwise shape) (left.lower arguments) (right.lower arguments)
+  | .multiply left right =>
+    .multiply (Align.pointwise shape) (left.lower arguments) (right.lower arguments)
   | .addOptional left right =>
     .addOptional (Align.pointwise shape) (left.lower arguments) (right.lower arguments)
+  | .multiplyOptional left right =>
+    .multiplyOptional (Align.pointwise shape) (left.lower arguments) (right.lower arguments)
+  | .apply function argument => .apply (function.lower arguments) (argument.lower arguments)
   | .ifThenElse condition yes no =>
     .ifThenElse (condition.lower arguments) (yes.lower arguments) (no.lower arguments)
   | .coalesce left right => .coalesce (left.lower arguments) (right.lower arguments)
@@ -83,9 +100,17 @@ theorem ScalarBody.lower_pointwise (body : ScalarBody parameters t)
   | add left right sameLeft sameRight =>
     simp only [ScalarBody.lower, ScalarBody.eval, Expr.eval, Align.pointwise_positions,
       sameLeft, sameRight]
+  | multiply left right sameLeft sameRight =>
+    simp only [ScalarBody.lower, ScalarBody.eval, Expr.eval, Align.pointwise_positions,
+      sameLeft, sameRight]
   | addOptional left right sameLeft sameRight =>
     simp only [ScalarBody.lower, ScalarBody.eval, Expr.eval, Align.pointwise_positions,
       sameLeft, sameRight]
+  | multiplyOptional left right sameLeft sameRight =>
+    simp only [ScalarBody.lower, ScalarBody.eval, Expr.eval, Align.pointwise_positions,
+      sameLeft, sameRight]
+  | apply function argument sameFunction sameArgument =>
+    simp only [ScalarBody.lower, ScalarBody.eval, Expr.eval, sameFunction, sameArgument]
   | ifThenElse condition yes no sameCondition sameYes sameNo =>
     -- Agreement in the condition selects the same thunk on both sides.
     simp only [ScalarBody.lower, ScalarBody.eval, Expr.eval, sameCondition, sameYes, sameNo]

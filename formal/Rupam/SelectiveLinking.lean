@@ -1,5 +1,6 @@
 import Rupam.StageLinking
 import Rupam.ContextUse
+import Rupam.QualifiedInference
 
 namespace Rupam
 
@@ -99,5 +100,25 @@ theorem ContextElaborates.link_uses_preserves_source (derivation : ContextElabor
   apply derivation.core.eval_agrees_on_used
   intro type binding live
   exact arguments.forUses_bindings_agree stage aligned used first second firstReady secondReady binding live
+
+theorem ContextElaborates.linked_qualified_lifting {input output : Ty}
+    (derivation : ContextElaborates locals source (.calculation input) needs)
+    (arguments : StageInputs context locals) (stage : Stage)
+    (aligned : context.scope.shape = .column stage.domain)
+    (first second : StageEnvironment context locals)
+    (ready : arguments.ReadyFor stage derivation.core.uses)
+    (function : input.denote → Outcome output.denote)
+    (demand : List context.scope.Member) :
+    let used := derivation.core.uses
+    let linked := arguments.forUses used first
+    let direct := arguments.forUses used second
+    let checked := (arguments.forUses_ready_iff stage used second).mpr ready
+    (derivation.core.linkedRun linked stage aligned).map (fun argument =>
+      argument.map (fun calculation =>
+        QualifiedApplies.calculation.run context function calculation .nil demand)) =
+      .ok ((derivation.runSource context (direct.direct stage aligned checked).lookup).map
+        (fun calculation => ValuesAt.toList <$> (calculation.map function).run demand)) := by
+  simp only [derivation.link_uses_preserves_source arguments stage aligned first second ready]
+  rfl
 
 end Rupam

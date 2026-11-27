@@ -4,9 +4,11 @@ import Rupam.Grouped
 import Rupam.Lifting
 import Rupam.Scope
 import Rupam.Application
+import Rupam.VectorCalls
 import Rupam.Deferred
 import Rupam.HigherOrder
 import Rupam.Pointwise
+import Rupam.PointwiseSource
 import Rupam.Substitution
 import Rupam.Alignment
 import Rupam.Restriction
@@ -25,6 +27,9 @@ import Rupam.Grouping
 import Rupam.ExactPromotion
 import Rupam.Evidence
 import Rupam.ContextInference
+import Rupam.QualifiedInference
+import Rupam.QualificationCheck
+import Rupam.QualifiedSchemes
 import Rupam.Guarded
 import Rupam.Selection
 import Rupam.StageLinking

@@ -122,14 +122,12 @@ inductive CommonType : Ty → Ty → Ty → Type where
   | rightOptional : CommonType (.required b) (.optional b) (.optional b)
 
 def CommonType.infer : (a b : Ty) → Option (Σ t, CommonType a b t)
-  | .required a, .required b =>
-    if same : a = b then by subst b; exact some ⟨_, .same⟩ else none
-  | .optional a, .optional b =>
-    if same : a = b then by subst b; exact some ⟨_, .same⟩ else none
   | .optional a, .required b =>
     if same : a = b then by subst b; exact some ⟨_, .leftOptional⟩ else none
   | .required a, .optional b =>
     if same : a = b then by subst b; exact some ⟨_, .rightOptional⟩ else none
+  | a, b =>
+    if same : a = b then by subst b; exact some ⟨_, .same⟩ else none
 
 theorem CommonType.infer_complete (common : CommonType a b t) :
     infer a b = some ⟨t, common⟩ := by
