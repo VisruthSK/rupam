@@ -1,11 +1,11 @@
-Output demo.gif
+Output demo.mp4
 
 Require rupam
 
 Set Shell "bash"
-Set FontSize 18
-Set Width 1440
-Set Height 900
+Set FontSize 24
+Set Width 1920
+Set Height 1080
 Set Padding 24
 Set Theme "Catppuccin Mocha"
 Set TypingSpeed 30ms

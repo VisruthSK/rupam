@@ -51,6 +51,7 @@ type model =
   ; recalled : int option
   ; menu : menu option
   ; pages : Rupam_native.Page.t list ref
+  ; failures : Rupam.Diagnostic.t list ref
   ; opened : (Rupam.Syntax.expr * Rupam_native.Session.result) option ref
   ; viewer : Viewer.t option
   ; editing : bool
@@ -81,7 +82,7 @@ and menu =
 let accent = Color.of_rgb 235 200 142
 let subtle = Color.grayscale ~level:17
 let faint = Color.grayscale ~level:8
-let failure = Color.of_rgb 240 113 120
+let failure = Color.of_rgb 255 95 87
 let missing = Color.of_rgb 218 137 145
 let typed = Color.of_rgb 232 225 215
 let style ?bold ?dim fg = Style.make ?bold ?dim ~fg ()
@@ -166,7 +167,23 @@ let page_view ~digits page =
     (lines ~digits page)
 ;;
 
-let transcript ~digits source output pages =
+let diagnostic_view (d : Rupam.Diagnostic.t) =
+  box
+    ~flex_direction:Column
+    ~size:{ width = pct 100; height = auto }
+    [ box
+        ~flex_direction:Row
+        [ text ~style:(style faint) (Rupam.Diagnostic.location d ^ "  ")
+        ; text ~style:(style ~bold:true failure) (Rupam.Diagnostic.name d.code)
+        ]
+    ; box
+        ~margin:(margin_lrtb 2 0 0 0)
+        ~size:{ width = pct 100; height = auto }
+        [ text ~wrap:`Word d.message ]
+    ]
+;;
+
+let transcript ~digits source output pages failures =
   let lines = String.split_on_char '\n' source in
   let echoed =
     List.mapi
@@ -187,7 +204,7 @@ let transcript ~digits source output pages =
     ~flex_direction:Column
     ~size:full
     ~margin:(margin_lrtb 0 0 0 1)
-    (echoed @ results @ List.concat_map (page_view ~digits) pages)
+    (echoed @ results @ List.map diagnostic_view failures @ List.concat_map (page_view ~digits) pages)
 ;;
 
 let status session =
@@ -443,13 +460,7 @@ let grid model (v : Viewer.t) =
           ; "2 Keep", Act (Missing_policy Keep)
           ; "3 Error", Act (Missing_policy Fail)
           ]
-      | None, Some diagnostic ->
-        box
-          ~flex_direction:Column
-          ~size:{ width = pct 100; height = auto }
-          (List.map
-             (text ~wrap:`Word ~style:(style failure))
-             (String.split_on_char '\n' (Rupam.Diagnostic.render diagnostic)))
+      | None, Some diagnostic -> diagnostic_view diagnostic
       | None, None -> text "")
   in
   let key_groups =
@@ -628,6 +639,7 @@ let evaluate model source =
     let history = entry :: model.history in
     Line.save_history history;
     model.pages := [];
+    model.failures := [];
     model.opened := None;
     let next, output =
       capture (fun () ->
@@ -643,7 +655,8 @@ let evaluate model source =
            ~digits:(Repl.digits model.session)
            entry
            output
-           (List.rev !(model.pages)))
+           (List.rev !(model.pages))
+           (List.rev !(model.failures)))
     in
     if not next
     then (
@@ -1239,10 +1252,12 @@ let start ~project ?path () =
   | None -> ()
   | Some session ->
     let pages = ref [] in
+    let failures = ref [] in
     let opened = ref None in
     let session =
       { session with
         show = (fun ~digits:_ page -> pages := page :: !pages)
+      ; fail = (fun d -> failures := d :: !failures)
       ; view = (fun subject result -> opened := Some (subject, result))
       }
     in
@@ -1258,6 +1273,7 @@ let start ~project ?path () =
               ; recalled = None
               ; menu = None
               ; pages
+              ; failures
               ; opened
               ; viewer = None
               ; editing = false

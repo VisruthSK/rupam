@@ -143,13 +143,13 @@ let parse line =
 let report message = prerr_endline ("error: " ^ message)
 let report_diagnostic d = prerr_endline (Diagnostic.render d)
 
-let diagnostic f =
+let diagnostic ?(fail = report_diagnostic) f =
   try Ok (f ()) with
   | Sys.Break ->
     prerr_endline "Cancelled";
     Error ()
   | exn ->
-    report_diagnostic (Diagnostic.of_exn exn);
+    fail (Diagnostic.of_exn exn);
     Error ()
 ;;
 
@@ -157,6 +157,7 @@ type t =
   { session : Session.t
   ; directory : string
   ; show : digits:int -> Page.t -> unit
+  ; fail : Diagnostic.t -> unit
   ; view : Syntax.expr -> Session.result -> unit
   }
 
@@ -326,7 +327,7 @@ let present r (event : Session.event) =
   | Value (text, typ) -> Printf.printf "%s : %s\n" text (Types.display typ)
   | Table page -> r.show ~digits:(digits r) page
   | Viewed (subject, result) -> r.view subject result
-  | Inspection_failed d -> report_diagnostic d
+  | Inspection_failed d -> r.fail d
   | Schema (rows, columns) ->
     Printf.printf "%d rows \xc3\x97 %d columns\n" rows (List.length columns);
     print_columns columns
@@ -399,8 +400,8 @@ let complete r line =
 ;;
 
 let bindings r = Completion.bindings r.session
-let guard f = ignore (diagnostic f)
-let evaluate r source = guard (fun () -> submit r (Frontend.read source))
+let guard r f = ignore (diagnostic ~fail:r.fail f)
+let evaluate r source = guard r (fun () -> submit r (Frontend.read source))
 let inspect_schema r source = evaluate r ("(" ^ source ^ ") |> !schema()")
 
 let schemas r =
@@ -513,7 +514,7 @@ let dispatch r = function
     if not (Session.redo r.session) then report "Nothing to redo";
     true
   | Lock ->
-    guard (fun () ->
+    guard r (fun () ->
       let entry = Session.lock r.session in
       Lock.print_schemas entry;
       Printf.printf "Locked %s for %s\n" entry.source (Target.name entry.target));
@@ -522,7 +523,7 @@ let dispatch r = function
     List.iter (fun (name, _, s) -> Printf.printf "%s : %s\n" name s.detail) (bindings r);
     true
   | Type source ->
-    guard (fun () ->
+    guard r (fun () ->
       match Frontend.read source with
       | [ ({ declaration = Evaluate _; _ } as d) ] ->
         (match Session.check r.session d with
@@ -532,13 +533,13 @@ let dispatch r = function
       | _ -> Diagnostic.fail Wrong_arguments "Expected one expression");
     true
   | Code (chosen, mode, source) ->
-    guard (fun () -> print_endline (Session.code r.session ~mode chosen source));
+    guard r (fun () -> print_endline (Session.code r.session ~mode chosen source));
     true
   | View (Schema, "") ->
     schemas r;
     true
   | View (view, source) ->
-    guard (fun () ->
+    guard r (fun () ->
       let env = Session.env r.session in
       match view, Scope.lookup env source with
       | Schema, Some (Contract contract) -> Contract.describe contract
@@ -579,7 +580,7 @@ let run r command =
     prerr_endline "Cancelled";
     true
   | exn ->
-    report_diagnostic (Diagnostic.of_exn exn);
+    r.fail (Diagnostic.of_exn exn);
     true
 ;;
 
@@ -593,6 +594,7 @@ let open_session ~project ?path () =
     { session
     ; directory
     ; show = plain
+    ; fail = report_diagnostic
     ; view = (fun _ result -> plain ~digits:2 (Session.page result ~offset:0 ~limit:20))
     }
   in

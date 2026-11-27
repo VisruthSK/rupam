@@ -274,11 +274,13 @@ let position (p : Lexing.position) =
     (p.pos_cnum - p.pos_bol + 1)
 ;;
 
+let location d =
+  match d.span with
+  | Some (start, _) -> position start
+  | None -> ""
+;;
+
 let render d =
-  let location =
-    match d.span with
-    | Some (start, _) -> position start ^ "  "
-    | None -> ""
-  in
+  let location = if location d = "" then "" else location d ^ "  " in
   location ^ name d.code ^ "\n  " ^ d.message
 ;;

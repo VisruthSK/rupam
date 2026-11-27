@@ -8,3 +8,4 @@ vendor/duckdb/*
 vendor/nanoarrow/*
 !vendor/nanoarrow/dune
 examples/trips.parquet
+examples/demo.mp4

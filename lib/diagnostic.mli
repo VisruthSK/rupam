@@ -72,4 +72,5 @@ val locate : span -> (unit -> 'a) -> 'a
 val name : code -> string
 val of_name : string -> code option
 val explanation : code -> string
+val location : t -> string
 val render : t -> string
