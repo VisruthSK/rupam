@@ -401,3 +401,35 @@ CAMLprim value rupam_arrow_histogram(value handle, value v_column, value v_bins)
   Store_field(out, 3, Val_long(missing));
   CAMLreturn(out);
 }
+
+CAMLprim value rupam_distinct_floats(value values) {
+  CAMLparam1(values);
+  size_t n = Wosize_val(values) / Double_wosize;
+  size_t capacity = 16;
+  while (capacity < 2 * n) capacity <<= 1;
+  uint64_t *slots = malloc(capacity * sizeof(uint64_t));
+  unsigned char *used = calloc(capacity, 1);
+  if (!slots || !used) {
+    free(slots);
+    free(used);
+    caml_raise_out_of_memory();
+  }
+  intnat distinct = 0;
+  for (size_t i = 0; i < n; i++) {
+    double d = Double_flat_field(values, i);
+    if (d == 0) d = 0.0;
+    uint64_t bits;
+    memcpy(&bits, &d, sizeof bits);
+    uint64_t h = bits * UINT64_C(0x9E3779B97F4A7C15);
+    size_t s = (size_t)(h ^ (h >> 32)) & (capacity - 1);
+    while (used[s] && slots[s] != bits) s = (s + 1) & (capacity - 1);
+    if (!used[s]) {
+      used[s] = 1;
+      slots[s] = bits;
+      distinct++;
+    }
+  }
+  free(slots);
+  free(used);
+  CAMLreturn(Val_long(distinct));
+}

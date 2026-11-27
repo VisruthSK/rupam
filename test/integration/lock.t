@@ -2,6 +2,7 @@ Rupam rejects stale locks. Standalone scripts read their supplied inputs
 without checking the lock, in both dialects.
 
   $ cp ../../examples/shop.rp ../../examples/orders.parquet ../../examples/data-dict.yaml .
+  $ chmod u+w shop.rp orders.parquet data-dict.yaml
   $ rupam compile --target python-polars shop.rp > shop.py
   $ rupam compile --target r-dplyr shop.rp > shop.R
   $ python shop.py && rupam-dev show regional.parquet region

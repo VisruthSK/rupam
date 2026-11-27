@@ -11,9 +11,28 @@ export OPAMROOTISOK=1
 RUPAM_REVISION=$(git describe --always --dirty --abbrev=12 2>/dev/null || true)
 export RUPAM_REVISION
 
+tester=rupam-tester
+
+unprivileged() {
+  if [ "$(id -u)" != 0 ]; then
+    "$@"
+    return
+  fi
+  id "$tester" >/dev/null 2>&1 || useradd --create-home "$tester"
+  chmod o+x /root
+  if [ "$(stat -c %U "$build")" != "$tester" ]; then chown -R "$tester" "$build"; fi
+  (
+    eval "$(opam env --switch="$switch" --set-switch)"
+    HOME=/home/$tester XDG_CACHE_HOME=/home/$tester/.cache runuser -m -u "$tester" -- "$@"
+  )
+}
+
 dune() {
   mkdir -p "$build"
-  flock "$build/.dev.lock" opam exec --switch="$switch" -- dune "$@" --build-dir "$build"
+  (
+    flock 9
+    unprivileged dune "$@" --build-dir "$build"
+  ) 9>"$build/.dev.lock"
 }
 
 usage() {
@@ -31,6 +50,7 @@ scripts/dev edit                apply raw old/new blocks from stdin (@@@ FILE pa
 scripts/dev watch               rebuild and rerun tests on every change
 scripts/dev promote             accept changed expect and cram output
 scripts/dev fmt                 format the code
+scripts/dev fmt-check           fail if formatting differs (the pre-commit hook)
 scripts/dev conformance         run conformance fixtures, showing why runnable pending ones fail
 scripts/dev stages STAGE FILE   print tokens, syntax, typed, transform-ir or code
 scripts/dev fixture ID FILE     record FILE as a pending conformance fixture with its observed outcome
@@ -47,11 +67,11 @@ suite() {
 unit() {
   suite dependencies python3 dev/declared.py "$root"
   UV_PROJECT_ENVIRONMENT=$venv uv sync --frozen --quiet
-  PATH="$venv/bin:$PATH" suite unit dune build @default @runtest @fmt
+  RUPAM_REVISION='' PATH="$venv/bin:$PATH" suite unit dune build @default @runtest @fmt
 }
 
 integration() {
-  suite integration env PATH="$venv/bin:$PATH" opam exec --switch="$switch" -- dune build @integration --build-dir "$build"
+  RUPAM_REVISION='' PATH="$venv/bin:$PATH" suite integration dune build @integration
 }
 
 check() {
@@ -129,6 +149,7 @@ PY
       du -h demo.mp4 demo.gif
     )
     ;;
+  fmt-check) dune build @fmt ;;
   watch) dune build --watch @default @runtest ;;
   promote) dune promote ;;
   fmt) dune fmt || true ;;

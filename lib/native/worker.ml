@@ -33,6 +33,7 @@ import io
 import json
 import sys
 
+sys.stdin.reconfigure(encoding="utf-8")
 session = {}
 for line in sys.stdin:
     request = json.loads(line)
@@ -54,6 +55,10 @@ for line in sys.stdin:
 
 let r =
   {|
+for (locale in c("C.UTF-8", ".UTF-8", "UTF-8")) {
+  if (l10n_info()[["UTF-8"]]) break
+  suppressWarnings(Sys.setlocale("LC_CTYPE", locale))
+}
 session <- new.env(parent = globalenv())
 input <- file("stdin", "r")
 repeat {

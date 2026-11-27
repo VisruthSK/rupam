@@ -8,7 +8,7 @@ homepage: "https://github.com/VisruthSK/rupam"
 bug-reports: "https://github.com/VisruthSK/rupam/issues"
 depends: [
   "dune" {>= "3.17"}
-  "ocaml" {>= "5.5"}
+  "ocaml" {>= "5.4"}
   "menhir" {>= "20180523"}
   "yojson"
   "ppx_yojson_conv"

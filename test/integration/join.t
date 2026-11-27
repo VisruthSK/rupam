@@ -21,7 +21,7 @@ Joins use named keys, keep unmatched rows and reject colliding columns.
   2 | 0.0 | South
   3 | 2.0 | North
   4 | 1.0 | South
-  $ sed -i 's/select(cost, region)/select(cost, customer_id)/' join.rp
+  $ sed 's/select(cost, region)/select(cost, customer_id)/' join.rp > edited.rp && mv edited.rp join.rp
   $ rupam compile --target python-polars join.rp
   join.rp:5:14  join-collision
     Both tables have a column named customer_id

@@ -1,0 +1,13 @@
+id = "C165"
+status = "pending"
+case = '''`square([1, 2, 3])` and `[1, 2] + [3, 4]`'''
+expected = '''`([1, 4, 9], [4, 6])`: functions and operators lift over vectors'''
+
+[run]
+source = '''
+let square(x) = x * x
+(square([1, 2, 3]), [1, 2] + [3, 4])
+'''
+
+[expect]
+value = '''([1, 4, 9], [4, 6])'''

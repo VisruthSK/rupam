@@ -1,9 +1,15 @@
 import calendar
 import datetime
 import functools
+import io
 import json
 import math
 import re
+import sys
+
+for stream in (sys.stdout, sys.stderr):
+    if isinstance(stream, io.TextIOWrapper):
+        stream.reconfigure(encoding="utf-8")
 
 
 class RupamError(Exception):

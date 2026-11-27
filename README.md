@@ -37,15 +37,15 @@ CSV and TSV files.
 Previews and `rupam run` execute the generated script, so they need the target
 language installed, plus the data-dict CLI for contract validation. The
 `python-polars` dialect needs `polars` and `data-dict`. The `r-dplyr` dialect
-needs `dplyr`, `tidyr`, `bit64`, `jsonlite` and `arrow`.
+needs `dplyr`, `tidyr`, `bit64`, `jsonlite`, `arrow` and `tzdb`.
 
 ### From source
 
-You need OCaml 5.5, opam, a C compiler, `curl` and `tar`.
+You need OCaml 5.4 or later, opam, a C compiler, `curl` and `tar`.
 
 ```sh
 scripts/fetch-deps            # pinned, checksummed DuckDB and nanoarrow
-opam install . --deps-only --with-test --with-dev-setup
+opam install --deps-only --with-test --with-dev-setup ./rupam.opam.locked ./rupam-dev.opam.locked
 opam pin add rupam .
 ```
 

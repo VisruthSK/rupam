@@ -21,7 +21,8 @@ jobs:
         run: |
           for workflow in CI Format; do
             passed=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow "$workflow" \
-              --commit "$GITHUB_SHA" --status success --json databaseId --jq length)
+              --commit "$GITHUB_SHA" --json conclusion \
+              --jq '[.[] | select(.conclusion == "success")] | length')
             if [ "$passed" = 0 ]; then
               echo "$workflow has not passed on $GITHUB_SHA; push to main and wait for green before tagging" >&2
               exit 1
@@ -50,12 +51,27 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@v7.0.1
-      - run: scripts/fetch-deps
+      - id: vendor
+        uses: actions/cache@v6.1.0
+        with:
+          path: |
+            vendor/duckdb
+            vendor/nanoarrow
+          key: vendor-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/fetch-deps') }}
+      - if: steps.vendor.outputs.cache-hit != 'true'
+        run: scripts/fetch-deps
 
       - uses: ocaml/setup-ocaml@v3.9.1
         with:
-          ocaml-compiler: "5.5"
-      - run: opam install . --deps-only
+          ocaml-compiler: "5.5.2"
+      - id: opam
+        uses: actions/cache@v6.1.0
+        with:
+          path: _opam
+          key: opam-${{ runner.os }}-${{ runner.arch }}-5.5.2-${{ hashFiles('*.opam', '*.opam.locked') }}
+      - run: opam install --deps-only --depext-only --with-test --with-dev-setup ./rupam.opam.locked ./rupam-dev.opam.locked
+      - if: steps.opam.outputs.cache-hit != 'true'
+        run: opam install --deps-only --with-test --with-dev-setup ./rupam.opam.locked ./rupam-dev.opam.locked
       - run: |
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then export RUPAM_VERSION=${GITHUB_REF_NAME#v}; fi
           opam exec -- dune build --profile release bin/rupam_cli.exe
@@ -65,10 +81,10 @@ jobs:
           name=rupam-${GITHUB_REF_NAME}-${{ matrix.platform }}
           mkdir -p "dist/$name"
           if [ "$RUNNER_OS" = Windows ]; then
-            cp _build/default/bin/rupam_cli.exe "dist/$name/rupam.exe"
+            install -m 755 _build/default/bin/rupam_cli.exe "dist/$name/rupam.exe"
             opam exec -- x86_64-w64-mingw32-strip "dist/$name/rupam.exe"
           else
-            cp _build/default/bin/rupam_cli.exe "dist/$name/rupam"
+            install -m 755 _build/default/bin/rupam_cli.exe "dist/$name/rupam"
             strip "dist/$name/rupam"
           fi
           cp LICENSE LICENSE.exception README.md "dist/$name/"
@@ -81,7 +97,9 @@ jobs:
       - uses: actions/upload-artifact@v7.0.2
         with:
           name: ${{ matrix.platform }}
-          path: dist/rupam-*.*
+          path: |
+            dist/rupam-*.tar.gz
+            dist/rupam-*.zip
 
   publish:
     needs: build

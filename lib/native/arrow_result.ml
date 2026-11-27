@@ -56,25 +56,58 @@ type summary =
   }
 
 external numbers : t -> int -> int -> float array = "rupam_arrow_numbers"
+external distinct_floats : float array -> int = "rupam_distinct_floats"
+
+let swap (a : float array) i j =
+  let x = a.(i) in
+  a.(i) <- a.(j);
+  a.(j) <- x
+;;
+
+let rec select random (a : float array) lo hi k =
+  if lo < hi
+  then (
+    let pivot = a.(lo + Random.State.int random (hi - lo + 1)) in
+    let i = ref lo
+    and j = ref hi in
+    while !i <= !j do
+      while a.(!i) < pivot do
+        incr i
+      done;
+      while a.(!j) > pivot do
+        decr j
+      done;
+      if !i <= !j
+      then (
+        swap a !i !j;
+        incr i;
+        decr j)
+    done;
+    if k <= !j then select random a lo !j k else if k >= !i then select random a !i hi k)
+;;
+
+let quantile (values : float array) p =
+  let n = Array.length values in
+  if n = 0
+  then None
+  else (
+    let k = float_of_int (n - 1) *. p in
+    let i = int_of_float k in
+    let weight = k -. float_of_int i in
+    select (Random.State.make [| n |]) values 0 (n - 1) i;
+    let next = ref values.(min (i + 1) (n - 1)) in
+    for j = i + 2 to n - 1 do
+      if values.(j) < !next then next := values.(j)
+    done;
+    Some (((1. -. weight) *. values.(i)) +. (weight *. !next)))
+;;
 
 let summary t ~column =
   let histogram = histogram t ~column ~bins:20 in
   let n = rows t - histogram.missing in
   let values = numbers t column n in
-  Array.sort Float.compare values;
-  let distinct = ref (if n = 0 then 0 else 1) in
-  for i = 1 to n - 1 do
-    if values.(i) <> values.(i - 1) then incr distinct
-  done;
-  let quantile p =
-    if n = 0
-    then None
-    else (
-      let k = float_of_int (n - 1) *. p in
-      let i = int_of_float k in
-      let weight = k -. float_of_int i in
-      Some (((1. -. weight) *. values.(i)) +. (weight *. values.(min (i + 1) (n - 1)))))
-  in
+  let distinct = ref (distinct_floats values) in
+  let quantile = quantile values in
   let scaled_sum f = Array.fold_left (fun sum value -> sum +. f value) 0. values in
   let mean, sd, skewness =
     if n = 0

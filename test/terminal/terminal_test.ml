@@ -250,7 +250,6 @@ let grid_pipeline () =
     press c term K.Right;
     press c term K.Right;
     until c (highlighted "1.00");
-    type_ c term "d";
     see c "Skewness";
     see c "Min 0.00   Q1 0.50";
     see c "Mean 1.00   SD 1.00";

@@ -623,10 +623,13 @@ let rec loop r pending =
       | Ok command ->
         let continue = run r command in
         flush stdout;
-        if continue then loop r "" else Session.close r.session)
+        if continue then loop r "")
 ;;
 
 let start ~project ?path () =
   Sys.catch_break true;
-  Option.iter (fun r -> loop r "") (open_session ~project ?path ())
+  Option.iter
+    (fun r ->
+       Fun.protect ~finally:(fun () -> Session.close r.session) (fun () -> loop r ""))
+    (open_session ~project ?path ())
 ;;

@@ -17,3 +17,10 @@ The REPL previews the same table in both persistent workers.
      <String>         <Int>      <Float?>
   1  North                2         10.00
   2  South                1          5.00
+
+Both workers keep non-ASCII text intact in both directions.
+
+  $ printf '"café ∑"\n:target r-dplyr\n"café ∑"\n:quit\n' | rupam repl --target python-polars
+  "café ∑" : String
+  r-dplyr
+  "café ∑" : String

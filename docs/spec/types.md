@@ -159,7 +159,13 @@ order (see [Tables](tables.md#order)); an unordered column is a bag of
 observations, not a set of distinct values. Element comparability is separate
 from observation order. Vectors have an intrinsic position order.
 
-- A function whose body uses only scalar operations lifts element-wise.
+- A function whose body uses only scalar operations lifts element-wise over
+  columns and vectors, as do operators and scalar builtins:
+  `square([1, 2, 3])` is `[1, 4, 9]` and `[1, 2] + [3, 4]` is `[4, 6]`.
+  Lifting applies only where the argument's type does not already match the
+  parameter's, so a function that accepts a vector receives it whole.
+  Lifted vectors must have equal lengths: a mismatch is a type error when
+  both lengths are known statically and a runtime error otherwise.
 - Reduction and transform constraints propagate through calls and higher-order
   functions, separately for each parameter. A consumed collection is the
   entire vector or current group; a scalar reduction broadcasts to that group

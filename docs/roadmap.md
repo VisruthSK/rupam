@@ -47,6 +47,8 @@ not yet built.
 - Range patterns: reject overlapping arms and name each uncovered interval in
   `nonexhaustive-match` (C158, C159).
 - Displayed signatures show column-shaped parameters and results (C162).
+- Lift functions, operators and scalar builtins over vectors as over columns,
+  with a length check and no recycling (C165, C37).
 
 ## 3. Analytical core
 
@@ -102,6 +104,14 @@ with R and Python only as reference backends.
   interfaces from the platform separation.
 - Idiomatic R and Python formatting of generated code beyond line breaking,
   if a light dependency or printer pass suffices.
+- Replace `scripts/dev` with a `justfile` (or an equally small runner) as a
+  development dependency, so build, test, bench and format commands are short
+  and reusable; formatting runs ocamlformat, air and jarl for R, and ruff for
+  Python.
+- Move dependency management to dune package management (`dune pkg` with a
+  `dune.lock`, cached through `setup-dune`) once its Windows support is
+  stable, replacing the opam switch, `scripts/lock-deps` and the `_opam`
+  cache in CI.
 - Splitting each backend into a `HOST` and a `DIALECT` once a language has a
   second table library.
 - Modules, package export, test blocks, `repeat`, and the relational

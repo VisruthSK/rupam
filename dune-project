@@ -10,7 +10,7 @@
  (name rupam)
  (synopsis "A typed language for interactive data analysis")
  (depends
-  (ocaml (>= 5.5))
+  (ocaml (>= 5.4))
   menhir
   yojson
   ppx_yojson_conv
