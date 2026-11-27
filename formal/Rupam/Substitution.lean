@@ -14,8 +14,12 @@ def ContextTerm.rename (rename : Renaming source target) :
     ContextTerm payload source t needs → ContextTerm payload target t needs
   | .variable binding => .variable (rename binding)
   | .scalar value => .scalar value
+  | .vector values => .vector values
   | .pointwise operation => .pointwise operation
   | .reducer kind policy operation => .reducer kind policy operation
+  | .vectorReducer policy operation => .vectorReducer policy operation
+  | .orderedReducer kind policy operation => .orderedReducer kind policy operation
+  | .mapResult operation input => .mapResult operation (input.rename rename)
   | .combine operation left right => .combine operation (left.rename rename) (right.rename rename)
   | .conditional test condition yes no =>
     .conditional test (condition.rename rename) (yes.rename rename) (no.rename rename)
@@ -30,8 +34,14 @@ theorem ContextTerm.eval_rename (term : ContextTerm payload source t needs)
   induction term generalizing target with
   | «variable» binding => rfl
   | scalar value => rfl
+  | vector values => rfl
   | pointwise operation => rfl
   | reducer kind policy operation => rfl
+  | vectorReducer policy operation => rfl
+  | orderedReducer kind policy operation => rfl
+  | mapResult operation input inputAgrees =>
+    simp only [ContextTerm.rename, ContextTerm.eval, inputAgrees]
+    rfl
   | combine operation left right leftAgrees rightAgrees =>
     simp only [ContextTerm.rename, ContextTerm.eval, leftAgrees, rightAgrees]
     rfl
@@ -59,8 +69,12 @@ def ContextTerm.substitute (replace : Substitution payload source target) :
     ContextTerm payload source t needs → ContextTerm payload target t needs
   | .variable binding => replace binding
   | .scalar value => .scalar value
+  | .vector values => .vector values
   | .pointwise operation => .pointwise operation
   | .reducer kind policy operation => .reducer kind policy operation
+  | .vectorReducer policy operation => .vectorReducer policy operation
+  | .orderedReducer kind policy operation => .orderedReducer kind policy operation
+  | .mapResult operation input => .mapResult operation (input.substitute replace)
   | .combine operation left right => .combine operation (left.substitute replace) (right.substitute replace)
   | .conditional test condition yes no =>
     .conditional test (condition.substitute replace) (yes.substitute replace) (no.substitute replace)
@@ -77,8 +91,14 @@ theorem ContextTerm.eval_substitute (term : ContextTerm payload source t needs)
     cases supplies
     rfl
   | scalar value => rfl
+  | vector values => rfl
   | pointwise operation => rfl
   | reducer kind policy operation => rfl
+  | vectorReducer policy operation => rfl
+  | orderedReducer kind policy operation => rfl
+  | mapResult operation input inputAgrees =>
+    simp only [ContextTerm.substitute, ContextTerm.eval, inputAgrees]
+    rfl
   | combine operation left right leftAgrees rightAgrees =>
     simp only [ContextTerm.substitute, ContextTerm.eval, leftAgrees, rightAgrees]
     rfl

@@ -1,0 +1,27 @@
+let penguins = read_csv("penguins.csv")
+
+let standardize(x) = (x - mean(x)) / sd(x)
+
+let profile(data, predicate, measurement, g1, g2) =
+  data
+  |> filter(predicate, missing = skip)
+  |> mutate(
+       z = standardize(measurement),
+       by = [g1, g2],
+       missing = skip,
+       group_missing = skip
+     )
+  |> summarize(
+       observations = n(),
+       average = mean(measurement),
+       spread = sd(measurement),
+       extreme = sum(
+         if (some(z))
+           if (abs(z) > 2.0) 1 else 0
+         else
+           None
+       ),
+       by = [g1, g2],
+       missing = skip,
+       group_missing = skip
+     )

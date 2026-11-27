@@ -262,6 +262,18 @@ inductive MissingPolicy where
   | skip
   | keep
   | error
+  deriving DecidableEq
+
+def firstWithPolicy (policy : MissingPolicy) (cells : List (Option α)) : Outcome (Option α) :=
+  match policy with
+  | .skip => .ok (cells.findSome? id)
+  | .keep => .ok cells.head?.join
+  | .error =>
+    if cells.any Option.isNone then .error .missingValue
+    else .ok cells.head?.join
+
+def lastWithPolicy (policy : MissingPolicy) (cells : List (Option α)) : Outcome (Option α) :=
+  firstWithPolicy policy cells.reverse
 
 def sumInt (policy : MissingPolicy) (cells : List (Option RInt)) :
     Outcome (Option RInt) := do

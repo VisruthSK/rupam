@@ -116,4 +116,33 @@ theorem AlignArguments.no_column_vector (alignment : AlignArguments inputs resul
     (alignment.vector_forces_shape vector)
   cases impossible
 
+inductive Broadcasts : Shape → Shape → Type where
+  | same : Broadcasts shape shape
+  | vector : Broadcasts .scalar (.vector n)
+  | column : Broadcasts .scalar (.column d)
+
+def Broadcasts.core : Broadcasts source target → Expr source t → Expr target t
+  | .same, expression => expression
+  | .vector, expression => .broadcastVector expression
+  | .column, expression => .broadcast expression
+
+def Broadcasts.trans : Broadcasts a b → Broadcasts b c → Broadcasts a c
+  | .same, later => later
+  | .vector, .same => .vector
+  | .column, .same => .column
+
+def Align.leftBroadcast (alignment : Align a b result) : Broadcasts a result := by
+  cases alignment <;> first | exact .same | exact .vector | exact .column
+
+def Align.rightBroadcast (alignment : Align a b result) : Broadcasts b result := by
+  cases alignment <;> first | exact .same | exact .vector | exact .column
+
+def AlignArguments.broadcasts (alignment : AlignArguments inputs result) :
+    ArgumentShape inputs input → Broadcasts input result :=
+  match alignment with
+  | .nil => fun argument => nomatch argument
+  | .cons head tail => fun
+    | .first => head.leftBroadcast
+    | .next argument => (tail.broadcasts argument).trans head.rightBroadcast
+
 end Rupam

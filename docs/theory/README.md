@@ -14,6 +14,7 @@ mechanisation in `formal/` proves its properties incrementally.
 | [Semantics](semantics.md) | operational semantics and failure |
 | [Categorical models](categorical.md) | denotational and categorical models |
 | [Metatheory](metatheory.md) | theorems, conjectures and proof status |
+| [Formalization roadmap](formalization.md) | proof dependencies and language coverage |
 | [Related work](related-work.md) | comparison with existing research |
 
 Notation: Γ lexical bindings, Δ analytical context (current table, grouping,

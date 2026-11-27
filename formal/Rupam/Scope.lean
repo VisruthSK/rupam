@@ -95,6 +95,33 @@ theorem guard_cannot_cover_whole (values : ValuesAt rows α) (test : α → Bool
   intro coversWhole
   exact notSelected (coversWhole inScope)
 
+theorem guard_covers_whole_iff (values : ValuesAt scope.members α) (test : α → Bool) :
+    scope.members ⊆ values.select test ↔
+      ∀ position member, test (values position member) = true := by
+  constructor
+  · intro covers position member
+    obtain ⟨inScope, passed⟩ := (values.mem_select_iff test position).mp (covers member)
+    exact passed
+  · intro allPass position member
+    exact values.mem_select test member (allPass position member)
+
+theorem nested_selection (values : ValuesAt rows α) (outer inner : α → Bool)
+    (position : scope.Member) :
+    let outerRows := values.select outer
+    let selected := values.restrict outerRows
+      (fun {_} member => (List.mem_filter.mp member).1)
+    position ∈ selected.select inner ↔
+      ∃ member : position ∈ rows,
+        outer (values position member) = true ∧ inner (values position member) = true := by
+  dsimp
+  rw [mem_select_iff]
+  constructor
+  · intro ⟨outerMember, passedInner⟩
+    obtain ⟨member, passedOuter⟩ := (values.mem_select_iff outer position).mp outerMember
+    exact ⟨member, passedOuter, passedInner⟩
+  · intro ⟨member, passedOuter, passedInner⟩
+    exact ⟨values.mem_select outer member passedOuter, passedInner⟩
+
 theorem select_empty_iff (values : ValuesAt rows α) (test : α → Bool) :
     values.select test = [] ↔ ∀ row member, test (values row member) = false := by
   rw [select, List.filter_eq_nil_iff]
