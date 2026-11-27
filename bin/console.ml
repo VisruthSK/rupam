@@ -830,6 +830,24 @@ let result_of f =
   | exception exn -> Error (Rupam.Diagnostic.of_exn exn)
 ;;
 
+let request_summary (model, cmd) =
+  match model.viewer with
+  | Some v when model.working = None && not model.closing ->
+    (match Viewer.needs_summary v with
+     | Some name ->
+       ( { model with working = Some Profile_work }
+       , Cmd.batch
+           [ cmd
+           ; Cmd.perform (fun dispatch ->
+               let profile =
+                 result_of (fun () -> Rupam_native.Session.column_summary v.result name)
+               in
+               dispatch (Column_ready (v.displayed, name, profile)))
+           ] )
+     | None -> model, cmd)
+  | _ -> model, cmd
+;;
+
 let step msg model =
   match msg with
   | Ignore -> model, Cmd.none
@@ -943,31 +961,25 @@ let step msg model =
       }
     , Cmd.none )
   | Scroll step ->
-    ( { model with viewer = Option.map (fun v -> Viewer.move v step) model.viewer }
-    , Cmd.none )
+    request_summary
+      ( { model with viewer = Option.map (fun v -> Viewer.move v step) model.viewer }
+      , Cmd.none )
   | Select_cell (row, column) ->
-    ( { model with
-        viewer = Option.map (fun v -> Viewer.move v (Cell (row, column))) model.viewer
-      ; editing = false
-      }
-    , Cmd.none )
+    request_summary
+      ( { model with
+          viewer = Option.map (fun v -> Viewer.move v (Cell (row, column))) model.viewer
+        ; editing = false
+        }
+      , Cmd.none )
   | Act Distribution ->
-    (match model.viewer with
-     | Some v when model.working = None ->
-       (match Viewer.current v with
-        | Some name ->
-          (match List.assoc_opt name v.profiles with
-           | Some profile ->
-             { model with viewer = Some (Viewer.show_profile v name profile) }, Cmd.none
-           | None ->
-             ( { model with working = Some Profile_work }
-             , Cmd.perform (fun dispatch ->
-                 let profile =
-                   result_of (fun () -> Rupam_native.Session.column_summary v.result name)
-                 in
-                 dispatch (Column_ready (v.displayed, name, profile))) ))
-        | None -> model, Cmd.none)
-     | _ -> model, Cmd.none)
+    request_summary
+      ( { model with
+          viewer =
+            Option.map
+              (fun (v : Viewer.t) -> { v with summarizing = not v.summarizing })
+              model.viewer
+        }
+      , Cmd.none )
   | Act action -> change_draft model (fun v -> Viewer.act v action), Cmd.none
   | Toggle_help -> { model with help = not model.help }, Cmd.none
   | External_edit ->
@@ -1048,8 +1060,9 @@ let step msg model =
     let model = { model with working = None } in
     (match model.viewer with
      | Some v when (not model.closing) && v.generation = generation ->
-       finish_viewer_work
-         { model with viewer = Some (Viewer.publish v generation result) }
+       request_summary
+         (finish_viewer_work
+            { model with viewer = Some (Viewer.publish v generation result) })
      | _ ->
        Result.iter Rupam_native.Session.release_draft result;
        if not model.closing
@@ -1066,15 +1079,15 @@ let step msg model =
       let viewer =
         Option.map
           (fun (v : Viewer.t) ->
-             if generation <> v.displayed || Viewer.current v <> Some name
-             then v
-             else (
-               match result with
-               | Ok profile -> Viewer.show_profile v name profile
-               | Error diagnostic -> { v with diagnostic = Some diagnostic }))
+             match result with
+             | _ when generation <> v.displayed -> v
+             | Ok profile -> Viewer.remember_profile v name profile
+             | Error diagnostic when Viewer.current v = Some name ->
+               { v with diagnostic = Some diagnostic; summarizing = false }
+             | Error _ -> v)
           model.viewer
       in
-      finish_viewer_work { model with viewer })
+      request_summary (finish_viewer_work { model with viewer }))
 ;;
 
 let paste_formatting =

@@ -1,0 +1,9 @@
+#!/bin/sh
+if command -v dune >/dev/null 2>&1; then
+  scripts/dev fmt-check
+else
+  wsl -d Debian -u root -e bash -lc 'cd "$(wslpath "$1")" && scripts/dev fmt-check' _ "$(pwd -W)"
+fi || {
+  echo "Formatting differs. Run scripts/dev fmt, then commit again." >&2
+  exit 1
+}

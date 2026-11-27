@@ -33,7 +33,7 @@ type t =
   ; height : int
   ; window : Rupam_native.Page.t
   ; history : string list
-  ; distribution : (string * Rupam_native.Arrow_result.profile) option
+  ; summarizing : bool
   ; profiles : (string * Rupam_native.Arrow_result.profile) list
   ; policy : Rupam.Syntax.expr option
   ; diagnostic : Rupam.Diagnostic.t option
@@ -67,4 +67,5 @@ val submission : t -> string -> string
 val act : t -> action -> t
 val visible : t -> Rupam_native.Page.t
 val bars : digits:int -> t -> string list
-val show_profile : t -> string -> Rupam_native.Arrow_result.profile -> t
+val remember_profile : t -> string -> Rupam_native.Arrow_result.profile -> t
+val needs_summary : t -> string option

@@ -16,9 +16,8 @@ Switching target never replays writes, and :save writes the accepted analysis.
   shop : contract
   small : table
   Saved b.rp
-  $ ls out.parquet
-  ls: cannot access 'out.parquet': No such file or directory
-  [2]
+  $ test -e out.parquet || echo "no out.parquet"
+  no out.parquet
   $ cat b.rp
   use contract "data-dict.yaml" as shop
   

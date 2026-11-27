@@ -139,17 +139,20 @@ let host ?(started = fun _ -> ()) t =
 
 let fingerprint (contract : Contract.t) =
   let directory = Filename.dirname contract.path in
+  let state path =
+    match Unix.stat path with
+    | s -> Printf.sprintf "%s %d %d %h %h" path s.st_size s.st_ino s.st_mtime s.st_ctime
+    | exception Unix.Unix_error _ -> path ^ " missing"
+  in
   let sources =
     List.filter_map
       (fun (table : Contract.table) ->
          Option.map
-           (fun parquet ->
-              let path = Filename.concat directory parquet in
-              if Sys.file_exists path then Digest.file path else Digest.string parquet)
+           (fun parquet -> state (Filename.concat directory parquet))
            table.parquet)
       contract.tables
   in
-  Digest.string (String.concat "" (Digest.file contract.path :: sources))
+  Digest.string (String.concat "\n" (state contract.path :: sources))
 ;;
 
 let validate h contracts =

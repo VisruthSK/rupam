@@ -237,6 +237,31 @@ let bench examples =
          "read_csv penguins"
          (time (fun () -> submit {|let p = read_csv("penguins.csv")|}));
        report "show table" (time (fun () -> submit "p"));
+       let trips = Filename.concat examples "trips.parquet" in
+       if Sys.file_exists trips
+       then (
+         report
+           "read_parquet trips"
+           (time (fun () -> submit {|let trips = read_parquet("trips.parquet")|}));
+         let opened = ref None in
+         report
+           "open trips"
+           (time (fun () ->
+              opened := Some (Session.result session (Session.table session "trips"))));
+         let r = Option.get !opened in
+         report "first page" (time (fun () -> Session.page r ~offset:0 ~limit:40));
+         report "summary fare" (time (fun () -> Session.column_summary r "fare"));
+         report "summary city" (time (fun () -> Session.column_summary r "city"));
+         let draft = Session.open_draft session in
+         let sorted = ref None in
+         report
+           "sort fare (draft)"
+           (time (fun () ->
+              sorted := Some (Session.preview_draft draft "trips |> arrange(fare)")));
+         report
+           "sorted first page"
+           (time (fun () -> Session.page (Option.get !sorted) ~offset:0 ~limit:40));
+         Session.close_draft draft);
        Session.close session)
     Rupam_fixture.Fixture.targets
 ;;

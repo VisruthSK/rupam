@@ -36,7 +36,7 @@ type t =
   ; height : int
   ; window : Page.t
   ; history : string list
-  ; distribution : (string * Arrow_result.profile) option
+  ; summarizing : bool
   ; profiles : (string * Arrow_result.profile) list
   ; policy : Syntax.expr option
   ; diagnostic : Diagnostic.t option
@@ -155,7 +155,7 @@ let open_ session base result ~width ~height =
     ; height
     ; window = Session.page result ~columns:[] ~offset:0 ~limit:0
     ; history = []
-    ; distribution = None
+    ; summarizing = false
     ; profiles = []
     ; policy = None
     ; diagnostic = None
@@ -169,7 +169,7 @@ let move t step =
   refresh
     (match step with
      | Rows n -> { t with row = t.row + n }
-     | Columns n -> { t with column = t.column + n; distribution = None; policy = None }
+     | Columns n -> { t with column = t.column + n; policy = None }
      | Pan_rows n ->
        let top = clamp (Session.total t.result - rows t) (t.top + n) in
        { t with top; row = max top (min t.row (top + rows t - 1)); policy = None }
@@ -180,14 +180,14 @@ let move t step =
        let column =
          if t.column < fixed then t.column else max left (min t.column (left + width - 1))
        in
-       { t with left; column; policy = None; distribution = None }
+       { t with left; column; policy = None }
      | Cell (row, index) ->
        let fixed, start, count = column_window t in
        if index < 0 || index >= fixed + count
        then t
        else (
          let column = if index < fixed then index else start + index - fixed in
-         { t with row; column; policy = None; distribution = None })
+         { t with row; column; policy = None })
      | Top -> { t with row = 0 }
      | Bottom -> { t with row = Session.total t.result - 1 })
 ;;
@@ -220,7 +220,6 @@ let publish t generation = function
         ; displayed = generation
         ; settled = generation
         ; diagnostic = None
-        ; distribution = None
         ; profiles = []
         }
     in
@@ -381,9 +380,15 @@ let visible t =
 ;;
 
 let bars ~digits t =
-  match t.distribution with
+  let shown =
+    match current t with
+    | Some name when t.summarizing -> Some (name, List.assoc_opt name t.profiles)
+    | _ -> None
+  in
+  match shown with
   | None -> []
-  | Some (name, Frequencies profile) ->
+  | Some (name, None) -> [ name ^ " · computing summary…" ]
+  | Some (name, Some (Frequencies profile)) ->
     let most = List.fold_left (fun best (_, n) -> max best n) 1 profile.top in
     [ name ^ " · Top values"
     ; Printf.sprintf "%d distinct" profile.distinct
@@ -399,7 +404,7 @@ let bars ~digits t =
            in
            Printf.sprintf "%s  %d  %S" bar n value)
         profile.top
-  | Some (name, Numeric summary) ->
+  | Some (name, Some (Numeric summary)) ->
     let h = summary.histogram in
     let most = Array.fold_left max 1 h.counts in
     let glyphs = [| "▁"; "▂"; "▃"; "▄"; "▅"; "▆"; "▇"; "█" |] in
@@ -424,9 +429,12 @@ let bars ~digits t =
     ]
 ;;
 
-let show_profile t name profile =
-  { t with
-    distribution = Some (name, profile)
-  ; profiles = (name, profile) :: take 7 (List.remove_assoc name t.profiles)
-  }
+let remember_profile t name profile =
+  { t with profiles = (name, profile) :: take 31 (List.remove_assoc name t.profiles) }
+;;
+
+let needs_summary t =
+  match current t with
+  | Some name when t.summarizing && not (List.mem_assoc name t.profiles) -> Some name
+  | _ -> None
 ;;
