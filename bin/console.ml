@@ -38,7 +38,7 @@ type msg =
   | Name_edit of Editor.t
   | Name_confirm
   | Name_cancel
-  | Draft_tick
+  | Draft_tick of int
   | Draft_ready of int * (Rupam_native.Session.result, Rupam.Diagnostic.t) result
   | Column_ready of
       int * string * (Rupam_native.Arrow_result.profile, Rupam.Diagnostic.t) result
@@ -58,16 +58,11 @@ type model =
   ; naming : Editor.t option
   ; search : (string * int * Editor.t) option
   ; help : bool
-  ; placement : placement
   ; working : work option
   ; closing : bool
   ; save_requested : int option
   ; size : int * int
   }
-
-and placement =
-  | Below
-  | Beside
 
 and work =
   | Preview_work
@@ -443,7 +438,7 @@ let strip_rows = 6
 let grid model (v : Viewer.t) =
   let page = Viewer.visible v in
   let digits = Repl.digits model.session in
-  let width, height = model.size in
+  let _, height = model.size in
   let body =
     box
       ~flex_direction:Column
@@ -573,19 +568,10 @@ let grid model (v : Viewer.t) =
       ; box ~flex_direction:Column ~size:{ width = pct 100; height = px strip_rows } strip
       ]
   in
-  match model.placement with
-  | Below ->
-    box
-      ~flex_direction:Column
-      ~size:{ width = pct 100; height = px height }
-      (table :: editor)
-  | Beside ->
-    box
-      ~flex_direction:Row
-      ~size:{ width = px width; height = px height }
-      [ box ~flex_direction:Column ~size:{ width = pct 40; height = pct 100 } editor
-      ; box ~flex_direction:Column ~size:{ width = pct 60; height = pct 100 } [ table ]
-      ]
+  box
+    ~flex_direction:Column
+    ~size:{ width = pct 100; height = px height }
+    (table :: editor)
 ;;
 
 let view model =
@@ -1032,13 +1018,17 @@ let step msg model =
   | Discard -> { model with input = Editor.empty; menu = None; search = None }, Cmd.none
   | Focus_prompt -> { model with editing = true }, Cmd.none
   | Focus_grid -> { model with editing = false; menu = None }, Cmd.none
-  | Draft_tick ->
+  | Draft_tick elapsed ->
     (match model.viewer with
      | Some v
        when model.working = None
             && (not model.closing)
             && v.generation <> v.settled
-            && Unix.gettimeofday () -. v.edited_at >= 0.15 ->
+            && v.quiet_ticks + elapsed < 3 ->
+       ( { model with viewer = Some { v with quiet_ticks = v.quiet_ticks + elapsed } }
+       , Cmd.none )
+     | Some v
+       when model.working = None && (not model.closing) && v.generation <> v.settled ->
        ( { model with working = Some Preview_work }
        , Cmd.perform (fun dispatch ->
            let result =
@@ -1169,7 +1159,7 @@ let subscriptions model =
       ; (if model.editing && model.naming = None then paste_formatting else Sub.none)
       ; (if model.working <> None || v.generation = v.settled
          then Sub.none
-         else Sub.every ~id:"viewer-preview" 0.05 (fun _ -> Draft_tick))
+         else Sub.every ~id:"viewer-preview" 0.05 (fun elapsed -> Draft_tick elapsed))
       ; (if model.closing
          then Sub.none
          else
@@ -1246,9 +1236,9 @@ let subscriptions model =
       ]
 ;;
 
-let start ~project ?path () =
+let app ~project ?path () =
   match Repl.open_session ~project ?path () with
-  | None -> ()
+  | None -> None
   | Some session ->
     let pages = ref [] in
     let failures = ref [] in
@@ -1260,9 +1250,7 @@ let start ~project ?path () =
       ; view = (fun subject result -> opened := Some (subject, result))
       }
     in
-    let config = Matrix.config ~mode:`Primary ~mouse:`Off ~kitty_keyboard:`Auto () in
-    run
-      ~config
+    Some
       { init =
           (fun () ->
             ( { session
@@ -1279,7 +1267,6 @@ let start ~project ?path () =
               ; naming = None
               ; search = None
               ; help = false
-              ; placement = Below
               ; working = None
               ; closing = false
               ; save_requested = None
@@ -1291,6 +1278,9 @@ let start ~project ?path () =
       ; subscriptions
       }
 ;;
+
+let config = Matrix.config ~mode:`Primary ~mouse:`Off ~kitty_keyboard:`Auto ()
+let start ~project ?path () = Option.iter (run ~config) (app ~project ?path ())
 
 type pick =
   | Move of int

@@ -1,5 +1,11 @@
+(library
+ (name rupam_console)
+ (modules console repl line viewer)
+ (libraries rupam rupam_native unix mosaic matrix.tty))
+
 (executable
  (name rupam_cli)
  (public_name rupam)
  (package rupam)
- (libraries rupam rupam_native cmdliner unix mosaic matrix.tty))
+ (modules rupam_cli)
+ (libraries rupam rupam_console rupam_native cmdliner unix))

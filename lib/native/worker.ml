@@ -88,6 +88,15 @@ let start (runtime : Runtime.t) (language : Target.language) =
   let replies, output = Unix.pipe ~cloexec:true () in
   let pid =
     try Unix.create_process argv.(0) argv input output Unix.stderr with
+    | Unix.Unix_error (Unix.ENOENT, _, _) ->
+      List.iter Unix.close [ input; requests; replies; output ];
+      Rupam.Diagnostic.fail
+        Host_failure
+        (Printf.sprintf
+           "%s is not available: %s was not found. Install it or choose another target \
+            with --target"
+           (Rupam.Target.language_name language)
+           argv.(0))
     | exn ->
       List.iter Unix.close [ input; requests; replies; output ];
       raise exn

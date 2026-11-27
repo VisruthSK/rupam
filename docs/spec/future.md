@@ -294,3 +294,13 @@ The parser keeps comments as trivia attached to the nearest item or pipeline
 stage, so `rupam fmt`, `:save`, pasted drafts and Ctrl+G edits reformat code
 without losing them. Until then, drafts containing comments are left as
 written.
+
+## Test coverage
+
+Measure line and branch coverage of the compiler, native runtime and console
+with `bisect_ppx`, instrumenting libraries through dune's
+`(instrumentation (backend bisect_ppx))` and reporting from CI to Codecov.
+Deferred: the released `bisect_ppx` 2.8.3 requires `cmdliner` < 2.0 and
+`ppxlib` < 0.36, which conflict with the pinned `cmdliner` 2.1.2. Adopt it once
+a release supports current `cmdliner` and `ppxlib`; coverage must not change
+which tests run or how they pass on any platform.

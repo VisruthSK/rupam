@@ -22,7 +22,7 @@ type t =
   ; generation : int
   ; displayed : int
   ; settled : int
-  ; edited_at : float
+  ; quiet_ticks : int
   ; base : Session.result
   ; context : Session.draft
   ; result : Session.result
@@ -141,7 +141,7 @@ let open_ session base result ~width ~height =
     ; generation = 0
     ; displayed = 0
     ; settled = 0
-    ; edited_at = 0.
+    ; quiet_ticks = 0
     ; base = result
     ; context = Session.open_draft session
     ; result
@@ -231,13 +231,7 @@ let publish t generation = function
 let edit t text =
   if text = source t
   then t
-  else
-    { t with
-      text
-    ; generation = t.generation + 1
-    ; edited_at = Unix.gettimeofday ()
-    ; policy = None
-    }
+  else { t with text; generation = t.generation + 1; quiet_ticks = 0; policy = None }
 ;;
 
 let replace t (expression : Syntax.expr) =

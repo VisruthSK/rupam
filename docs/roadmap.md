@@ -30,7 +30,11 @@ not yet built.
   compiler and browser worker.
 - Generate differential programs from typed TransformIR rather than source
   text, and shrink each failure into a pending fixture.
->>>>
+- Numeric promotion through captured bindings (`let f(x) = x * m` is
+  `(Number) -> Number`) and `Number` as an annotation (C160, C161).
+- Range patterns: reject overlapping arms and name each uncovered interval in
+  `nonexhaustive-match` (C158, C159).
+- Displayed signatures show column-shaped parameters and results (C162).
 
 
 ## 2. Analytical core
@@ -61,20 +65,20 @@ In order of conformance cases unlocked:
   revision, the external effect and worker recovery as separate facts.
 
 - `:probe`, `??term` search, comment-preserving `:save`.
-- Emit runtime adapters only when the generated code uses them, so
-  `:code --full` and exports carry no unused helpers.
 - A TextMate grammar; LSP completion and hover from the shared checker.
-- Start the target worker in the background when the REPL opens and send its
-  preamble without waiting, so the first command does not pay the measured
-  ~740 ms interpreter and package start (`rupam-dev bench`).
-- Reading CSV in R takes ~435 ms for penguins against ~117 ms in Python;
-  profile the R reader and the separate schema scan.
->>>>
+- Viewer speed on large data: sort online (publish the visible top-k
+  first, finish the order in the background, buffer pages only when paging
+  outruns it) and compute summary statistics in one vectorised pass per
+  column, cached per result and shown progressively.
+- Save and export by backward slicing: `:save result` and `:export result`
+  keep only the chosen bindings and their dependencies (C164).
 
 
 ## 4. Public MVP
 
-Native releases for Linux, macOS and Windows; documentation; `rupam env`
+Native, stripped releases for Linux, macOS and Windows, with every suite,
+including the in-process terminal tests, green on all three in CI; a
+minimum OCaml of 5.4 (issue 3); a demo recorded at 1080p30; documentation; `rupam env`
 environment setup; realistic end-to-end examples on both targets.
 
 The last step before release is a whole-codebase audit: every algorithm is
@@ -96,6 +100,11 @@ with R and Python only as reference backends.
   second table library.
 - Modules, package export, test blocks, `repeat`, and the relational
   extensions in [Future](spec/future.md).
+- Optional OxCaml release builds for Linux and macOS (Flambda 2, unboxed
+  types), skipped cleanly on Windows until OxCaml supports it
+  ([brief](briefs/compiler-platform-separation.md)).
+- Test coverage with `bisect_ppx` once it supports current `cmdliner` and
+  `ppxlib` ([Future](spec/future.md#test-coverage)).
 - Lean 4 proofs of the [metatheory](theory/metatheory.md) in `formal/`,
   checked against the reference evaluator on shared fixtures.
 - The analyst MCP on MCP 2026-07-28 ([Agents](spec/agent-interface.md)) and

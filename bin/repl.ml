@@ -62,10 +62,6 @@ let help =
   ]
 ;;
 
-let command_names =
-  List.map (fun (usage, _) -> List.hd (String.split_on_char ' ' usage)) help
-;;
-
 let parse line =
   let line = String.trim line in
   let verb, rest =
@@ -329,7 +325,11 @@ let present r (event : Session.event) =
   | Viewed (subject, result) -> r.view subject result
   | Inspection_failed d -> r.fail d
   | Schema (rows, columns) ->
-    Printf.printf "%d rows \xc3\x97 %d columns\n" rows (List.length columns);
+    let plural n noun = Printf.sprintf "%d %s%s" n noun (if n = 1 then "" else "s") in
+    Printf.printf
+      "%s \xc3\x97 %s\n"
+      (plural rows "row")
+      (plural (List.length columns) "column");
     print_columns columns
   | Typed t -> print_endline (Types.display t)
   | Bars (column, f) -> List.iter print_endline (bars column f)

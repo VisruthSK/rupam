@@ -1,5 +1,6 @@
 open Rupam
 open Rupam_native
+open Rupam_console
 open Cmdliner
 
 let with_program path action =

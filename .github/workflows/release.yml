@@ -66,6 +66,7 @@ jobs:
           mkdir -p "dist/$name"
           if [ "$RUNNER_OS" = Windows ]; then
             cp _build/default/bin/rupam_cli.exe "dist/$name/rupam.exe"
+            opam exec -- x86_64-w64-mingw32-strip "dist/$name/rupam.exe"
           else
             cp _build/default/bin/rupam_cli.exe "dist/$name/rupam"
             strip "dist/$name/rupam"

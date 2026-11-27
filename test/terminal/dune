@@ -6,7 +6,17 @@
 (executable
  (name terminal_test)
  (modules terminal_test)
- (libraries matrix matrix.test astring unix))
+ (libraries
+  rupam
+  rupam_native
+  rupam_console
+  matrix
+  matrix.test
+  mosaic
+  mosaic.test
+  astring
+  unix
+  threads.posix))
 
 (rule
  (alias integration)

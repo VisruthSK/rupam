@@ -1,6 +1,5 @@
 module T = Matrix_test.Terminal
 module S = Matrix_test.Screen
-module C = Matrix_test.Child
 module K = Matrix.Input.Keystroke
 
 let absolute path =
@@ -28,28 +27,41 @@ let fresh files =
 let lines term = String.split_on_char '\n' (S.text (T.screen term))
 let shows text term = List.exists (contains ~affix:text) (lines term)
 let screen = ref None
+let running = Atomic.make 0
 
-let until c ready =
-  match !screen with
-  | Some term when ready term -> ()
-  | _ -> C.wait c ~within:20. ready
+let process_perform job =
+  Atomic.incr running;
+  ignore
+    (Thread.create
+       (fun () -> Fun.protect ~finally:(fun () -> Atomic.decr running) job)
+       ())
 ;;
 
-let poll c ready =
-  let deadline = Unix.gettimeofday () +. 20. in
+let quiesce () =
+  let deadline = Unix.gettimeofday () +. 0.05 in
+  while Atomic.get running > 0 && Unix.gettimeofday () < deadline do
+    Thread.delay 0.002
+  done
+;;
+
+let tick = 50_000_000
+
+let until c ready =
+  let term = Option.get !screen in
+  let deadline = Unix.gettimeofday () +. 30. in
   let rec go () =
-    if ready ()
+    if ready term
     then ()
     else if Unix.gettimeofday () > deadline
-    then failwith "condition not met within 20s"
+    then failwith ("not ready within 30s; the screen:\n" ^ S.text (T.screen term))
     else (
-      (try C.wait c ~within:0.1 (fun _ -> ready ()) with
-       | Failure _ -> ());
+      Matrix_test.advance c tick;
       go ())
   in
   go ()
 ;;
 
+let poll c ready = until c (fun _ -> ready ())
 let see c text = until c (shows text)
 let gone c text = until c (fun term -> not (shows text term))
 
@@ -62,11 +74,12 @@ let highlighted text term =
     (S.find screen text)
 ;;
 
+let send c bytes = Matrix_test.input c bytes
 let key term ?(mods = K.no_mods) k = T.key term ~mods k
 let char c = K.Char (Uchar.of_char c)
-let type_ c term s = C.send c (T.text term s)
-let paste c term s = C.send c (T.paste term s)
-let press c term ?mods k = C.send c (key term ?mods k)
+let type_ c term s = send c (T.text term s)
+let paste c term s = send c (T.paste term s)
+let press c term ?mods k = send c (key term ?mods k)
 
 let submit c term s =
   type_ c term s;
@@ -76,7 +89,7 @@ let submit c term s =
 let click c term text =
   match S.find (T.screen term) text with
   | (row, col) :: _ ->
-    C.send
+    send
       c
       (Printf.sprintf
          "\027[<0;%d;%dM\027[<0;%d;%dm"
@@ -89,40 +102,80 @@ let click c term text =
 
 let wheel_down c term text =
   match S.find (T.screen term) text with
-  | (row, col) :: _ -> C.send c (Printf.sprintf "\027[<65;%d;%dM" (col + 1) (row + 1))
+  | (row, col) :: _ -> send c (Printf.sprintf "\027[<65;%d;%dM" (col + 1) (row + 1))
   | [] -> failwith ("no " ^ text ^ " on screen")
 ;;
 
+let project dir args =
+  let project = Rupam_native.Project.load dir in
+  let rec target = function
+    | "--target" :: name :: _ -> List.assoc_opt name Rupam.Target.targets
+    | _ :: rest -> target rest
+    | [] -> None
+  in
+  match target args with
+  | None -> project
+  | Some chosen ->
+    { project with target = { value = Some chosen; origin = Session "--target" } }
+;;
+
 let session ?(env = []) ~dir args f =
-  let term = T.create ~cols:100 ~rows:30 () in
-  let env =
-    [ "PATH", Sys.getenv "PATH"
-    ; "HOME", dir
-    ; "TERM", "xterm-256color"
-    ; "COLORTERM", "truecolor"
+  let path = List.find_opt (fun a -> Filename.check_suffix a ".rp") args in
+  let base =
+    [ "HOME", dir
+    ; "USERPROFILE", dir
+    ; "LOCALAPPDATA", Filename.concat dir "state"
     ; "XDG_CONFIG_HOME", Filename.concat dir "config"
     ; "XDG_STATE_HOME", Filename.concat dir "state"
     ]
-    |> List.filter (fun (key, _) -> not (List.mem_assoc key env))
-    |> fun base -> base @ env
   in
-  screen := Some term;
-  C.with_spawn term ~env ~cwd:dir ~prog:rupam ~args (fun c ->
-    see c "rupam ❯";
-    f c term)
+  let previous = Sys.getcwd () in
+  let saved = List.map (fun (k, _) -> k, Sys.getenv_opt k) (base @ env) in
+  List.iter (fun (k, v) -> Unix.putenv k v) (base @ env);
+  Sys.chdir dir;
+  Fun.protect
+    ~finally:(fun () ->
+      Sys.chdir previous;
+      List.iter (fun (k, v) -> Unix.putenv k (Option.value v ~default:"")) saved)
+    (fun () ->
+       let app =
+         Option.get (Rupam_console.Console.app ~project:(project dir args) ?path ())
+       in
+       let term = T.create ~cols:100 ~rows:30 () in
+       screen := Some term;
+       Mosaic_test.run
+         ~config:Rupam_console.Console.config
+         ~process_perform
+         ~quiesce
+         term
+         app
+         (fun c ->
+            see c "rupam ❯";
+            f c term))
 ;;
 
-let run_in dir command =
-  let out = Filename.concat dir "out.txt" in
-  let code =
-    Sys.command
-      (Printf.sprintf
-         "cd %s && { %s; } > %s 2>&1"
-         (Filename.quote dir)
-         command
-         (Filename.quote out))
+let run_in ?(input = "") dir prog args =
+  let file name = Filename.concat dir name in
+  Out_channel.with_open_bin (file "in.txt") (fun oc -> output_string oc input);
+  let stdin = Unix.openfile (file "in.txt") [ O_RDONLY ] 0
+  and stdout = Unix.openfile (file "out.txt") [ O_WRONLY; O_CREAT; O_TRUNC ] 0o600 in
+  let previous = Sys.getcwd () in
+  Sys.chdir dir;
+  let pid =
+    Fun.protect
+      ~finally:(fun () -> Sys.chdir previous)
+      (fun () ->
+         Unix.create_process prog (Array.of_list (prog :: args)) stdin stdout stdout)
   in
-  code, In_channel.with_open_text out In_channel.input_all
+  let _, status = Unix.waitpid [] pid in
+  Unix.close stdin;
+  Unix.close stdout;
+  let code =
+    match status with
+    | WEXITED n -> n
+    | WSIGNALED _ | WSTOPPED _ -> 255
+  in
+  code, In_channel.with_open_bin (file "out.txt") In_channel.input_all
 ;;
 
 let check name ok = if not ok then failwith name
@@ -208,7 +261,7 @@ let grid_pipeline () =
     see c "1 row × 4 columns";
     press c term K.Enter;
     see c "name ❯";
-    C.send c (String.concat "" (List.init 11 (fun _ -> key term K.Backspace)));
+    send c (String.concat "" (List.init 11 (fun _ -> key term K.Backspace)));
     paste c term "kept_orders";
     press c term K.Enter;
     gone c "╭";
@@ -222,21 +275,20 @@ let grid_pipeline () =
   check "one arrange" (count "arrange(" viewer = 1);
   check "sort keys" (contains ~affix:"desc($region), desc($customer_id)" viewer);
   check "exact filter" (contains ~affix:"filter($cost == 1.0, missing = skip)" viewer);
-  let code, out = run_in dir (Filename.quote rupam ^ " check saved.rp") in
+  let code, out = run_in dir rupam [ "check"; "saved.rp" ] in
   check ("check: " ^ out) (code = 0);
   let code, ir =
-    run_in dir (Filename.quote dev ^ " transform-ir --binding kept_orders saved.rp")
+    run_in dir dev [ "transform-ir"; "--binding"; "kept_orders"; "saved.rp" ]
   in
   check ("ir: " ^ ir) (code = 0 && count "(Arrange" ir = 1 && count "(Filter" ir = 1);
   List.iter
     (fun target ->
        let code, out =
          run_in
+           ~input:"kept_orders\n:quit\n"
            dir
-           (Printf.sprintf
-              "printf 'kept_orders\\n:quit\\n' | %s repl --target %s saved.rp"
-              (Filename.quote rupam)
-              target)
+           rupam
+           [ "repl"; "--target"; target; "saved.rp" ]
        in
        check
          (target ^ ": " ^ out)
@@ -293,31 +345,42 @@ let exact_cell () =
     press c term K.Enter;
     see c "name ❯";
     submit c term "exact_row";
-    see c "let exact_row")
+    gone c "name ❯";
+    submit c term ":bindings";
+    see c "exact_row :")
 ;;
 
-let alive pid =
-  match Unix.kill pid 0 with
-  | () -> true
-  | exception Unix.Unix_error (Unix.ESRCH, _, _) -> false
+let slow_worker =
+  {|import os, sys, time
+if "-u" in sys.orig_argv and os.path.exists(os.environ.get("TEST_SLOW", "")):
+    with open(os.environ["TEST_STARTED"], "w") as f:
+        f.write(str(os.getpid()))
+    for beat in range(1200):
+        with open(os.environ["TEST_HEARTBEAT"], "w") as f:
+            f.write(str(beat))
+        time.sleep(0.05)
+    os._exit(0)
+|}
 ;;
 
 let cancellation () =
   let dir = fresh [ "viewer-penguins.rp"; "penguins.csv" ] in
   let slow = Filename.concat dir "slow"
-  and started = Filename.concat dir "started" in
-  let python = Filename.concat dir "python" in
-  let real = String.trim (snd (run_in dir "command -v python3 || command -v python")) in
-  Out_channel.with_open_text python (fun oc ->
-    output_string
-      oc
-      "#!/bin/sh\n\
-       if [ \"$1\" = -u ] && [ -f \"$TEST_SLOW\" ]; then\n\
-      \  printf \"%s\\n\" \"$$\" > \"$TEST_STARTED\"\n\
-      \  exec \"$TEST_PYTHON\" -c \"import time; time.sleep(60)\"\n\
-       fi\n\
-       exec \"$TEST_PYTHON\" \"$@\"\n");
-  Unix.chmod python 0o755;
+  and started = Filename.concat dir "started"
+  and heartbeat = Filename.concat dir "heartbeat"
+  and site = Filename.concat dir "site" in
+  Sys.mkdir site 0o755;
+  Out_channel.with_open_bin (Filename.concat site "sitecustomize.py") (fun oc ->
+    output_string oc slow_worker);
+  let beat () =
+    try In_channel.with_open_bin heartbeat In_channel.input_all with
+    | Sys_error _ -> ""
+  in
+  let alive _ =
+    let before = beat () in
+    Unix.sleepf 0.5;
+    beat () <> before
+  in
   let touch path = Out_channel.with_open_text path ignore in
   let started_pid () =
     let pid = ref None in
@@ -332,10 +395,10 @@ let cancellation () =
     pid, ready
   in
   let env =
-    [ "PATH", dir ^ ":" ^ Sys.getenv "PATH"
+    [ "PYTHONPATH", site
     ; "TEST_SLOW", slow
     ; "TEST_STARTED", started
-    ; "TEST_PYTHON", real
+    ; "TEST_HEARTBEAT", heartbeat
     ]
   in
   session
@@ -433,7 +496,12 @@ let () =
          | exception exn ->
            Printf.printf "FAIL  %s\n%s\n%!" name (Printexc.to_string exn);
            true)
-      tests
+      (match List.tl (Array.to_list Sys.argv) with
+       | [] -> tests
+       | chosen ->
+         List.filter
+           (fun (name, _) -> List.exists (fun c -> contains ~affix:c name) chosen)
+           tests)
   in
   if failed <> [] then exit 1
 ;;

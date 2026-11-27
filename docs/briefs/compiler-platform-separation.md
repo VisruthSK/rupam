@@ -73,6 +73,13 @@ missingness, order, effects, target-specific evidence) are unchanged.
   buffer further pages only if paging outruns it. Compute summary statistics
   with one vectorised pass per column, cached per result, and show them
   progressively instead of blocking.
+- OxCaml (issue 3): OxCaml is based on OCaml 5.4, so lower the minimum
+  supported OCaml to 5.4 (the source uses nothing from 5.5) while building
+  releases with 5.5. Later, build Linux and macOS releases with OxCaml
+  (Flambda 2 at least, unboxed types where they pay) as an optional
+  configuration that Windows builds skip cleanly, with no OxCaml-only code
+  paths in the shared source, until OxCaml supports Windows; then move
+  everything to OxCaml.
 - Profile before adopting OxCaml or Flambda 2; domain parallelism stays after
   the MVP with `domainslib`.
 

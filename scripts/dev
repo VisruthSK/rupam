@@ -46,11 +46,11 @@ suite() {
 
 unit() {
   suite dependencies python3 dev/declared.py "$root"
-  suite unit dune build @default @runtest @fmt
+  UV_PROJECT_ENVIRONMENT=$venv uv sync --frozen --quiet
+  PATH="$venv/bin:$PATH" suite unit dune build @default @runtest @fmt
 }
 
 integration() {
-  UV_PROJECT_ENVIRONMENT=$venv uv sync --frozen --quiet
   suite integration env PATH="$venv/bin:$PATH" opam exec --switch="$switch" -- dune build @integration --build-dir "$build"
 }
 
