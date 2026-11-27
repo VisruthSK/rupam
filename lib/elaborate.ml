@@ -1217,7 +1217,7 @@ and source ctx span (f : Syntax.expr) args : C.table =
     let missing =
       match options with
       | [] -> Input.default_missing
-      | [ (Some "missing_tokens", ({ form = List tokens; _ } as given)) ] ->
+      | [ (Some (Plain "missing_tokens"), ({ form = List tokens; _ } as given)) ] ->
         if reader = "read_parquet"
         then fail given.span Wrong_arguments "read_parquet has no missing_tokens";
         List.map
