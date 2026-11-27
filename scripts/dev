@@ -26,6 +26,7 @@ scripts/dev triage              group pending conformance fixtures by why they f
 scripts/dev activate ID         mark fixture ID active once it passes on every target
 scripts/dev frames [ROWS]       open the viewer on ROWS generated rows with the frame-timing overlay
 scripts/dev repl [ARGS]         run rupam with the development venv, so R/Python targets find their packages
+scripts/dev demo                generate examples/trips.parquet (2M rows) and record examples/demo.gif with VHS
 scripts/dev edit                apply raw old/new blocks from stdin (@@@ FILE path, <<<< old ==== new >>>>)
 scripts/dev watch               rebuild and rerun tests on every change
 scripts/dev promote             accept changed expect and cram output
@@ -102,6 +103,21 @@ case "${1:-}" in
     PATH=$venv/bin:$PATH "$build/default/bin/rupam_cli.exe" repl "$@"
     ;;
   edit) python3 dev/edit.py ;;
+  demo)
+    "$venv/bin/python" - "$root/examples/trips.parquet" <<'PY'
+import sys
+import polars as pl
+n = 2_000_000
+pl.DataFrame({
+    "trip": range(n),
+    "city": [("Lisbon", "Osaka", "Lima", "Oslo")[i % 4] for i in range(n)],
+    "minutes": [(i * 7919) % 90 + 5 for i in range(n)],
+    "fare": [((i * 104729) % 4000) / 100 for i in range(n)],
+}).write_parquet(sys.argv[1])
+PY
+    dune build bin/rupam_cli.exe @install
+    (cd "$root/examples" && rm -f analysis.rp && VHS_NO_SANDBOX=true PATH="$venv/bin:$build/install/default/bin:$PATH" vhs demo.tape; rm -f analysis.rp)
+    ;;
   watch) dune build --watch @default @runtest ;;
   promote) dune promote ;;
   fmt) dune fmt || true ;;

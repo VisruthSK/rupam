@@ -163,6 +163,9 @@ let pipeline =
       ; "mutate(e = d + months(1), f = floor_date(d, \"week\"), k = d - d\"2025-01-01\", \
          q = wday(d))"
       ; "filter(d >= d\"2025-01-01\", missing = skip)"
+      ; "mutate(centered = y - mean(y, missing = skip), by = g)"
+      ; "mutate(c = if (x > 0) sum(x, missing = skip) else 0, by = g)"
+      ; "left_join(read_csv(\"labels.csv\"), by = g, relationship = many_to_one)"
       ]
   in
   let* stages = G.list_size (G.int_range 0 4) stage in

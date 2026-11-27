@@ -377,6 +377,13 @@ let rec table ~checked ~scalar ~name (t : C.table) =
               ([ P.Positional r
                ; P.Keyword ("on", P.Str key)
                ; P.Keyword ("how", P.Str (C.join_name kind))
+               ; P.Keyword
+                   ( "maintain_order"
+                   , P.Str
+                       (match C.join_name kind with
+                        | "right" -> "right"
+                        | "full" -> "left_right"
+                        | _ -> "left") )
                ]
                @ (match relationship with
                   | None -> []

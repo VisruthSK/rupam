@@ -7,3 +7,4 @@ vendor/duckdb/*
 !vendor/duckdb/dune
 vendor/nanoarrow/*
 !vendor/nanoarrow/dune
+examples/trips.parquet

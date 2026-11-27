@@ -14,8 +14,6 @@
 
 (rule
  (alias integration)
- (enabled_if
-  (<> %{os_type} Win32))
  (deps
   (glob_files conformance/*.toml)
   (glob_files conformance/data/*.csv))

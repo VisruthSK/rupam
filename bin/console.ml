@@ -785,7 +785,7 @@ let save_viewer model (v : Viewer.t) =
   then submit_viewer model v ""
   else
     ( { model with
-        naming = Some (Editor.of_string v.binding)
+        naming = Some Editor.empty
       ; save_requested = None
       ; menu = None
       }
@@ -1164,7 +1164,11 @@ let subscriptions model =
            Sub.on_keys
              ~phase:Capture
              (if model.naming <> None
-              then [ Shortcut.enter, Name_confirm; Shortcut.escape, Name_cancel ]
+              then
+                [ Shortcut.enter, Name_confirm
+                ; Shortcut.escape, Name_cancel
+                ; Shortcut.ctrl 'c', Name_cancel
+                ]
               else if model.editing
               then
                 [ Shortcut.enter, Return

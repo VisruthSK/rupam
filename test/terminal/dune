@@ -10,8 +10,6 @@
 
 (rule
  (alias integration)
- (enabled_if
-  (<> %{os_type} Win32))
  (deps
   %{bin:rupam}
   (source_tree ../../examples))

@@ -4,8 +4,6 @@
 
 (rule
  (alias integration)
- (enabled_if
-  (<> %{os_type} Win32))
- (deps small.csv)
+ (deps small.csv labels.csv)
  (action
   (run %{exe:differential.exe})))
