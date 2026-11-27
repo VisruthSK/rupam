@@ -1,7 +1,7 @@
 id = "C37"
 status = "active"
 case = '''`[1, 2, 3] + [1, 2]`'''
-expected = '''type error: vectors have no elementwise arithmetic; use `map`'''
+expected = '''type error: lifted vectors differ in length; no recycling'''
 
 [run]
 source = '''

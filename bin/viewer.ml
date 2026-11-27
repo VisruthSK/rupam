@@ -112,18 +112,21 @@ let refresh ?(force = false) t =
 ;;
 
 let layout result =
+  let module Names = Set.Make (String) in
   let table = Session.table_of_result result in
+  let restricted = Names.of_list table.restricted in
   let names =
-    List.filter
-      (fun name -> not (List.mem name table.restricted))
-      (TransformIR.names table)
+    List.filter (fun name -> not (Names.mem name restricted)) (TransformIR.names table)
   in
   let pinned =
     match table.keys with
-    | key :: _ -> List.filter (fun name -> List.mem name names) key
+    | key :: _ ->
+      let available = Names.of_list names in
+      List.filter (fun name -> Names.mem name available) key
     | [] -> []
   in
-  let names = pinned @ List.filter (fun name -> not (List.mem name pinned)) names in
+  let fixed = Names.of_list pinned in
+  let names = pinned @ List.filter (fun name -> not (Names.mem name fixed)) names in
   Array.of_list names, pinned
 ;;
 

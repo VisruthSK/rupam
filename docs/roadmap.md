@@ -47,6 +47,8 @@ not yet built.
 - Range patterns: reject overlapping arms and name each uncovered interval in
   `nonexhaustive-match` (C158, C159).
 - Displayed signatures show column-shaped parameters and results (C162).
+- Lift functions, operators and scalar builtins over vectors as over columns,
+  with a length check and no recycling (C165, C37).
 
 ## 3. Analytical core
 

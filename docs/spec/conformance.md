@@ -60,7 +60,7 @@ obligations emit no redundant runtime assertions.
 | C34 | `PatientId` joined against `HospitalId` | type error |
 | C35 | `left_join` on a non-key without `relationship` | type error |
 | C36 | `1=..=0`; `1=..=5 \|> rev()`; `1:3` outside a selector | empty vector; `[5, 4, 3, 2, 1]`; `r-range` with fix `1=..=3` |
-| C37 | `[1, 2, 3] + [1, 2]` | type error: vectors have no elementwise arithmetic; use `map` |
+| C37 | `[1, 2, 3] + [1, 2]` | type error: lifted vectors differ in length; no recycling |
 | C38 | `arrange(name)` on mixed-case strings | byte order |
 | C39 | `match bmi { ..<18.5 => Under, 18.5=..<25.0 => Healthy, 25.0=.. => Over }` on a column | enum column; exhaustive without `_` |
 | C40 | `Int(x)` with `x : Float`; `Int(round(x))` | type error; accepted with checked range |
@@ -199,6 +199,7 @@ obligations emit no redundant runtime assertions.
 | C162 | `let center(x) = x - mean(x)` shown by `:type` | signature shows the column-shaped parameter and result |
 | C163 | `t |> make_key(trip)` where `make_key` is undefined | `unknown-name` for `make_key`, not for `trip` |
 | C164 | session explores several bindings, then saves `result` | saved source and exports contain only `result` and its dependencies |
+| C165 | `square([1, 2, 3])`; `[1, 2] + [3, 4]` | `[1, 4, 9]`; `[4, 6]`: functions and operators lift over vectors |
 
 ## Additional implementation requirements
 

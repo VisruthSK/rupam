@@ -64,14 +64,10 @@ let swap (a : float array) i j =
   a.(j) <- x
 ;;
 
-let rec select (a : float array) lo hi k =
+let rec select random (a : float array) lo hi k =
   if lo < hi
   then (
-    let mid = lo + ((hi - lo) / 2) in
-    if a.(mid) < a.(lo) then swap a mid lo;
-    if a.(hi) < a.(lo) then swap a hi lo;
-    if a.(hi) < a.(mid) then swap a hi mid;
-    let pivot = a.(mid) in
+    let pivot = a.(lo + Random.State.int random (hi - lo + 1)) in
     let i = ref lo
     and j = ref hi in
     while !i <= !j do
@@ -87,7 +83,7 @@ let rec select (a : float array) lo hi k =
         incr i;
         decr j)
     done;
-    if k <= !j then select a lo !j k else if k >= !i then select a !i hi k)
+    if k <= !j then select random a lo !j k else if k >= !i then select random a !i hi k)
 ;;
 
 let quantile (values : float array) p =
@@ -98,7 +94,7 @@ let quantile (values : float array) p =
     let k = float_of_int (n - 1) *. p in
     let i = int_of_float k in
     let weight = k -. float_of_int i in
-    select values 0 (n - 1) i;
+    select (Random.State.make [| n |]) values 0 (n - 1) i;
     let next = ref values.(min (i + 1) (n - 1)) in
     for j = i + 2 to n - 1 do
       if values.(j) < !next then next := values.(j)
