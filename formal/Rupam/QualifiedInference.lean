@@ -153,6 +153,35 @@ theorem QualifiedApplies.run_contextual (context : ConsumptionContext)
     QualifiedApplies.contextual.run context function argument supplies positions =
       output.observe context (function supplies argument) positions := rfl
 
+theorem QualifiedApplies.run_contextual_inactive {input : QualifiedType} {output : Ty}
+    (context : ConsumptionContext)
+    (function : (QualifiedType.contextual latent input (.calculation output)).denote context)
+    (argument : input.denote context) (supplies : Supplies context latent) :
+    QualifiedApplies.contextual.run context function argument supplies [] = .ok [] := rfl
+
+theorem QualifiedApplies.run_lifted_reduction {input cell output : Ty}
+    (context : ConsumptionContext) (argument : ScopedCalculation context.scope input.denote)
+    (pointwise : input.denote → Outcome cell.denote)
+    (reduce : Supplies context latent → List cell.denote → Outcome output.denote)
+    (supplies : Supplies context latent) (first : context.scope.Member)
+    (rest : List context.scope.Member) :
+    (QualifiedApplies.contextual (input := .calculation input) (output := .calculation output)).run
+        context (fun supplied calculation => (calculation.map pointwise).reduce (reduce supplied))
+        argument supplies (first :: rest) =
+      (do
+        let cells ← (argument.map pointwise).run context.scope.members
+        let result ← reduce supplies cells.toList
+        pure (List.replicate (rest.length + 1) result)) := by
+  change (ValuesAt.toList <$> ((argument.map pointwise).reduce (reduce supplies)).run (first :: rest)) = _
+  rw [ScopedCalculation.reduce_demanded]
+  cases (argument.map pointwise).run context.scope.members with
+  | error failure => rfl
+  | ok cells =>
+    cases reduced : reduce supplies cells.toList <;>
+      simp only [bind, Except.bind, reduced] <;>
+      simp [ValuesAt.toList, Functor.map, Except.map, pure, Except.pure, Function.comp_def,
+        List.replicate_succ, List.map_const'] <;> rfl
+
 def QualifiedApplication.run (call : QualifiedApplication function argument)
     (context : ConsumptionContext) (fn : function.denote context) (value : argument.denote context)
     (demand : call.output.Demand context) :

@@ -158,7 +158,11 @@ preserves the pointwise interface, including whole collection parameters.
 The composed source proofs send a lifted vector or scoped
 calculation through that forwarder to a checked contextual operation.
 `ContextTerm.runQualifiedApplication_eq` preserves existing contextual
-execution under the shared call rule. `ContextElaborates.linked_qualified_lifting`
+execution under the shared call rule. `QualifiedApplies.run_lifted_reduction`
+proves that a demanded reduction reads the lifted inputs across the full
+enclosing scope and broadcasts to the demanded positions, preserving
+failures. `run_contextual_inactive` covers empty demand for a scoped result.
+`ContextElaborates.linked_qualified_lifting`
 preserves observations after selective linking of a scoped argument under
 the existing schema-readiness premise.
 
