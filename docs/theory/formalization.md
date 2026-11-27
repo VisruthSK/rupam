@@ -3,6 +3,7 @@
 The [language spec](../spec/README.md) defines the semantics. Lean checks the
 model and proofs. The [metatheory register](metatheory.md) records which
 theorems hold today and states the fragment each theorem covers.
+The [specification map](specification-map.md) tracks coverage by spec chapter.
 
 ## 1. Source inference and lifting
 

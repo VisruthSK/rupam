@@ -618,12 +618,6 @@ private def vectorArithmeticSource : SourceExpr :=
 
 private def emptySourceContext : SourceContext := { lexical := fun _ => none }
 
-example : vectorArithmeticSource.infer emptySourceContext = .error .vectorArithmetic := rfl
-
-example :
-    (SourceExpr.add (.integerVector [1, 2]) (.integerVector [3, 4])).infer emptySourceContext =
-      .error .vectorArithmetic := rfl
-
 def main : IO Unit := do
   match mixedScopeResult with
   | some (.ok values) =>
@@ -631,8 +625,9 @@ def main : IO Unit := do
       throw (IO.userError "group and materialized vector reductions used the wrong scopes")
   | _ => throw (IO.userError "group and materialized vector reductions failed")
   match vectorArithmeticSource.infer emptySourceContext with
-  | .error .vectorArithmetic => IO.println (Lean.Json.arr #[.str "C37", .str "diagnostic", .str "type-mismatch"]).compress
-  | _ => throw (IO.userError "C37: expected rejection of vector arithmetic")
+  | .error (.misaligned (.vector 3) (.vector 2)) =>
+    IO.println (Lean.Json.arr #[.str "C37", .str "diagnostic", .str "type-mismatch"]).compress
+  | _ => throw (IO.userError "C37: expected rejection of unequal vector lengths")
   match c55 with
   | .ok value =>
     IO.println (Lean.Json.arr #[.str "C55", .str "type", .str "Int"]).compress

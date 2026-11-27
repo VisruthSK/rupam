@@ -36,3 +36,6 @@ import Rupam.MatchSelection
 import Rupam.MatchExecution
 import Rupam.Patterns
 import Rupam.IntegerPatterns
+import Rupam.ScopedMatch
+import Rupam.LinkedMatch
+import Rupam.Specification

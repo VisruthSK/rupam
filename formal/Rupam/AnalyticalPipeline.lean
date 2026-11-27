@@ -26,23 +26,33 @@ private def StageCall.execute (call : StageCall t)
   let calculation ← plan.mapError .context
   (calculation.run call.active).mapError .calculation
 
-def StageCall.direct (call : StageCall t) : Except StageFailure (ValuesAt call.active t.denote) :=
+def StageCall.directPlan (call : StageCall t) :
+    Except Requirement (ScopedCalculation call.context.scope t.denote) :=
   let used := call.derivation.core.uses
   let arguments := call.arguments.forUses used call.unused
   let ready := (call.arguments.forUses_ready_iff call.source used call.unused).mpr call.ready
   let sourceBindings := arguments.direct call.source call.aligned ready
-  call.execute (call.derivation.runSource call.context sourceBindings.lookup)
+  call.derivation.runSource call.context sourceBindings.lookup
+
+def StageCall.linkedPlan (call : StageCall t) :
+    Except ColumnError (Except Requirement (ScopedCalculation call.context.scope t.denote)) :=
+  let arguments := call.arguments.forUses call.derivation.core.uses call.unused
+  call.derivation.core.linkedRun arguments call.source call.aligned
+
+theorem StageCall.linkedPlan_eq (call : StageCall t) :
+    call.linkedPlan = .ok call.directPlan :=
+  call.derivation.link_uses_preserves_source call.arguments call.source call.aligned
+    call.unused call.unused call.ready
+
+def StageCall.direct (call : StageCall t) : Except StageFailure (ValuesAt call.active t.denote) :=
+  call.execute call.directPlan
 
 def StageCall.linked (call : StageCall t) : Except StageFailure (ValuesAt call.active t.denote) := do
-  let arguments := call.arguments.forUses call.derivation.core.uses call.unused
-  let plan ← (call.derivation.core.linkedRun arguments call.source call.aligned).mapError .schema
+  let plan ← call.linkedPlan.mapError .schema
   call.execute plan
 
 theorem StageCall.elimination_preserves_execution (call : StageCall t) : call.linked = call.direct := by
-  unfold linked direct
-  dsimp only
-  rw [call.derivation.link_uses_preserves_source call.arguments call.source call.aligned
-    call.unused call.unused call.ready]
+  rw [linked, call.linkedPlan_eq]
   rfl
 
 theorem StageCall.direct_ignores_unused (call : StageCall t)

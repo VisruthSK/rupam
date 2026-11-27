@@ -32,7 +32,6 @@ inductive ElaborationError where
   | ambiguousName (name : String)
   | misaligned (left right : Shape)
   | expectedNumbers (left right : Ty)
-  | vectorArithmetic
   | optionalOrNonBooleanCondition (actual : Ty)
   | incompatibleBranches (left right : Ty)
   | incompatibleConditionalShapes (condition yes no : Shape)
@@ -42,10 +41,6 @@ private def requireOption (value : Option α) (error : ElaborationError) :
   match value with
   | some found => .ok found
   | none => .error error
-
-def Shape.arithmeticOperand : Shape → Bool
-  | .scalar | .column _ => true
-  | .vector _ => false
 
 private def checkedIntegers :
     (values : List Int) → Except ElaborationError {cells : List RInt // cells.map Subtype.val = values}
@@ -110,6 +105,17 @@ def IntOperands.compute : IntOperands a b t → a.denote → b.denote → Outcom
   | .optionalRight, left, right => lift₂ addInt (some left) right
   | .optionalBoth, left, right => lift₂ addInt left right
 
+theorem IntOperands.lower_observes (operands : IntOperands a b t)
+    (alignment : Align sa sb shape) (left : Expr sa a) (right : Expr sb b)
+    (position : Position shape) :
+    (operands.lower alignment left right).eval position = (do
+      let (l, r) := alignment.positions position
+      operands.compute (← left.eval l) (← right.eval r)) := by
+  cases operands <;> simp only [lower, Expr.eval, compute]
+  all_goals
+    cases left.eval (alignment.positions position).1 <;>
+      cases right.eval (alignment.positions position).2 <;> rfl
+
 inductive CommonType : Ty → Ty → Ty → Type where
   | same : CommonType t t t
   | leftOptional : CommonType (.optional b) (.required b) (.optional b)
@@ -160,7 +166,6 @@ inductive Elaborates (context : SourceContext) : SourceExpr → Shape → Ty →
   | reference (value : CheckedValue) (found : context.resolve name = .ok value) :
       Elaborates context (.reference name) value.shape value.type
   | add : Elaborates context left ls lt → Elaborates context right rs rt →
-      (ls.arithmeticOperand && rs.arithmeticOperand) = true →
       Align ls rs shape → IntOperands lt rt t → Elaborates context (.add left right) shape t
   | conditional : Elaborates context condition cs (.required .bool) →
       Elaborates context yes ys yt → Elaborates context no ns nt →
@@ -173,7 +178,7 @@ def Elaborates.core : Elaborates context source shape t → Expr shape t
   | .boolean value => .literal value
   | .missing _ => .literal none
   | .reference value _ => value.core
-  | .add left right _ alignment operands => operands.lower alignment left.core right.core
+  | .add left right alignment operands => operands.lower alignment left.core right.core
   | .conditional condition yes no alignment common =>
     .ifThenElse ((alignment.broadcasts .first).core condition.core)
       (common.left ((alignment.broadcasts (.next .first)).core yes.core))
@@ -202,12 +207,9 @@ def SourceExpr.infer (context : SourceContext) :
   | .add left right => do
     let a ← left.infer context
     let b ← right.infer context
-    if allowed : (a.shape.arithmeticOperand && b.shape.arithmeticOperand) = true then
-      let ⟨shape, align⟩ ← requireOption (Align.infer a.shape b.shape) (.misaligned a.shape b.shape)
-      let ⟨t, operands⟩ ← requireOption (IntOperands.infer a.type b.type) (.expectedNumbers a.type b.type)
-      pure ⟨shape, t, .add a.derivation b.derivation allowed align operands⟩
-    else
-      .error .vectorArithmetic
+    let ⟨shape, align⟩ ← requireOption (Align.infer a.shape b.shape) (.misaligned a.shape b.shape)
+    let ⟨t, operands⟩ ← requireOption (IntOperands.infer a.type b.type) (.expectedNumbers a.type b.type)
+    pure ⟨shape, t, .add a.derivation b.derivation align operands⟩
   | .conditional condition yes no => do
     let test ← condition.infer context
     if requiredBool : test.type = .required .bool then
@@ -241,9 +243,9 @@ theorem Elaborates.infer_agrees (derivation : Elaborates context source shape t)
     · rename_i diagnostic failed
       rw [failed] at found
       cases found
-  | add left right allowed alignment operands leftAgrees rightAgrees =>
+  | add left right alignment operands leftAgrees rightAgrees =>
     rw [SourceExpr.infer, leftAgrees, rightAgrees]
-    simp [bind, Except.bind, allowed, requireOption, alignment.infer_complete, operands.infer_complete]
+    simp [bind, Except.bind, requireOption, alignment.infer_complete, operands.infer_complete]
     rfl
   | conditional condition yes no alignment common conditionAgrees yesAgrees noAgrees =>
     rw [SourceExpr.infer, conditionAgrees]
@@ -256,11 +258,11 @@ theorem Elaborates.coherent (first : Elaborates context source shape₁ t₁)
     (⟨shape₁, t₁, first⟩ : Inferred context source) = ⟨shape₂, t₂, second⟩ := by
   exact Except.ok.inj (first.infer_agrees.symm.trans second.infer_agrees)
 
-theorem Elaborates.vector_literal_add_rejected
-    (derivation : Elaborates context (.add (.integerVector values) right) shape t) : False := by
-  cases derivation with
-  | add leftElaboration _ allowed _ _ =>
-    cases leftElaboration
-    cases allowed
+theorem Elaborates.vector_add_at_position
+    (left : Elaborates context a (.vector n) ta) (right : Elaborates context b (.vector n) tb)
+    (operands : IntOperands ta tb t) (index : Fin n) :
+    (Elaborates.add left right .vectorSame operands).core.eval index = (do
+      operands.compute (← left.core.eval index) (← right.core.eval index)) :=
+  operands.lower_observes .vectorSame left.core right.core index
 
 end Rupam
