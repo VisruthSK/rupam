@@ -23,6 +23,7 @@ type t =
   ; mutable pending : int list
   ; lifecycle : Mutex.t
   ; mutable stopped : bool
+  ; program : string option
   }
 
 let python =
@@ -46,7 +47,7 @@ for line in sys.stdin:
             reply["code"] = exc.code
     try:
         print(json.dumps(dict(reply, revision=request["revision"])), flush=True)
-    except BrokenPipeError:
+    except OSError:
         break
 |}
 ;;
@@ -79,10 +80,13 @@ repeat {
 ;;
 
 let start (runtime : Runtime.t) (language : Target.language) =
-  let argv =
+  let argv, program =
     match language with
-    | Python -> Array.append runtime.command [| "-u"; "-c"; python |]
-    | R -> Array.append runtime.command [| "-e"; runtime.prelude ^ r |]
+    | Python -> Array.append runtime.command [| "-u"; "-c"; python |], None
+    | R ->
+      let file = Filename.temp_file "rupam-worker" ".R" in
+      Out_channel.with_open_bin file (fun oc -> output_string oc (runtime.prelude ^ r));
+      Array.append runtime.command [| file |], Some file
   in
   let input, requests = Unix.pipe ~cloexec:true () in
   let replies, output = Unix.pipe ~cloexec:true () in
@@ -90,6 +94,7 @@ let start (runtime : Runtime.t) (language : Target.language) =
     try Unix.create_process argv.(0) argv input output Unix.stderr with
     | Unix.Unix_error (Unix.ENOENT, _, _) ->
       List.iter Unix.close [ input; requests; replies; output ];
+      Option.iter Sys.remove program;
       Rupam.Diagnostic.fail
         Host_failure
         (Printf.sprintf
@@ -99,6 +104,7 @@ let start (runtime : Runtime.t) (language : Target.language) =
            argv.(0))
     | exn ->
       List.iter Unix.close [ input; requests; replies; output ];
+      Option.iter Sys.remove program;
       raise exn
   in
   Unix.close input;
@@ -110,6 +116,7 @@ let start (runtime : Runtime.t) (language : Target.language) =
   ; revision = 0
   ; pending = []
   ; lifecycle = Mutex.create ()
+  ; program
   ; stopped = false
   }
 ;;
@@ -123,7 +130,12 @@ let stop w =
   then (
     close_out_noerr w.requests;
     close_in_noerr w.replies;
-    ignore (Unix.waitpid [] w.pid))
+    ignore (Unix.waitpid [] w.pid);
+    Option.iter
+      (fun file ->
+         try Sys.remove file with
+         | Sys_error _ -> ())
+      w.program)
 ;;
 
 let cancel w =
@@ -133,7 +145,7 @@ let cancel w =
     (fun () ->
        if not w.stopped
        then (
-         try Unix.kill w.pid (if Sys.win32 then Sys.sigterm else Sys.sigkill) with
+         try Unix.kill w.pid Sys.sigkill with
          | Unix.Unix_error (Unix.ESRCH, _, _) -> ()))
 ;;
 
