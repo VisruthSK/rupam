@@ -66,6 +66,13 @@ missingness, order, effects, target-specific evidence) are unchanged.
   IR to find an established result. Cache hits start no host work.
 - `rp_show_float` and `rp_formatter` iterate Python values; vectorise only if
   formatting stays identical.
+- The viewer's sort and summary statistics are too slow on large inputs:
+  opening the 2M-row `trips.parquet` and sorting by `fare` stalls. Sort
+  online: compute the visible window first (top-k for the viewport) and
+  publish it immediately, then finish the full order in the background and
+  buffer further pages only if paging outruns it. Compute summary statistics
+  with one vectorised pass per column, cached per result, and show them
+  progressively instead of blocking.
 - Profile before adopting OxCaml or Flambda 2; domain parallelism stays after
   the MVP with `domainslib`.
 
