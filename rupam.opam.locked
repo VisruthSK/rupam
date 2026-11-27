@@ -15,12 +15,10 @@ depends: [
   "cmdliner" {= "2.1.2"}
   "cppo" {= "1.8.0"}
   "csexp" {= "1.5.2"}
-  "digestif" {= "1.4.2"}
   "dune" {= "3.25.0"}
   "dune-build-info" {= "3.25.0" & with-dev-setup}
   "dune-configurator" {= "3.25.0"}
   "either" {= "1.0.0" & with-dev-setup}
-  "eqaf" {= "0.10"}
   "fix" {= "20250919" & with-dev-setup}
   "fpath" {= "0.7.3" & with-dev-setup}
   "ISO8601" {= "0.2.6"}
