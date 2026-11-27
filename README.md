@@ -31,8 +31,8 @@ Download the archive for your system from the
 [releases page](https://github.com/VisruthSK/rupam/releases), unpack it and
 put `rupam` (or `rupam.exe`) on your PATH. Builds exist for Linux and macOS
 on x86-64 and ARM, and for Windows on x86-64. The binary is self-contained:
-it embeds [DuckDB](https://duckdb.org) 2.0, which rupam uses to read Parquet,
-CSV and TSV files.
+it reads Parquet, CSV, TSV and Arrow files with its own readers and needs no
+runtime libraries beyond the operating system.
 
 Previews and `rupam run` execute the generated script, so they need the target
 language installed, plus the data-dict CLI for contract validation. The
@@ -41,12 +41,21 @@ needs `dplyr`, `tidyr`, `bit64`, `jsonlite`, `arrow` and `tzdb`.
 
 ### From source
 
-You need OCaml 5.4 or later, opam, a C compiler, `curl` and `tar`.
+Building `rupam` needs OCaml 5.4 or later, opam and the C compiler OCaml
+uses. Its C code (the BLAKE3 and decompression kernels) is vendored, so the
+build downloads nothing and needs no C++.
 
 ```sh
-scripts/fetch-deps            # pinned, checksummed DuckDB and nanoarrow
-opam install --deps-only --with-test --with-dev-setup ./rupam.opam.locked ./rupam-dev.opam.locked
+opam install --deps-only ./rupam.opam.locked
 opam pin add rupam .
+```
+
+Developing rupam also builds the test oracles, which need `curl` and `tar`
+to fetch a pinned DuckDB and, on Windows, a MinGW C++ compiler:
+
+```sh
+scripts/fetch-deps
+opam install --deps-only --with-test --with-dev-setup ./rupam.opam.locked ./rupam-dev.opam.locked
 ```
 
 ## Projects

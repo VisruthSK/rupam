@@ -1,7 +1,6 @@
 # Separate Rupam's compiler from the platform runtime
 
 **Status:** Remaining work
-**Related brief:** [Extract a minimal Talon-based columnar library](talon-columnar-extraction.md)
 
 ## Objective
 
@@ -106,9 +105,6 @@ missingness, order, effects, target-specific evidence) are unchanged.
 3. Shared discovery pass and bounded host materialisation.
 4. WASM compiler, browser worker and virtual inputs; strict exports and
    browser conformance.
-
-The [Talon brief](talon-columnar-extraction.md) proceeds against the service
-interfaces from step 1.
 
 ## Acceptance
 

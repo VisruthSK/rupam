@@ -149,7 +149,7 @@ their explicit seeds or configuration and runtime dependencies.
 ## Distribution
 
 Self-contained binaries for Linux and macOS (x86-64, ARM) and Windows
-(x86-64), with DuckDB linked statically. Generated scripts need their locked
+(x86-64), with no runtime libraries beyond the operating system. Generated scripts need their locked
 interpreter and packages.
 The data-dict CLI is needed for rupam validation/relocking, not for executing
 a script whose contract obligations were discharged against the lock.

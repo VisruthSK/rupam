@@ -11,10 +11,7 @@ not yet built.
 - Native, stripped `0.0.0-alpha.1` binaries for Linux, macOS and Windows,
   built only from a commit whose CI and Format runs passed.
 - Every suite green on all three operating systems, including the
-  in-process terminal tests and native Windows linking against DuckDB.
-- Windows links DuckDB's UCRT archive into msvcrt OCaml through a
-  one-function shim (`vendor/duckdb/ucrt.c`); after the alpha, match the C
-  runtimes by building DuckDB with the MinGW toolchain or OCaml for UCRT.
+  in-process terminal tests.
 - A minimum supported OCaml of 5.4 (issue 3), with releases built on 5.5.
 - The demo recorded again at 1080p30 with the current error rendering.
 
@@ -99,9 +96,6 @@ with R and Python only as reference backends.
   by `floor`, `ceiling`, `trunc` and `round` (C40, C49, C64).
 - Data-discovered enums and `as_enum` ([Future](spec/future.md)).
 - `DateTime`, `Time` and zones; nominal types and units (C33, C34, C95).
-- A minimal Talon-based columnar library replacing DuckDB and nanoarrow
-  ([brief](briefs/talon-columnar-extraction.md)), against the service
-  interfaces from the platform separation.
 - Idiomatic R and Python formatting of generated code beyond line breaking,
   if a light dependency or printer pass suffices.
 - Replace `scripts/dev` with a `justfile` (or an equally small runner) as a
