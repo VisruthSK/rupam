@@ -30,4 +30,4 @@ without checking the lock, in both dialects.
   $ python -c "import polars as pl; t = pl.read_parquet('orders.parquet'); t.with_columns(pl.when(pl.col('revenue') == 0).then(None).otherwise(pl.col('revenue')).alias('revenue')).write_parquet('orders.parquet')"
   $ rupam lock --target python-polars shop.rp 2>&1 | head -3
   contract-failure
-    data-dict.yaml does not match its data: has 1 null value
+    data-dict.yaml does not match its data: orders.revenue: A required column must not contain nulls; has 1 null value

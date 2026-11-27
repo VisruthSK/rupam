@@ -313,11 +313,33 @@ let rec files table =
   | Join { left; right; _ } -> files left @ files right
 ;;
 
-let rec contracts table =
+let rec loaded_by table =
   match table.source with
-  | Load { contract; _ } -> [ contract.path ]
+  | Load { contract; _ } -> [ contract ]
   | Read _ | Bound _ -> []
-  | Join { left; right; _ } -> contracts left @ contracts right
+  | Join { left; right; _ } -> loaded_by left @ loaded_by right
+;;
+
+let contracts table = List.map (fun (c : Contract.t) -> c.path) (loaded_by table)
+
+let loaded items =
+  let found = ref [] in
+  let visit e =
+    ignore
+      (exists
+         (fun e ->
+            (match e.node with
+             | Table t -> found := loaded_by t @ !found
+             | _ -> ());
+            false)
+         e)
+  in
+  List.iter
+    (function
+      | Define (_, e) | Show e | Write (e, _) -> visit e
+      | Variant _ -> ())
+    items;
+  List.sort_uniq (fun (a : Contract.t) b -> compare a.path b.path) !found
 ;;
 
 let rec substitute (id : id) (value : expr) (e : expr) : expr =

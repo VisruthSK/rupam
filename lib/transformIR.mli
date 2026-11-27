@@ -192,6 +192,8 @@ val reduces : expr -> bool
 val sources : table -> string list
 val files : table -> file list
 val contracts : table -> string list
+val loaded_by : table -> Contract.t list
+val loaded : item list -> Contract.t list
 val substitute : id -> expr -> expr -> expr
 val tabular : item list -> bool
 val sexp_of_item : item -> Sexplib0.Sexp.t

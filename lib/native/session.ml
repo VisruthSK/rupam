@@ -13,6 +13,7 @@ type host =
   { worker : Worker.t
   ; names : Host.names
   ; established : (int, unit) Hashtbl.t
+  ; validated : (string, Digest.t) Hashtbl.t
   ; mutable target : Target.t
   }
 
@@ -126,6 +127,7 @@ let host ?(started = fun _ -> ()) t =
       { worker
       ; names = Host.checking (B.names ())
       ; established = Hashtbl.create 64
+      ; validated = Hashtbl.create 8
       ; target
       }
     in
@@ -135,10 +137,37 @@ let host ?(started = fun _ -> ()) t =
     h
 ;;
 
+let fingerprint (contract : Contract.t) =
+  let directory = Filename.dirname contract.path in
+  let sources =
+    List.filter_map
+      (fun (table : Contract.table) ->
+         Option.map
+           (fun parquet ->
+              let path = Filename.concat directory parquet in
+              if Sys.file_exists path then Digest.file path else Digest.string parquet)
+           table.parquet)
+      contract.tables
+  in
+  Digest.string (String.concat "" (Digest.file contract.path :: sources))
+;;
+
+let validate h contracts =
+  List.iter
+    (fun (contract : Contract.t) ->
+       let current = fingerprint contract in
+       if Hashtbl.find_opt h.validated contract.path <> Some current
+       then (
+         Data_dict.validate contract.path;
+         Hashtbl.replace h.validated contract.path current))
+    contracts
+;;
+
 let run h items =
   match items with
   | [] -> ""
   | _ ->
+    validate h (TransformIR.loaded items);
     let module B = (val Backend.of_target h.target) in
     Worker.evaluate h.worker (B.statements h.names items)
 ;;
@@ -219,7 +248,8 @@ let ordering t (table : TransformIR.table) =
      | _ -> "ordered by (" ^ String.concat ", " keys ^ ")")
 ;;
 
-let materialize h ~ordering table =
+let materialize h ~ordering (table : TransformIR.table) =
+  validate h (TransformIR.loaded_by table);
   let file = Filename.temp_file "rupam" ".arrow" in
   match
     let module B = (val Backend.of_target h.target) in

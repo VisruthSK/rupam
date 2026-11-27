@@ -35,8 +35,31 @@ let validate path =
            Diagnostic.fail Contract_failure ("data-dict " ^ level ^ " failed on " ^ path)
        in
        let problems =
-         list "problems" json
-         |> List.filter_map (fun p -> J.member "message" p |> J.to_string_option)
+         List.map
+           (fun problem ->
+              let text key = J.member key problem |> J.to_string_option in
+              let where =
+                match
+                  ( text "table"
+                  , List.filter_map J.to_string_option (list "columns" problem) )
+                with
+                | Some table, [] -> table ^ ": "
+                | Some table, columns ->
+                  String.concat ", " (List.map (fun c -> table ^ "." ^ c) columns) ^ ": "
+                | None, _ -> ""
+              in
+              let rule =
+                Option.value (text "expected") ~default:""
+                |> String.trim
+                |> fun r ->
+                if String.ends_with ~suffix:"." r
+                then String.sub r 0 (String.length r - 1)
+                else r
+              in
+              let finding = Option.value (text "message") ~default:"" in
+              where
+              ^ String.concat "; " (List.filter (fun s -> s <> "") [ rule; finding ]))
+           (list "problems" json)
        in
        let failed =
          list "steps" json
