@@ -52,8 +52,7 @@ not yet built.
 
 In order of conformance cases unlocked:
 
-1. Multi-column `match` in verbs (C127), quoted output names (C103),
-   `Int()` conversion (C40, C49, C64).
+1. Multi-column `match` in verbs (C127) and quoted output names (C103).
 2. A fixture runner for the session protocol: drafts, holes, decisions,
    `define`, `fork`, `save`, target switches and taps (about 11 cases).
 3. Contract validation: required, range, NaN and infinity in sources, keys
@@ -96,6 +95,9 @@ with R and Python only as reference backends.
 
 ## 6. After the MVP
 
+- Explicit conversions `Int()`, `Float()` and `String()` from the
+  [conversion table](spec/types.md#conversions), with wholeness established
+  by `floor`, `ceiling`, `trunc` and `round` (C40, C49, C64).
 - Data-discovered enums and `as_enum` ([Future](spec/future.md)).
 - `DateTime`, `Time` and zones; nominal types and units (C33, C34, C95).
 - A minimal Talon-based columnar library replacing DuckDB and nanoarrow
