@@ -118,15 +118,15 @@ PY
     dune build bin/rupam_cli.exe @install
     (
       cd "$root/examples"
-      rm -f analysis.rp demo.mp4
+      rm -f analysis.rp demo.mp4 demo.gif
       VHS_NO_SANDBOX=true PATH="$venv/bin:$build/install/default/bin:$PATH" vhs demo.tape
       rm -f analysis.rp
       ffmpeg -y -loglevel error -i demo.mp4 -vf \
-        "fps=12,split[a][b];[a]palettegen=max_colors=96:stats_mode=diff[p];[b][p]paletteuse=dither=none:diff_mode=rectangle" \
+        "fps=30,split[a][b];[a]palettegen=max_colors=96:stats_mode=diff[p];[b][p]paletteuse=dither=none:diff_mode=rectangle" \
         -loop 0 demo.raw.gif
       gifsicle -O3 demo.raw.gif -o demo.gif
-      rm -f demo.raw.gif demo.mp4
-      du -h demo.gif
+      rm -f demo.raw.gif
+      du -h demo.mp4 demo.gif
     )
     ;;
   watch) dune build --watch @default @runtest ;;

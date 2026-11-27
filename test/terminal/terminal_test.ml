@@ -292,8 +292,8 @@ let exact_cell () =
     see c "$measurement == 0.30000000000000004";
     press c term K.Enter;
     see c "name ❯";
-    press c term K.Enter;
-    see c "let view_result")
+    submit c term "exact_row";
+    see c "let exact_row")
 ;;
 
 let alive pid =

@@ -191,6 +191,14 @@ obligations emit no redundant runtime assertions.
 | C154 | `wday`, `yday`, `floor_date(_, "week")` of `d"2026-01-01"` | `4`, `1`, `d"2025-12-29"` |
 | C155 | `parse_date("04/07/2026", "%d/%m/%Y")`, `parse_date("2026-07-04x", "%Y-%m-%d")` | `d"2026-07-04"`, `None` |
 | C156 | date column with a missing value: `mutate(later = when + months(1), gap = when - d"2026-01-01")` | per-row clamped dates and day counts; missing stays `None` |
+| C157 | `summarize(count = sum(body_mass > 4000), proportion = mean(body_mass > 4000), missing = skip)` | `Int` count and `Float` proportion of `TRUE` |
+| C158 | `match x { ..=3500 => "small", 3500=.. => "large" }` | `overlapping-patterns` naming `3500` |
+| C159 | `match x { ..<3500 => "small", 3600=.. => "large" }` | `nonexhaustive-match` naming the uncovered interval `3500=..<3600` |
+| C160 | `let m = 3`, `let f(x) = x * m`, then `f(2.5)` | `f : (Number) -> Number`; `7.5 : Float` |
+| C161 | `let f(x: Number) = x * 3`, then `f(2)` and `f(2.5)` | accepted; `6 : Int` and `7.5 : Float` |
+| C162 | `let center(x) = x - mean(x)` shown by `:type` | signature shows the column-shaped parameter and result |
+| C163 | `t |> make_key(trip)` where `make_key` is undefined | `unknown-name` for `make_key`, not for `trip` |
+| C164 | session explores several bindings, then saves `result` | saved source and exports contain only `result` and its dependencies |
 
 ## Additional implementation requirements
 

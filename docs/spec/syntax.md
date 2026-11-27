@@ -270,6 +270,10 @@ match reading {
   [Types](types.md#refinement-aware-exhaustiveness)). Ranges that together cover every number are
   exhaustive. Signed numeric range endpoints are permitted; a standalone
   floating literal is not a pattern. Guards do not count toward exhaustiveness.
+- Range arms must not overlap: `..=3500` and `3500=..` both contain `3500`
+  and are rejected with `overlapping-patterns`. `nonexhaustive-match` names
+  each uncovered interval or constructor, for example `3500=..<3600`, never
+  only `_`.
 
 ## Settings
 

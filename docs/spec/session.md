@@ -62,6 +62,36 @@ History, failed drafts, transient expressions, inspections, session commands
 and unaccepted proposals are excluded. Saving writes source only; it neither
 runs nor relocks. Overwriting asks for confirmation and the path is printed.
 
+### Saving and exporting a result by slicing
+
+An analysis is reconstructed from its dependency graph, not from its
+execution history. `:save result` and `:export result` take one or more
+chosen bindings and compute their backward slice: every binding, contract,
+`set` declaration and input those bindings depend on, and nothing else.
+Exploratory expressions, superseded bindings and unrelated helpers disappear.
+
+```rupam
+let clean = penguins |> filter(body_mass > 0, missing = skip)
+clean |> summarize(avg = mean(body_mass))
+let heavy = clean |> filter(body_mass > 4000)
+heavy |> summarize(count = n())
+let result = heavy |> summarize(avg = mean(body_mass), by = species)
+```
+
+Saving `result` keeps `penguins`, `clean`, `heavy` and `result`. The export
+emits the same slice in the target language, and the emitter may fuse
+single-use intermediate bindings into one pipeline when that preserves
+names visible to the user and evaluation semantics.
+
+- The slice is sound because Rupam controls effects: writes, random draws and
+  clock reads are explicit effects, so a dependency is never hidden in
+  mutation. An effectful binding is kept only when a kept binding depends on
+  it.
+- The saved `.rp` source and the data lock are kept alongside generated code;
+  the lock records exactly the inputs the slice reads.
+- The full exploratory history may be saved separately, on request, for
+  transparency. It is never part of the exported program.
+
 ## Inspection taps
 
 A tap is an identity-preserving presentation effect usable at any stage of a

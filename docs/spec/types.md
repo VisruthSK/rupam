@@ -105,6 +105,13 @@ Here `apply(center, value)` inherits `center`'s group-scope requirement,
 which `mutate(..., by = group)` discharges, so `mean` runs per group exactly
 as in `mutate(z = value - mean(value), by = group)`.
 
+Displayed signatures must show these requirements. A function whose body
+reduces a parameter needs a column, so `center` shows as
+`center : (Column<Float>) -> Column<Float?>`, not `(Float) -> Float?`, and
+`center(2.5)` is rejected with a message that refers to that signature.
+`Column<T>` is display notation for a column-shaped parameter or result, not
+annotation syntax.
+
 Inference aims for a most general supported constraint scheme, but the full
 system makes no unproved principal-type claim. The implementation must publish
 syntax-directed rules for this core (including generalisation, role resolution,
@@ -233,7 +240,14 @@ from observation order. Vectors have an intrinsic position order.
   do not promote. Inference chooses the result type independently of values.
 - Numeric literals adapt exactly to their inferred context and default to
   their lexical type only when unconstrained. `let inc(x) = x + 1` remains
-  polymorphic over numeric inputs. A decimal literal may round to its nearest
+  polymorphic over numeric inputs. A captured binding promotes like a
+  literal: with `let m = 3`, `let f(x) = x * m` is `(Number) -> Number`, so
+  `f(2.5)` is `7.5`, as `2.5 * m` is. Arithmetic never forces a parameter to
+  the type of a captured value.
+- `Number` may annotate a parameter or result: `let f(x: Number) = x * 3`
+  accepts `Int` and `Float` and returns the promoted type. It names the
+  constraint in the table above, not a runtime type; values are always `Int`
+  or `Float`. A decimal literal may round to its nearest
   finite binary64 value; adaptation of an integer literal to Float is exact.
 - `/` returns `Float`; `div(a, b)` takes integers and truncates toward zero.
   `%` is modulo with the sign of the divisor. Both operands of integer-to-float

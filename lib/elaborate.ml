@@ -572,7 +572,9 @@ and call ctx span (f : Syntax.expr) args =
           List.iter2 (fun p (v : C.expr) -> expect v.span p v.typ) params values;
           make (shape_of span values) result (Construct (n, values))
         | t -> make Scalar t (Construct (n, [])))
-     | _ -> apply ctx span (expr ctx f) (List.map (fun (_, a) -> expr ctx a) args))
+     | _ ->
+       let callee = expr ctx f in
+       apply ctx span callee (List.map (fun (_, a) -> expr ctx a) args))
   | Lambda (params, body)
     when List.length params = List.length args && ctx.columns <> None ->
     let env =
@@ -583,7 +585,9 @@ and call ctx span (f : Syntax.expr) args =
         args
     in
     expr { ctx with env } body
-  | _ -> apply ctx span (expr ctx f) (List.map (fun (_, a) -> expr ctx a) args)
+  | _ ->
+    let callee = expr ctx f in
+    apply ctx span callee (List.map (fun (_, a) -> expr ctx a) args)
 
 and lambda ctx span params body types =
   if List.length params <> List.length types
@@ -876,7 +880,7 @@ and builtin ctx span n b args =
     in
     let v =
       match r, T.repr (T.present v.typ) with
-      | Sum, Bool ->
+      | (Sum | Mean), Bool ->
         let constant i = make Scalar T.Int (Constant (Int (Int64.of_int i))) in
         lift ctx.env span v.shape [ v ] (function
           | [ b ] -> make v.shape T.Int (If (b, constant 1, constant 0))

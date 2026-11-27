@@ -204,7 +204,10 @@ let transcript ~digits source output pages failures =
     ~flex_direction:Column
     ~size:full
     ~margin:(margin_lrtb 0 0 0 1)
-    (echoed @ results @ List.map diagnostic_view failures @ List.concat_map (page_view ~digits) pages)
+    (echoed
+     @ results
+     @ List.map diagnostic_view failures
+     @ List.concat_map (page_view ~digits) pages)
 ;;
 
 let status session =
@@ -797,11 +800,7 @@ let save_viewer model (v : Viewer.t) =
   if Viewer.named v
   then submit_viewer model v ""
   else
-    ( { model with
-        naming = Some Editor.empty
-      ; save_requested = None
-      ; menu = None
-      }
+    ( { model with naming = Some Editor.empty; save_requested = None; menu = None }
     , Cmd.none )
 ;;
 
