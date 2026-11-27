@@ -2,7 +2,7 @@ Output demo.gif
 
 Require rupam
 
-Set Shell "powershell"
+Set Shell "bash"
 Set FontSize 18
 Set Width 1440
 Set Height 900

@@ -2,7 +2,7 @@ Output explore.gif
 
 Require rupam
 
-Set Shell "powershell"
+Set Shell "bash"
 Set FontSize 18
 Set Width 1440
 Set Height 900
@@ -97,7 +97,7 @@ Type ":save explore.rp"
 Enter
 Sleep 1.5s
 
-Type "Get-Content explore.rp"
+Type "cat explore.rp"
 Sleep 200ms
 Ctrl+D
 Sleep 500ms
