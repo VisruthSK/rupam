@@ -1,0 +1,95 @@
+opam-version: "2.0"
+name: "rupam"
+version: "dev"
+synopsis: "A typed language for interactive data analysis"
+maintainer: "Visruth Srimath Kandali <public@visruth.com>"
+authors: "Visruth Srimath Kandali <public@visruth.com>"
+license: "GPL-3.0-or-later"
+homepage: "https://github.com/VisruthSK/rupam"
+bug-reports: "https://github.com/VisruthSK/rupam/issues"
+depends: [
+  "conf-mingw-w64-g++-x86_64" {os = "win32"}
+  "astring" {= "0.8.5"}
+  "base" {= "v0.17.3"}
+  "camlp-streams" {= "5.0.1" & with-dev-setup}
+  "cmarkit" {= "0.4.0"}
+  "cmdliner" {= "2.1.2"}
+  "cppo" {= "1.8.0"}
+  "csexp" {= "1.5.2"}
+  "digestif" {= "1.4.2"}
+  "dune" {= "3.25.0"}
+  "dune-build-info" {= "3.25.0" & with-dev-setup}
+  "dune-configurator" {= "3.25.0"}
+  "either" {= "1.0.0" & with-dev-setup}
+  "eqaf" {= "0.10"}
+  "fix" {= "20250919" & with-dev-setup}
+  "fpath" {= "0.7.3" & with-dev-setup}
+  "ISO8601" {= "0.2.6"}
+  "jane-street-headers" {= "v0.17.0" & with-test}
+  "jst-config" {= "v0.17.0" & with-test}
+  "lwt" {= "6.1.3"}
+  "matrix" {= "0.3.0"}
+  "menhir" {= "20260209"}
+  "menhirCST" {= "20260209"}
+  "menhirGLR" {= "20260209"}
+  "menhirLib" {= "20260209"}
+  "menhirSdk" {= "20260209"}
+  "mosaic" {= "0.3.0"}
+  "ocaml-compiler-libs" {= "v0.17.0"}
+  "ocaml-version" {= "4.1.6" & with-dev-setup}
+  "ocaml_intrinsics_kernel" {= "v0.17.3"}
+  "ocamlbuild" {= "0.16.1"}
+  "ocamlfind" {= "1.9.9~preview"}
+  "ocamlformat" {= "0.29.0" & with-dev-setup}
+  "ocamlformat-lib" {= "0.29.0" & with-dev-setup}
+  "ocp-indent" {= "1.10.0" & with-dev-setup}
+  "ocplib-endian" {= "1.2"}
+  "octavius" {= "1.2.2"}
+  "ppx_assert" {= "v0.17.0" & with-test}
+  "ppx_base" {= "v0.17.0" & with-test}
+  "ppx_cold" {= "v0.17.0" & with-test}
+  "ppx_compare" {= "v0.17.0" & with-test}
+  "ppx_derivers" {= "1.2.1"}
+  "ppx_devtools-optcomp" {= "0.1"}
+  "ppx_enumerate" {= "v0.17.0"}
+  "ppx_expect" {= "v0.17.3" & with-test}
+  "ppx_globalize" {= "v0.17.2" & with-test}
+  "ppx_hash" {= "v0.17.0" & with-test}
+  "ppx_here" {= "v0.17.0" & with-test}
+  "ppx_inline_test" {= "v0.17.1" & with-test}
+  "ppx_js_style" {= "v0.17.1"}
+  "ppx_optcomp" {= "v0.17.1" & with-test}
+  "ppx_sexp_conv" {= "v0.17.1"}
+  "ppx_yojson_conv" {= "v0.17.1"}
+  "ppx_yojson_conv_lib" {= "v0.17.0"}
+  "ppxlib" {= "0.39.0"}
+  "ppxlib_jane" {= "v0.17.4"}
+  "ptime" {= "1.2.0"}
+  "qcheck-core" {= "0.91" & with-test}
+  "re" {= "1.14.0"}
+  "sexplib0" {= "v0.17.0"}
+  "stdio" {= "v0.17.0" & with-test}
+  "time_now" {= "v0.17.0" & with-test}
+  "toffee" {= "0.3.0"}
+  "toml" {= "7.1.0"}
+  "topkg" {= "1.1.1"}
+  "uucp" {= "18.0.0"}
+  "uuseg" {= "18.0.0" & with-dev-setup}
+  "uutf" {= "1.0.4" & with-dev-setup}
+  "yojson" {= "3.0.0"}
+]
+build: [
+  ["dune" "subst"] {dev}
+  [
+    "dune"
+    "build"
+    "-p"
+    name
+    "-j"
+    jobs
+    "@install"
+    "@runtest" {with-test}
+    "@doc" {with-doc}
+  ]
+]
+dev-repo: "git+https://github.com/VisruthSK/rupam.git"

@@ -58,3 +58,36 @@ jobs:
           git push -u origin "$branch"
           gh pr create --title "Update $NAME to $LATEST" \
             --body "Pins $NAME $LATEST in scripts/fetch-deps with fresh SHA-256 checksums. CI must pass, including the viewer and session tests, before merging."
+
+  opam:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - uses: ocaml/setup-ocaml@v3.9.1
+        with:
+          ocaml-compiler: "5.5"
+          cache: false
+      - run: opam install . --deps-only --with-test --with-dev-setup
+      - run: opam exec -- scripts/lock-deps
+
+      - name: Open a pull request with the new locks
+        run: |
+          if git diff --quiet -- '*.opam.locked'; then
+            echo "The locked opam dependencies are current"
+            exit 0
+          fi
+          branch="opam-locks-$(date -u +%Y-%m-%d)"
+          if git ls-remote --exit-code --heads origin "$branch" > /dev/null; then
+            echo "$branch already proposed"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$branch"
+          git commit -am "Update locked opam dependencies"
+          git push -u origin "$branch"
+          gh pr create --title "Update locked opam dependencies" \
+            --body "$(git diff --unified=0 HEAD~1 -- '*.opam.locked' | grep '^[-+]  "' | sed 's/^/    /')"

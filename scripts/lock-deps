@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+opam lock ./rupam.opam ./rupam-dev.opam
+for package in rupam rupam-dev; do
+  locked=$package.opam.locked
+  sed -i.bak -E '/^  "(ocaml|ocaml-base-compiler|ocaml-variants|ocaml-compiler|ocaml-config|ocaml-options-[^"]*|ocaml-option-[^"]*|compiler-cloning|flexdll|base-[^"]*|host-[^"]*|system-[^"]*|arch-[^"]*|conf-[^"]*)" /d' "$locked"
+  grep -E '^  "[^"]+" \{os' "$package.opam" > "$locked.platform" || true
+  sed -i.bak "/^depends: \[/r $locked.platform" "$locked"
+  rm -f "$locked.bak" "$locked.platform"
+done

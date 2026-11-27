@@ -11,6 +11,7 @@ workflows:
         - 'r-lib/actions@v2.14.0'
     '.github/workflows/deps.yml':
         - 'actions/checkout@v7.0.1'
+        - 'ocaml/setup-ocaml@v3.9.1'
     '.github/workflows/format.yml':
         - 'actions/checkout@v7.0.1'
         - 'ocaml/setup-ocaml@v3.9.1'
