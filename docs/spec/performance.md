@@ -10,6 +10,15 @@ Rupam's interactive and standalone execution paths share the language semantics 
 - Scrolling a completed result performs no analysis. Run expensive compilation, scans and sorts outside the terminal event loop. Coalesce live edits, cancel superseded work and reject stale replies before publication. Preserve input focus and the last good grid throughout.
 - Lower ordinary table operations to native vectorised expressions. Share repeated pure computations where scope and evaluation order permit. Discharge checks once at the earliest sound boundary. Retain runtime checks whose obligations depend on effects or unstable reductions.
 
+## Throughput
+
+Ingestion, snapshot hashing, inference and scans aim for the hardware's
+limit, not a fixed speed. Measure each against a raw sequential read of the
+same file on the same machine, cold and warm, and report the fraction of that
+ceiling achieved; a gap is a defect to explain or remove. Snapshot hashing
+targets 5 GB/s cold on storage that can deliver it, using every SIMD kernel
+and core available on each release platform.
+
 ## Implementation evidence
 
 Exercise a cold session, a warm edit, repeated inspection, a wide table, a deep scroll and cancellation during a grouped computation. Record work at each boundary: checker invalidations, worker submissions, input scans, Arrow bytes copied, retained mappings, allocations and formatted cells. Compare full typed results alongside these observations. Separate host execution, compiler time, transport and terminal paint so an improvement in one cannot conceal a regression in another.

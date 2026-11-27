@@ -50,3 +50,10 @@
  (flags
   (:standard -open Rupam))
  (libraries unix rupam rupam_native))
+
+(executable
+ (name csv_bench)
+ (modules csv_bench)
+ (flags
+  (:standard -open Rupam))
+ (libraries unix rupam rupam_native talon))
