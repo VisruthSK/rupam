@@ -1,0 +1,3 @@
+(library
+ (name talon_ipc)
+ (modules_without_implementation types))

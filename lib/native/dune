@@ -1,6 +1,6 @@
 (library
  (name rupam_native)
- (libraries rupam unix yojson toml astring digestif duckdb_static nanoarrow)
+ (libraries rupam unix yojson toml astring digestif duckdb_static talon_ipc)
  (flags
   (:standard -open Rupam))
  (preprocess
@@ -8,8 +8,4 @@
  (foreign_stubs
   (language c)
   (names duckdb_stubs)
-  (include_dirs ../../vendor/duckdb))
- (foreign_stubs
-  (language c)
-  (names arrow_stubs)
-  (include_dirs ../../vendor/nanoarrow/include)))
+  (include_dirs ../../vendor/duckdb)))

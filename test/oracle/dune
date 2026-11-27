@@ -1,0 +1,34 @@
+(library
+ (name nanoarrow_oracle)
+ (modules nanoarrow_oracle)
+ (libraries nanoarrow)
+ (foreign_stubs
+  (language c)
+  (names arrow_stubs)
+  (include_dirs ../../vendor/nanoarrow/include)))
+
+(executable
+ (name ipc_differential)
+ (modules ipc_differential)
+ (libraries yojson rupam_native nanoarrow_oracle))
+
+(rule
+ (alias integration)
+ (deps ipc_fixtures.py)
+ (action
+  (progn
+   (run python ipc_fixtures.py ipc)
+   (run %{exe:ipc_differential.exe} ipc))))
+
+(executable
+ (name ipc_bench)
+ (modules ipc_bench)
+ (libraries unix rupam_native nanoarrow_oracle))
+
+(rule
+ (alias bench)
+ (deps ipc_bench_data.py)
+ (action
+  (progn
+   (run python ipc_bench_data.py bench)
+   (run %{exe:ipc_bench.exe} bench))))
