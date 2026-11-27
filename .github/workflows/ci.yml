@@ -61,15 +61,16 @@ jobs:
       - if: steps.vendor.outputs.cache-hit != 'true'
         run: scripts/fetch-deps
 
-      - uses: ocaml/setup-ocaml@v3.9.1
-        with:
-          ocaml-compiler: ${{ matrix.ocaml || '5.5' }}
       - id: opam
         if: ${{ !matrix.fresh }}
         uses: actions/cache@v6.1.0
         with:
-          path: ${{ runner.os == 'Windows' && 'C:\.opam' || '~/.opam' }}
-          key: opam-${{ runner.os }}-${{ runner.arch }}-${{ matrix.ocaml || '5.5' }}-${{ hashFiles('*.opam', '*.opam.locked') }}
+          path: _opam
+          key: opam-${{ runner.os }}-${{ runner.arch }}-${{ matrix.ocaml || '5.5.2' }}-${{ hashFiles('*.opam', '*.opam.locked') }}
+      - uses: ocaml/setup-ocaml@v3.9.1
+        with:
+          ocaml-compiler: ${{ matrix.ocaml || '5.5.2' }}
+          cache: ${{ matrix.fresh || false }}
       - if: ${{ matrix.fresh }}
         run: opam install . --deps-only --with-test --with-dev-setup
       - if: ${{ !matrix.fresh && steps.opam.outputs.cache-hit != 'true' }}
@@ -77,8 +78,8 @@ jobs:
       - uses: actions/cache@v6.1.0
         with:
           path: ${{ github.workspace }}/../dune-cache
-          key: dune-${{ runner.os }}-${{ runner.arch }}-${{ matrix.ocaml || '5.5' }}-${{ github.sha }}
-          restore-keys: dune-${{ runner.os }}-${{ runner.arch }}-${{ matrix.ocaml || '5.5' }}-
+          key: dune-${{ runner.os }}-${{ runner.arch }}-${{ matrix.ocaml || '5.5.2' }}-${{ github.sha }}
+          restore-keys: dune-${{ runner.os }}-${{ runner.arch }}-${{ matrix.ocaml || '5.5.2' }}-
       - run: opam exec -- dune build @all
 
       - uses: astral-sh/setup-uv@v10.4.0
