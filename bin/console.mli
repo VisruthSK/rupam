@@ -1,8 +1,11 @@
 type model
 type msg
 
+val with_capture : (string -> 'a) -> 'a
+
 val app
-  :  project:Rupam_native.Project.t
+  :  capture:string
+  -> project:Rupam_native.Project.t
   -> ?path:string
   -> unit
   -> (model, msg) Mosaic.app option

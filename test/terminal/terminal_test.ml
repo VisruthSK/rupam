@@ -138,8 +138,11 @@ let session ?(env = []) ~dir args f =
       Sys.chdir previous;
       List.iter (fun (k, v) -> Unix.putenv k (Option.value v ~default:"")) saved)
     (fun () ->
+       Rupam_console.Console.with_capture
+       @@ fun capture ->
        let app =
-         Option.get (Rupam_console.Console.app ~project:(project dir args) ?path ())
+         Option.get
+           (Rupam_console.Console.app ~capture ~project:(project dir args) ?path ())
        in
        let term = T.create ~cols:100 ~rows:30 () in
        screen := Some term;

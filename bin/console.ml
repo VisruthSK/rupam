@@ -50,6 +50,7 @@ type model =
   ; history : string list
   ; recalled : int option
   ; menu : menu option
+  ; capture_file : string
   ; pages : Rupam_native.Page.t list ref
   ; failures : Rupam.Diagnostic.t list ref
   ; opened : (Rupam.Syntax.expr * Rupam_native.Session.result) option ref
@@ -85,15 +86,23 @@ let prompt = "rupam \xe2\x9d\xaf "
 let continuation = "    \xe2\x80\xa6 "
 let full = { width = pct 100; height = auto }
 
-let capture f =
+let with_capture f =
+  let file = Filename.temp_file "rupam" ".out" in
+  Fun.protect
+    ~finally:(fun () ->
+      try Sys.remove file with
+      | Sys_error _ -> ())
+    (fun () -> f file)
+;;
+
+let capture file f =
   flush stdout;
   flush stderr;
-  let file = Filename.temp_file "rupam" ".out" in
-  let target = Unix.openfile file [ O_WRONLY; O_TRUNC ] 0o600 in
-  let saved_out = Unix.dup Unix.stdout
-  and saved_err = Unix.dup Unix.stderr in
-  Unix.dup2 target Unix.stdout;
-  Unix.dup2 target Unix.stderr;
+  let target = Unix.openfile file [ O_WRONLY; O_TRUNC; O_CLOEXEC ] 0o600 in
+  let saved_out = Unix.dup ~cloexec:true Unix.stdout
+  and saved_err = Unix.dup ~cloexec:true Unix.stderr in
+  Unix.dup2 ~cloexec:true target Unix.stdout;
+  Unix.dup2 ~cloexec:true target Unix.stderr;
   let result =
     Fun.protect
       ~finally:(fun () ->
@@ -104,9 +113,7 @@ let capture f =
         List.iter Unix.close [ saved_out; saved_err; target ])
       f
   in
-  let text = In_channel.with_open_text file In_channel.input_all in
-  Sys.remove file;
-  result, text
+  result, In_channel.with_open_text file In_channel.input_all
 ;;
 
 let output_line line =
@@ -631,7 +638,7 @@ let evaluate model source =
     model.failures := [];
     model.opened := None;
     let next, output =
-      capture (fun () ->
+      capture model.capture_file (fun () ->
         match Repl.parse entry with
         | Error message ->
           Repl.report message;
@@ -1236,7 +1243,7 @@ let subscriptions model =
       ]
 ;;
 
-let app ~project ?path () =
+let app ~capture ~project ?path () =
   match Repl.open_session ~project ?path () with
   | None -> None
   | Some session ->
@@ -1259,6 +1266,7 @@ let app ~project ?path () =
               ; history = Line.load_history ()
               ; recalled = None
               ; menu = None
+              ; capture_file = capture
               ; pages
               ; failures
               ; opened
@@ -1280,7 +1288,10 @@ let app ~project ?path () =
 ;;
 
 let config = Matrix.config ~mode:`Primary ~mouse:`Off ~kitty_keyboard:`Auto ()
-let start ~project ?path () = Option.iter (run ~config) (app ~project ?path ())
+
+let start ~project ?path () =
+  with_capture (fun capture -> Option.iter (run ~config) (app ~capture ~project ?path ()))
+;;
 
 type pick =
   | Move of int

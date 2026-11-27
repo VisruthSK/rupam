@@ -1,33 +1,35 @@
 Each setting reports the source that won: built-in default, user file,
 project file or session.
 
-  $ export XDG_CONFIG_HOME=$PWD/config APPDATA=$PWD/config
+  $ root=$(cygpath -m "$PWD" 2>/dev/null || echo "$PWD")
+  $ export XDG_CONFIG_HOME=$root/config APPDATA=$root/config
+  $ options() { rupam repl "$@" | sed -e 's|\\|/|g' -e "s|$root|ROOT|"; }
   $ mkdir -p config/rupam analysis && cd analysis
-  $ printf ':options\n:quit\n' | rupam repl --target r-dplyr
+  $ printf ':options\n:quit\n' | options --target r-dplyr
   target.language  r              session --target
   target.dialect   dplyr          session --target
   check.strict     TRUE           default
   preview.digits   2              default
   $ printf '[target]\nlanguage = "r"\ndialect = "dplyr"\n[preview]\ndigits = 4\n' > ../config/rupam/rupam.toml
-  $ printf ':options\n:quit\n' | rupam repl
-  target.language  r              global $TESTCASE_ROOT/config/rupam/rupam.toml
-  target.dialect   dplyr          global $TESTCASE_ROOT/config/rupam/rupam.toml
+  $ printf ':options\n:quit\n' | options
+  target.language  r              global ROOT/config/rupam/rupam.toml
+  target.dialect   dplyr          global ROOT/config/rupam/rupam.toml
   check.strict     TRUE           default
-  preview.digits   4              global $TESTCASE_ROOT/config/rupam/rupam.toml
+  preview.digits   4              global ROOT/config/rupam/rupam.toml
   $ printf '[preview]\ndigits = 2\n' > rupam.toml
-  $ printf ':options\n:quit\n' | rupam repl
-  target.language  r              global $TESTCASE_ROOT/config/rupam/rupam.toml
-  target.dialect   dplyr          global $TESTCASE_ROOT/config/rupam/rupam.toml
+  $ printf ':options\n:quit\n' | options
+  target.language  r              global ROOT/config/rupam/rupam.toml
+  target.dialect   dplyr          global ROOT/config/rupam/rupam.toml
   check.strict     TRUE           default
-  preview.digits   2              project $TESTCASE_ROOT/analysis/rupam.toml
-  $ printf ':options\n:quit\n' | rupam repl --target r-dplyr
+  preview.digits   2              project ROOT/analysis/rupam.toml
+  $ printf ':options\n:quit\n' | options --target r-dplyr
   target.language  r              session --target
   target.dialect   dplyr          session --target
   check.strict     TRUE           default
-  preview.digits   2              project $TESTCASE_ROOT/analysis/rupam.toml
-  $ printf ':target python-polars\n:options\n:quit\n' | rupam repl --no-strict
+  preview.digits   2              project ROOT/analysis/rupam.toml
+  $ printf ':target python-polars\n:options\n:quit\n' | options --no-strict
   python-polars
   target.language  python         session :target
   target.dialect   polars         session :target
   check.strict     FALSE          session --no-strict
-  preview.digits   2              project $TESTCASE_ROOT/analysis/rupam.toml
+  preview.digits   2              project ROOT/analysis/rupam.toml

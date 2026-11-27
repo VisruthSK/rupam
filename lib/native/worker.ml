@@ -79,6 +79,8 @@ repeat {
 |}
 ;;
 
+let host_stderr = Unix.dup ~cloexec:true Unix.stderr
+
 let start (runtime : Runtime.t) (language : Target.language) =
   let argv, program =
     match language with
@@ -91,7 +93,7 @@ let start (runtime : Runtime.t) (language : Target.language) =
   let input, requests = Unix.pipe ~cloexec:true () in
   let replies, output = Unix.pipe ~cloexec:true () in
   let pid =
-    try Unix.create_process argv.(0) argv input output Unix.stderr with
+    try Unix.create_process argv.(0) argv input output host_stderr with
     | Unix.Unix_error (Unix.ENOENT, _, _) ->
       List.iter Unix.close [ input; requests; replies; output ];
       Option.iter Sys.remove program;
