@@ -32,6 +32,7 @@ jobs:
         include:
           - os: ubuntu-latest
           - os: macos-latest
+          - os: macos-15-intel
           - os: windows-latest
           - os: ubuntu-latest
             ocaml: "5.4"
