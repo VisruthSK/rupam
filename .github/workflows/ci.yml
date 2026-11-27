@@ -61,16 +61,15 @@ jobs:
       - if: steps.vendor.outputs.cache-hit != 'true'
         run: scripts/fetch-deps
 
+      - uses: ocaml/setup-ocaml@v3.9.1
+        with:
+          ocaml-compiler: ${{ matrix.ocaml || '5.5.2' }}
       - id: opam
         if: ${{ !matrix.fresh }}
         uses: actions/cache@v6.1.0
         with:
           path: _opam
           key: opam-${{ runner.os }}-${{ runner.arch }}-${{ matrix.ocaml || '5.5.2' }}-${{ hashFiles('*.opam', '*.opam.locked') }}
-      - uses: ocaml/setup-ocaml@v3.9.1
-        with:
-          ocaml-compiler: ${{ matrix.ocaml || '5.5.2' }}
-          cache: ${{ matrix.fresh || false }}
       - if: ${{ matrix.fresh }}
         run: opam install . --deps-only --with-test --with-dev-setup
       - if: ${{ !matrix.fresh && steps.opam.outputs.cache-hit != 'true' }}

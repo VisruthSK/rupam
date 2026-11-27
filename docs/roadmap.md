@@ -108,6 +108,10 @@ with R and Python only as reference backends.
   development dependency, so build, test, bench and format commands are short
   and reusable; formatting runs ocamlformat, air and jarl for R, and ruff for
   Python.
+- Move dependency management to dune package management (`dune pkg` with a
+  `dune.lock`, cached through `setup-dune`) once its Windows support is
+  stable, replacing the opam switch, `scripts/lock-deps` and the `_opam`
+  cache in CI.
 - Splitting each backend into a `HOST` and a `DIALECT` once a language has a
   second table library.
 - Modules, package export, test blocks, `repeat`, and the relational

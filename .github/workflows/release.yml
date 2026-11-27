@@ -60,15 +60,14 @@ jobs:
       - if: steps.vendor.outputs.cache-hit != 'true'
         run: scripts/fetch-deps
 
+      - uses: ocaml/setup-ocaml@v3.9.1
+        with:
+          ocaml-compiler: "5.5.2"
       - id: opam
         uses: actions/cache@v6.1.0
         with:
           path: _opam
           key: opam-${{ runner.os }}-${{ runner.arch }}-5.5.2-${{ hashFiles('*.opam', '*.opam.locked') }}
-      - uses: ocaml/setup-ocaml@v3.9.1
-        with:
-          ocaml-compiler: "5.5.2"
-          cache: false
       - if: steps.opam.outputs.cache-hit != 'true'
         run: opam install --deps-only --with-test --with-dev-setup ./rupam.opam.locked ./rupam-dev.opam.locked
       - run: |
