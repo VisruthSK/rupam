@@ -1,10 +1,71 @@
 #include <caml/alloc.h>
 #include <caml/bigarray.h>
+#include <caml/fail.h>
 #include <caml/memory.h>
 #include <caml/mlvalues.h>
 #include <caml/threads.h>
 
+#include <stdlib.h>
+#include <string.h>
+
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <fcntl.h>
+#include <unistd.h>
+#endif
+
 #include "blake3.c"
+
+static int read_at(const char *path, uint64_t offset, uint8_t *out, size_t length) {
+#ifdef _WIN32
+  int wide = MultiByteToWideChar(CP_UTF8, 0, path, -1, NULL, 0);
+  if (wide <= 0) return 0;
+  wchar_t *name = malloc(sizeof(wchar_t) * wide);
+  if (!name) return 0;
+  MultiByteToWideChar(CP_UTF8, 0, path, -1, name, wide);
+  HANDLE file = CreateFileW(name, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                            NULL, OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN, NULL);
+  free(name);
+  if (file == INVALID_HANDLE_VALUE) return 0;
+  size_t done = 0;
+  while (done < length) {
+    OVERLAPPED at = {0};
+    uint64_t position = offset + done;
+    at.Offset = (DWORD)(position & 0xFFFFFFFFu);
+    at.OffsetHigh = (DWORD)(position >> 32);
+    DWORD want = (DWORD)(length - done > 0x40000000u ? 0x40000000u : length - done);
+    DWORD got = 0;
+    if (!ReadFile(file, out + done, want, &got, &at) || got == 0) break;
+    done += got;
+  }
+  CloseHandle(file);
+  return done == length;
+#else
+  int fd = open(path, O_RDONLY);
+  if (fd < 0) return 0;
+  size_t done = 0;
+  while (done < length) {
+    ssize_t got = pread(fd, out + done, length - done, (off_t)(offset + done));
+    if (got <= 0) break;
+    done += (size_t)got;
+  }
+  close(fd);
+  return done == length;
+#endif
+}
+
+CAMLprim value rupam_blake3_read(value path, value offset, value buffer, value length) {
+  CAMLparam4(path, offset, buffer, length);
+  char *name = caml_stat_strdup(String_val(path));
+  uint8_t *out = Caml_ba_data_val(buffer);
+  caml_release_runtime_system();
+  int ok = read_at(name, (uint64_t)Long_val(offset), out, Long_val(length));
+  caml_acquire_runtime_system();
+  caml_stat_free(name);
+  if (!ok) caml_failwith("the file could not be read at the expected size");
+  CAMLreturn(Val_unit);
+}
 
 CAMLprim value rupam_blake3_state_size(value unit) {
   (void)unit;

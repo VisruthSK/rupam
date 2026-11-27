@@ -20,6 +20,7 @@
   astring
   re
   ptime
+  domainslib
   uucp
   toml
   (ppx_expect :with-test)

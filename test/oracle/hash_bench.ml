@@ -2,7 +2,7 @@ let () =
   let path = Sys.argv.(1) in
   let size = (Unix.stat path).st_size in
   let start = Unix.gettimeofday () in
-  let digest = Blake3.file path in
+  let digest = Rupam_native.Data_file.digest path in
   let elapsed = Unix.gettimeofday () -. start in
   let gb = float_of_int size /. 1e9 in
   Printf.printf

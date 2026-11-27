@@ -21,101 +21,99 @@ let fresh () =
   }
 ;;
 
-let digit c = c >= '0' && c <= '9'
+let int_bit = 1
+let float_bit = 2
+let bool_bit = 4
+let date_bit = 8
+let nan_bit = 16
+let inf_bit = 32
+let byte b i = Bytes.unsafe_get b i
+let is_digit c = c >= '0' && c <= '9'
 
-let digits b p n =
-  let rec go i = i = n || (digit (Bytes.unsafe_get b (p + i)) && go (i + 1)) in
-  n > 0 && go 0
-;;
-
-let equals b p n s =
+let word b p n s =
   String.length s = n
   &&
-  let rec go i =
-    i = n || (Bytes.unsafe_get b (p + i) = String.unsafe_get s i && go (i + 1))
-  in
-  go 0
+  let i = ref 0 in
+  while !i < n && byte b (p + !i) = String.unsafe_get s !i do
+    incr i
+  done;
+  !i = n
 ;;
 
-let unsigned_mantissa b p n =
-  let rec go i = if i < n && digit (Bytes.unsafe_get b (p + i)) then go (i + 1) else i in
-  let k = go 0 in
-  if k = 0 || (k > 1 && Bytes.unsafe_get b p = '0') then -1 else k
+let rec member b p n = function
+  | [] -> false
+  | token :: rest -> word b p n token || member b p n rest
 ;;
 
-let sign b p n = if n > 0 && Bytes.unsafe_get b p = '-' then 1 else 0
 let largest = "9223372036854775807"
 
-let integer b p n =
-  let s = sign b p n in
-  let k = unsigned_mantissa b (p + s) (n - s) in
-  k = n - s
-  && (k < 19
-      || (k = 19
-          &&
-          let rec go i =
-            i = 19
-            ||
-            let c = Bytes.unsafe_get b (p + s + i) in
-            c < largest.[i] || (c = largest.[i] && go (i + 1))
-          in
-          go 0))
+let fits b first =
+  let i = ref 0 in
+  while !i < 19 && byte b (first + !i) = String.unsafe_get largest !i do
+    incr i
+  done;
+  !i = 19 || byte b (first + !i) < String.unsafe_get largest !i
 ;;
 
-let decimal b p n =
-  let s = sign b p n in
-  let k = unsigned_mantissa b (p + s) (n - s) in
-  k > 0
-  &&
-  let i = p + s + k
-  and stop = p + n in
-  let i, fraction =
-    if i < stop && Bytes.unsafe_get b i = '.'
-    then (
-      let rec go j = if j < stop && digit (Bytes.unsafe_get b j) then go (j + 1) else j in
-      let j = go (i + 1) in
-      if j = i + 1 then -1, false else j, true)
-    else i, false
-  in
-  i >= 0
-  &&
-  let i, exponent =
-    if i < stop && (Bytes.unsafe_get b i = 'e' || Bytes.unsafe_get b i = 'E')
-    then (
-      let j =
-        if
-          i + 1 < stop
-          && (Bytes.unsafe_get b (i + 1) = '+' || Bytes.unsafe_get b (i + 1) = '-')
-        then i + 2
-        else i + 1
-      in
-      if digits b j (stop - j) then stop, true else -1, false)
-    else i, false
-  in
-  i = stop && (fraction || exponent)
+let run_of_digits b i stop =
+  while !i < stop && is_digit (byte b !i) do
+    incr i
+  done
 ;;
 
-let infinities = [ "inf"; "-inf"; "Inf"; "-Inf"; "Infinity"; "-Infinity" ]
+let number b p n =
+  let stop = p + n in
+  let i = ref p in
+  if byte b p = '-' then incr i;
+  let first = !i in
+  run_of_digits b i stop;
+  let digits = !i - first in
+  if digits = 0 || (digits > 1 && byte b first = '0')
+  then 0
+  else if !i = stop
+  then if digits < 19 || (digits = 19 && fits b first) then int_bit lor float_bit else 0
+  else (
+    let fraction =
+      byte b !i = '.'
+      &&
+      (incr i;
+       let start = !i in
+       run_of_digits b i stop;
+       !i > start)
+    in
+    let broken = (not fraction) && byte b (!i - 1) = '.' in
+    let exponent =
+      (not broken)
+      && !i < stop
+      && (byte b !i = 'e' || byte b !i = 'E')
+      &&
+      (incr i;
+       if !i < stop && (byte b !i = '+' || byte b !i = '-') then incr i;
+       let start = !i in
+       run_of_digits b i stop;
+       !i > start)
+    in
+    if (not broken) && !i = stop && (fraction || exponent) then float_bit else 0)
+;;
+
+let two b p = ((Char.code (byte b p) - 48) * 10) + Char.code (byte b (p + 1)) - 48
 
 let date b p n =
   n = 10
-  && digits b p 4
-  && Bytes.unsafe_get b (p + 4) = '-'
-  && digits b (p + 5) 2
-  && Bytes.unsafe_get b (p + 7) = '-'
-  && digits b (p + 8) 2
+  && byte b (p + 4) = '-'
+  && byte b (p + 7) = '-'
+  && is_digit (byte b p)
+  && is_digit (byte b (p + 1))
+  && is_digit (byte b (p + 2))
+  && is_digit (byte b (p + 3))
+  && is_digit (byte b (p + 5))
+  && is_digit (byte b (p + 6))
+  && is_digit (byte b (p + 8))
+  && is_digit (byte b (p + 9))
   &&
-  let number i k =
-    let rec go j acc =
-      if j = k
-      then acc
-      else go (j + 1) ((10 * acc) + Char.code (Bytes.unsafe_get b (p + i + j)) - 48)
-    in
-    go 0 0
-  in
-  let year = number 0 4
-  and month = number 5 2
-  and day = number 8 2 in
+  let year = (two b p * 100) + two b (p + 2)
+  and month = two b (p + 5)
+  and day = two b (p + 8) in
   let leap = (year mod 4 = 0 && year mod 100 <> 0) || year mod 400 = 0 in
   let days =
     match month with
@@ -126,50 +124,79 @@ let date b p n =
   month >= 1 && month <= 12 && day >= 1 && day <= days
 ;;
 
-let valid_utf_8 b p n =
-  let rec go i =
-    i >= p + n
-    ||
-    if Char.code (Bytes.unsafe_get b i) < 0x80
-    then go (i + 1)
-    else (
-      let d = Bytes.get_utf_8_uchar b i in
-      Uchar.utf_decode_is_valid d
-      && i + Uchar.utf_decode_length d <= p + n
-      && go (i + Uchar.utf_decode_length d))
-  in
-  go p
+let classify b p n =
+  if n = 0
+  then 0
+  else (
+    match byte b p with
+    | '0' .. '9' -> number b p n lor if date b p n then date_bit else 0
+    | '-' ->
+      if word b p n "-inf" || word b p n "-Inf" || word b p n "-Infinity"
+      then inf_bit
+      else number b p n
+    | 'T' | 't' ->
+      if word b p n "TRUE" || word b p n "true" || word b p n "True" then bool_bit else 0
+    | 'F' | 'f' ->
+      if word b p n "FALSE" || word b p n "false" || word b p n "False"
+      then bool_bit
+      else 0
+    | 'N' -> if word b p n "NaN" then nan_bit else 0
+    | 'i' | 'I' ->
+      if word b p n "inf" || word b p n "Inf" || word b p n "Infinity" then inf_bit else 0
+    | _ -> 0)
 ;;
 
-let observe c b p n ~missing ~scan ~row =
-  if List.exists (equals b p n) missing
+let valid_utf_8 b p n =
+  let stop = p + n in
+  let i = ref p in
+  while
+    !i + 8 <= stop && Int64.logand (Bytes.get_int64_le b !i) 0x8080808080808080L = 0L
+  do
+    i := !i + 8
+  done;
+  let ok = ref true in
+  while !ok && !i < stop do
+    if Char.code (byte b !i) < 0x80
+    then incr i
+    else (
+      let d = Bytes.get_utf_8_uchar b !i in
+      let length = Uchar.utf_decode_length d in
+      if Uchar.utf_decode_is_valid d && !i + length <= stop
+      then i := !i + length
+      else ok := false)
+  done;
+  !ok
+;;
+
+let observe c b p n ~missing ~longest ~scan ~row =
+  if n <= longest && member b p n missing
   then c.missing <- true
   else (
     c.present <- true;
     if c.int || c.float || c.bool || c.date
-    then
-      if equals b p n "NaN"
+    then (
+      let m = classify b p n in
+      if m land nan_bit <> 0
       then (
         c.nan <- true;
         c.int <- false;
         c.bool <- false;
         c.date <- false)
-      else if List.exists (equals b p n) infinities
+      else if m land inf_bit <> 0
       then (
         if c.infinite = None then c.infinite <- Some (Talon.Scan.line scan row);
         c.int <- false;
         c.bool <- false;
         c.date <- false)
       else (
-        let whole = integer b p n in
-        if c.int && not whole then c.int <- false;
-        if c.float && not (whole || decimal b p n) then c.float <- false;
-        if c.bool && not (equals b p n "TRUE" || equals b p n "FALSE")
-        then c.bool <- false;
-        if c.date && not (date b p n) then c.date <- false))
+        if m land int_bit = 0 then c.int <- false;
+        if m land float_bit = 0 then c.float <- false;
+        if m land bool_bit = 0 then c.bool <- false;
+        if m land date_bit = 0 then c.date <- false)))
 ;;
 
 let columns ~missing ~path format : Input.column list =
+  let longest = List.fold_left (fun m t -> max m (String.length t)) 0 missing in
   let sep =
     match (format : Input.format) with
     | Tsv -> '\t'
@@ -226,6 +253,7 @@ let columns ~missing ~path format : Input.column list =
                  observe
                    c
                    ~missing
+                   ~longest
                    b
                    (Talon.Scan.pos s r j)
                    (Talon.Scan.len s r j)

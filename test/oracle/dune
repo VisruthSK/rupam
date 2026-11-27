@@ -42,4 +42,11 @@
 (executable
  (name hash_bench)
  (modules hash_bench)
- (libraries unix blake3))
+ (libraries unix rupam_native))
+
+(executable
+ (name evidence_bench)
+ (modules evidence_bench)
+ (flags
+  (:standard -open Rupam))
+ (libraries unix rupam rupam_native))

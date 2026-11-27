@@ -323,7 +323,7 @@ write_csv(summary, "summary.csv")
   fields and `NA` are missing, quoted or not, as in readr's defaults; R's
   Arrow reader cannot distinguish quoted values, so neither does Rupam. No
   implicit trimming and no other missing tokens by default;
-  `missing_tokens = [...]` replaces the default tokens. `TRUE` and `FALSE` parse as booleans, not `T` or `F`.
+  `missing_tokens = [...]` replaces the default tokens. `TRUE`, `true`, `True` and their `FALSE` forms parse as booleans, not `T`, `F`, `1` or `0`.
   Infer the narrowest common supported primitive type, preserving leading-zero
   identifier text as strings; ambiguous types default to String. Explicit
   schemas parse exactly, including nominal wrappers, and reject malformed
@@ -331,8 +331,8 @@ write_csv(summary, "summary.csv")
 - CSV inference recognises exactly these spellings, with no surrounding
   whitespace. `Int` is `-?(0|[1-9][0-9]*)` within the `Int` range. `Float` is
   an `Int`-shaped mantissa followed by a `.digits` fraction, an exponent
-  `[eE][+-]?digits`, or both, or the token `NaN`. `Bool` is `TRUE` or
-  `FALSE`. `Date` is `YYYY-MM-DD` naming a real calendar date. A column of
+  `[eE][+-]?digits`, or both, or the token `NaN`. `Bool` is `TRUE`,
+  `true`, `True`, `FALSE`, `false` or `False`, the spellings R and Python write. `Date` is `YYYY-MM-DD` naming a real calendar date. A column of
   `Int` and `Float` values is `Float`; any other mixture, an out-of-range
   integer or any other present value makes the column `String`, as does a
   column with no present values. In a column that is otherwise `Float`, the

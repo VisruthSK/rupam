@@ -1,6 +1,6 @@
 (library
  (name blake3)
- (libraries unix)
+ (libraries)
  (foreign_stubs
   (language c)
   (extra_deps blake3.c blake3_neon.c)

@@ -17,6 +17,6 @@ let%test "parallel subtrees equal the sequential hash at every boundary" =
          ~finally:(fun () -> Sys.remove path)
          (fun () ->
             Out_channel.with_open_bin path (fun oc -> Out_channel.output_string oc data);
-            String.equal (Blake3.file path) (Blake3.string data)))
+            String.equal (Rupam_native.Data_file.digest path) (Blake3.string data)))
     [ 0; 1; 1023; 1024; 1025; 4194303; 4194304; 4194305; 8388609; 12583935; 33554433 ]
 ;;

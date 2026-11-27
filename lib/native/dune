@@ -1,6 +1,6 @@
 (library
  (name rupam_native)
- (libraries rupam unix yojson toml astring talon lz blake3)
+ (libraries rupam unix yojson toml astring talon lz blake3 domainslib)
  (flags
   (:standard -open Rupam))
  (preprocess
