@@ -60,6 +60,7 @@ and node =
   | If of expr * expr * expr
   | Coalesce of expr * expr
   | Require of expr
+  | Guarded of expr * expr
   | Match of expr * arm list
   | Lambda of id list * expr
   | Apply of expr * expr list

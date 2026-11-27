@@ -225,7 +225,7 @@ and node names (e : C.expr) : P.expr =
   | If (c, a, b) -> P.If (go c, go a, go b)
   | Coalesce (a, b) ->
     P.If (is_none (P.Walrus ("fallback_value", go a)), go b, P.Name "fallback_value")
-  | Require x -> go x
+  | Require x | Guarded (_, x) -> go x
   | Match (subject, arms) -> match_ names subject arms
   | Lambda (ids, body) -> P.Lambda (List.map (Host.name names) ids, go body)
   | Apply (f, args) -> P.Call (go f, List.map (fun a -> P.Positional (go a)) args)

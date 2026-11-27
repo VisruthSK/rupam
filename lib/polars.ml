@@ -123,18 +123,12 @@ let rec expression ?(deferred = false) ~checked ~scalar (e : C.expr) : P.expr =
   else (
     match e.node with
     | Column n -> col n
-    | If (c, a, b) when C.reduces a || C.reduces b ->
-      let guard selects (x : C.expr) =
-        let any = P.meth selects "any" [] in
-        if not (C.reduces x)
-        then go x
-        else if checked && T.repr (T.present x.typ) = Int
-        then
-          narrow (choose any (expression ~deferred:true ~checked ~scalar x) P.Null)
-        else choose any (go x) P.Null
-      in
-      choose (go c) (guard (go c) a) (guard (P.Unary (Invert, go c)) b)
     | If (c, a, b) -> choose (go c) (go a) (go b)
+    | Guarded (selects, value) ->
+      let any = P.meth (go selects) "any" [] in
+      if checked && T.repr (T.present value.typ) = Int
+      then narrow (choose any (expression ~deferred:true ~checked ~scalar value) P.Null)
+      else choose any (go value) P.Null
     | Coalesce (a, b) -> P.Call (pl "coalesce", positional [ go a; go b ])
     | Builtin (Parse_date, [ s; { node = Constant (Text f); _ } ]) ->
       P.meth

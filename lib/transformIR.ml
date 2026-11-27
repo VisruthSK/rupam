@@ -69,6 +69,7 @@ and node =
   | If of expr * expr * expr
   | Coalesce of expr * expr
   | Require of expr
+  | Guarded of expr * expr
   | Match of expr * arm list
   | Lambda of id list * expr
   | Apply of expr * expr list
@@ -235,8 +236,12 @@ let rec exists f e =
     any xs
   | Reduce (_, _, x) | Unary (_, x) | Convert x | Require x | Lambda (_, x) | Field (x, _)
     -> exists f x
-  | Binary (_, a, b) | Coalesce (a, b) | Let (_, a, b) | Member (a, b) | Sequence (a, b)
-    -> any [ a; b ]
+  | Binary (_, a, b)
+  | Coalesce (a, b)
+  | Let (_, a, b)
+  | Member (a, b)
+  | Sequence (a, b)
+  | Guarded (a, b) -> any [ a; b ]
   | Element (x, i) -> any (x :: Option.to_list i)
   | Slice (x, a, b) -> any ((x :: Option.to_list a) @ Option.to_list b)
   | If (a, b, c) -> any [ a; b; c ]

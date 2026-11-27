@@ -118,18 +118,12 @@ let rec expression names (e : C.expr) : R.expr =
   | Constant (Date d) -> R.call "as.Date" [ R.String (Calendar.to_iso d) ]
   | Absent -> missing e.typ
   | If (c, a, b) when c.shape = Scalar -> R.If (go c, go a, go b)
-  | If (c, a, b) when C.reduces a || C.reduces b ->
-    let guard selects (x : C.expr) =
-      if C.reduces x
-      then
-        R.If
-          ( R.Call (R.Name "any", [ R.Positional selects; R.Named ("na.rm", R.Logical true) ])
-          , go x
-          , R.Na )
-      else go x
-    in
-    if_else (go c) (guard (go c) a) (guard (R.Not (go c)) b)
   | If (c, a, b) -> if_else (go c) (go a) (go b)
+  | Guarded (selects, value) ->
+    R.If
+      ( R.Call (R.Name "any", [ R.Positional (go selects); R.Named ("na.rm", R.Logical true) ])
+      , go value
+      , R.Na )
   | Coalesce (a, b) ->
     R.qualified "dplyr" "coalesce" [ R.Positional (go a); R.Positional (go b) ]
   | Builtin (row, args) -> builtin row (List.map go args)

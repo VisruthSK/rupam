@@ -405,6 +405,13 @@ let rec eval env ?rows (e : C.expr) =
     (match here a with
      | Missing -> here b
      | v -> v)
+  | Guarded (selects, value) ->
+    (match rows with
+     | Some ({ group; _ } as at) ->
+       if Array.exists (fun row -> eval env ~rows:{ at with row } selects = Bool true) group
+       then here value
+       else Missing
+     | None -> here value)
   | Require x ->
     (match here x with
      | Missing -> fail e Missing_under_error "A condition is missing and missing = error"

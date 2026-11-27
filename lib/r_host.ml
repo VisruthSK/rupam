@@ -153,7 +153,7 @@ and node names (e : C.expr) : R.expr =
       , R.If (test, R.Null, go body) )
   | If (c, a, b) -> R.If (go c, go a, go b)
   | Coalesce (a, b) -> R.call "rp_coalesce" [ go a; go b ]
-  | Require x -> go x
+  | Require x | Guarded (_, x) -> go x
   | Match (subject, arms) -> match_ names subject arms
   | Lambda (ids, body) -> R.Function (List.map (Host.name names) ids, go body)
   | Apply (f, args) -> R.Call (go f, List.map (fun a -> R.Positional (go a)) args)

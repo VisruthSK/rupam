@@ -109,6 +109,11 @@ let rec expr ctx (x : Syntax.expr) : C.expr =
          coalesce(condition, FALSE) or coalesce(condition, TRUE)";
     expect c.span T.Bool c.typ;
     let a, b, t = common span (expr (present_after ctx c) a) (here b) in
+    let guard selects (x : C.expr) =
+      if c.shape = Columnar && C.reduces x then { x with node = Guarded (selects, x) } else x
+    in
+    let a = guard c a
+    and b = guard (make c.shape T.Bool (Unary (Not, c))) b in
     let optional = T.is_optional a.typ || T.is_optional b.typ in
     make (shape_of span [ c; a; b ]) (if optional then T.optional t else t) (If (c, a, b))
   | Member (v, set) ->
@@ -1291,6 +1296,7 @@ let rec settle (e : C.expr) : C.expr =
     | If (c, a, b) -> If (settle c, settle a, settle b)
     | Coalesce (a, b) -> Coalesce (settle a, settle b)
     | Require x -> Require (settle x)
+    | Guarded (s, v) -> Guarded (settle s, settle v)
     | Match (x, arms) ->
       Match
         ( settle x
