@@ -34,6 +34,7 @@ jobs:
         with:
           path: _opam
           key: opam-${{ runner.os }}-${{ runner.arch }}-5.5.2-${{ hashFiles('*.opam', '*.opam.locked') }}
+      - run: opam install --deps-only --depext-only --with-test --with-dev-setup ./rupam.opam.locked ./rupam-dev.opam.locked
       - if: steps.opam.outputs.cache-hit != 'true'
         run: opam install --deps-only --with-test --with-dev-setup ./rupam.opam.locked ./rupam-dev.opam.locked
       - run: opam exec -- dune build @fmt

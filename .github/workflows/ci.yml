@@ -70,6 +70,8 @@ jobs:
         with:
           path: _opam
           key: opam-${{ runner.os }}-${{ runner.arch }}-${{ matrix.ocaml || '5.5.2' }}-${{ hashFiles('*.opam', '*.opam.locked') }}
+      - if: ${{ !matrix.fresh }}
+        run: opam install --deps-only --depext-only --with-test --with-dev-setup ./rupam.opam.locked ./rupam-dev.opam.locked
       - if: ${{ matrix.fresh }}
         run: opam install . --deps-only --with-test --with-dev-setup
       - if: ${{ !matrix.fresh && steps.opam.outputs.cache-hit != 'true' }}
