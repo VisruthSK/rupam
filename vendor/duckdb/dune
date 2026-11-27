@@ -1,6 +1,9 @@
 (library
  (name duckdb_static)
  (no_dynlink)
+ (foreign_stubs
+  (language c)
+  (names ucrt))
  (foreign_archives
   duckdb_static
   parquet_extension

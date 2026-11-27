@@ -6,7 +6,19 @@ or Python/Polars. The [specification](spec/README.md) defines semantics and
 [conformance](spec/conformance.md) pins them; this page lists only what is
 not yet built.
 
-## 1. Semantic foundations
+## 1. Alpha release
+
+- Native, stripped `0.0.0-alpha.1` binaries for Linux, macOS and Windows,
+  built only from a commit whose CI and Format runs passed.
+- Every suite green on all three operating systems, including the
+  in-process terminal tests and native Windows linking against DuckDB.
+- Windows links DuckDB's UCRT archive into msvcrt OCaml through a
+  one-function shim (`vendor/duckdb/ucrt.c`); after the alpha, match the C
+  runtimes by building DuckDB with the MinGW toolchain or OCaml for UCRT.
+- A minimum supported OCaml of 5.4 (issue 3), with releases built on 5.5.
+- The demo recorded again at 1080p30 with the current error rendering.
+
+## 2. Semantic foundations
 
 - Share one canonical input snapshot across preview, proof checking and
   export. Rupam verifies it during development. Standalone scripts consume
@@ -36,8 +48,7 @@ not yet built.
   `nonexhaustive-match` (C158, C159).
 - Displayed signatures show column-shaped parameters and results (C162).
 
-
-## 2. Analytical core
+## 3. Analytical core
 
 In order of conformance cases unlocked:
 
@@ -57,13 +68,12 @@ In order of conformance cases unlocked:
    (5 cases).
 8. Strict mode and effect sets (5 cases); restricted columns (3 cases).
 
-## 3. Interactive experience
+## 4. Interactive experience
 
 - An explicit session state machine: base revision, pinned inputs, pending
   work and publication outcome. Specify cancellation or worker loss after a
   write or random draw but before publication, keeping the accepted
   revision, the external effect and worker recovery as separate facts.
-
 - `:probe`, `??term` search, comment-preserving `:save`.
 - A TextMate grammar; LSP completion and hover from the shared checker.
 - Viewer speed on large data: sort online (publish the visible top-k
@@ -73,13 +83,10 @@ In order of conformance cases unlocked:
 - Save and export by backward slicing: `:save result` and `:export result`
   keep only the chosen bindings and their dependencies (C164).
 
+## 5. Public MVP
 
-## 4. Public MVP
-
-Native, stripped releases for Linux, macOS and Windows, with every suite,
-including the in-process terminal tests, green on all three in CI; a
-minimum OCaml of 5.4 (issue 3); a demo recorded at 1080p30; documentation; `rupam env`
-environment setup; realistic end-to-end examples on both targets.
+Documentation; `rupam env` environment setup; realistic end-to-end examples
+on both targets.
 
 The last step before release is a whole-codebase audit: every algorithm is
 log-linear at worst with small constants, accidental complexity and spec
@@ -87,7 +94,7 @@ deviations are removed, systems are simplified, hand-written infrastructure
 moves to maintained dependencies where one fits, and tests stay native OCaml,
 with R and Python only as reference backends.
 
-## 5. After the MVP
+## 6. After the MVP
 
 - Data-discovered enums and `as_enum` ([Future](spec/future.md)).
 - `DateTime`, `Time` and zones; nominal types and units (C33, C34, C95).

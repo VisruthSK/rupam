@@ -34,7 +34,7 @@ esac
 
 fetch "https://github.com/duckdb/duckdb/releases/download/v$duckdb/duckdb-static-libs-$platform.tar.gz" \
   "$work/duckdb.tar.gz" "$sha"
-find "$root/vendor/duckdb" -mindepth 1 ! -name dune -delete
+find "$root/vendor/duckdb" -mindepth 1 ! -name dune ! -name ucrt.c -delete
 tar xzf "$work/duckdb.tar.gz" -C "$root/vendor/duckdb" \
   duckdb.h duckdb_static_extension.h \
   libduckdb_static.a libparquet_extension.a libjson_extension.a libcore_functions_extension.a
