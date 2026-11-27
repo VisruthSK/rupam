@@ -55,7 +55,10 @@ let () =
   let env = [ "PATH", Sys.getenv "PATH"; "HOME", dir; "TERM", "xterm-256color" ] in
   C.with_spawn term ~env ~cwd:dir ~prog:rupam ~args:[ "repl"; "--target"; "python-polars"; "frames.rp" ]
     (fun c ->
-       C.wait c ~within:120. (fun term -> Astring.String.is_infix ~affix:"rupam" (text term));
+       let start = Unix.gettimeofday () in
+       C.wait c ~within:600. (fun term -> Astring.String.is_infix ~affix:"rupam \xe2\x9d\xaf" (text term));
+       Printf.printf "%d rows; REPL ready with the table bound in %.0f ms\n%!" rows
+         ((Unix.gettimeofday () -. start) *. 1000.);
        C.send c (T.text term ":view big");
        C.send c (T.key term K.Enter);
        let start = Unix.gettimeofday () in

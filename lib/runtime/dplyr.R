@@ -1,4 +1,5 @@
 suppressPackageStartupMessages(library(dplyr))
+invisible(requireNamespace("arrow", quietly = TRUE))
 
 rp_wider <- function(data, ids, key, value, labels) {
   if (!all(data[[key]] %in% labels)) stop("Unexpected pivot key")

@@ -29,17 +29,21 @@ let words text = List.map (fun g -> Re.Group.get g 0) (Re.all word text)
 
 let used adapters code =
   let blocks = blocks adapters in
-  let named = List.filter_map (fun (n, body) -> Option.map (fun n -> n, body) n) blocks in
-  let rec close needed = function
-    | [] -> needed
-    | w :: rest when List.mem w needed || not (List.mem_assoc w named) -> close needed rest
-    | w :: rest -> close (w :: needed) (words (List.assoc w named) @ rest)
+  let named = Hashtbl.create 64 in
+  List.iter (fun (n, body) -> Option.iter (fun n -> Hashtbl.replace named n body) n) blocks;
+  let needed = Hashtbl.create 64 in
+  let rec close = function
+    | [] -> ()
+    | w :: rest when Hashtbl.mem needed w || not (Hashtbl.mem named w) -> close rest
+    | w :: rest ->
+      Hashtbl.replace needed w ();
+      close (List.rev_append (words (Hashtbl.find named w)) rest)
   in
-  let needed = close [] (words code) in
+  close (words code);
   blocks
   |> List.filter (fun (name, body) ->
     match name with
-    | Some n -> List.mem n needed
+    | Some n -> Hashtbl.mem needed n
     | None -> String.trim body <> "")
   |> List.map snd
   |> String.concat "\n"

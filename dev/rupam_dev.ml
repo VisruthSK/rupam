@@ -218,7 +218,13 @@ let bench examples =
        Session.set_target session (List.assoc name Target.targets) ~origin:"bench";
        let submit source = Session.submit session (Frontend.read source) in
        let report label ms = Printf.printf "%-28s %7.1f ms\n%!" (name ^ " " ^ label) ms in
-       report "worker cold start" (time (fun () -> submit "1 + 1"));
+       report "first command, immediate" (time (fun () -> submit "1 + 1"));
+       Session.close session;
+       let session = Session.create ~project:Project.standalone ~directory:examples in
+       Session.set_target session (List.assoc name Target.targets) ~origin:"bench";
+       let submit source = Session.submit session (Frontend.read source) in
+       Unix.sleepf 1.0;
+       report "first command, after 1 s" (time (fun () -> submit "1 + 1"));
        let warm = List.init 30 (fun _ -> time (fun () -> submit "1 + 1")) in
        Printf.printf
          "%-28s p50 %7.1f ms  p95 %7.1f ms\n%!"

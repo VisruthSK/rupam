@@ -187,9 +187,14 @@ let builtin e call (row : Prelude.row) args =
   | Reverse, [ List xs ] -> List (List.rev xs)
   | Sorted, [ List xs ] -> List (List.stable_sort missing_last xs)
   | Deduplicate, [ List xs ] ->
+    let seen = Hashtbl.create 16 in
     List
-      (List.rev
-         (List.fold_left (fun seen x -> if List.mem x seen then seen else x :: seen) [] xs))
+      (List.filter
+         (fun x ->
+            let fresh = not (Hashtbl.mem seen x) in
+            Hashtbl.replace seen x ();
+            fresh)
+         xs)
   | Map_each, [ List xs; f ] -> List (List.map (fun x -> call f [ x ]) xs)
   | Retain, [ List xs; f ] -> List (List.filter (fun x -> call f [ x ] = Bool true) xs)
   | Fold, [ List xs; init; f ] -> List.fold_left (fun acc x -> call f [ acc; x ]) init xs
@@ -545,14 +550,15 @@ and join env (j : C.join) =
   let key frame = List.assoc j.key frame.columns in
   let lk = key left
   and rk = key right in
-  let matches i =
-    if lk.(i) = Missing
-    then []
-    else
-      List.filter
-        (fun k -> rk.(k) <> Missing && compare_values rk.(k) lk.(i) = 0)
-        (List.init right.rows Fun.id)
+  let normal = function
+    | Float f when f = 0. -> Float 0.
+    | v -> v
   in
+  let index = Hashtbl.create right.rows in
+  for k = right.rows - 1 downto 0 do
+    if rk.(k) <> Missing then Hashtbl.add index (normal rk.(k)) k
+  done;
+  let matches i = if lk.(i) = Missing then [] else Hashtbl.find_all index (normal lk.(i)) in
   let pairs =
     List.concat_map
       (fun i ->
