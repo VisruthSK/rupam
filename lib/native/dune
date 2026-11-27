@@ -1,11 +1,7 @@
 (library
  (name rupam_native)
- (libraries rupam unix yojson toml astring digestif duckdb_static talon)
+ (libraries rupam unix yojson toml astring digestif talon lz)
  (flags
   (:standard -open Rupam))
  (preprocess
-  (pps ppx_enumerate ppx_yojson_conv ppx_sexp_conv))
- (foreign_stubs
-  (language c)
-  (names duckdb_stubs)
-  (include_dirs ../../vendor/duckdb)))
+  (pps ppx_enumerate ppx_yojson_conv ppx_sexp_conv)))

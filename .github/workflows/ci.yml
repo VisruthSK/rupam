@@ -54,9 +54,7 @@ jobs:
       - id: vendor
         uses: actions/cache@v6.1.0
         with:
-          path: |
-            vendor/duckdb
-            vendor/nanoarrow
+          path: vendor/nanoarrow
           key: vendor-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/fetch-deps') }}
       - if: steps.vendor.outputs.cache-hit != 'true'
         run: scripts/fetch-deps

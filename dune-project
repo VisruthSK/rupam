@@ -26,7 +26,6 @@
   (ppx_expect :with-test)
   (qcheck-core :with-test)
   (cmdliner (= 2.1.2))
-  (conf-mingw-w64-g++-x86_64 (= :os "win32"))
   mosaic
   matrix
   (ocamlformat (and :with-dev-setup (= 0.29.0)))))

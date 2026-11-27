@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        dependency: [duckdb, nanoarrow]
+        dependency: [nanoarrow]
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
@@ -23,10 +23,7 @@ jobs:
       - name: Compare pinned and latest versions
         id: versions
         run: |
-          case "${{ matrix.dependency }}" in
-            duckdb) latest=$(gh release view --repo duckdb/duckdb --json tagName --jq '.tagName | ltrimstr("v")') ;;
-            nanoarrow) latest=$(gh release view --repo apache/arrow-nanoarrow --json tagName --jq '.tagName | ltrimstr("apache-arrow-nanoarrow-")') ;;
-          esac
+          latest=$(gh release view --repo apache/arrow-nanoarrow --json tagName --jq '.tagName | ltrimstr("apache-arrow-nanoarrow-")')
           echo "current=$(sed -n 's/^${{ matrix.dependency }}=//p' scripts/fetch-deps)" >> "$GITHUB_OUTPUT"
           echo "latest=$latest" >> "$GITHUB_OUTPUT"
 
@@ -42,15 +39,8 @@ jobs:
             exit 0
           fi
           sed -i "s/^$NAME=.*/$NAME=$LATEST/" scripts/fetch-deps
-          if [ "$NAME" = duckdb ]; then
-            for platform in linux-amd64 linux-arm64 osx-amd64 osx-arm64 windows-mingw; do
-              sum=$(curl -fsSL "https://github.com/duckdb/duckdb/releases/download/v$LATEST/duckdb-static-libs-$platform.tar.gz" | sha256sum | cut -d' ' -f1)
-              sed -i "s/platform=$platform sha=[0-9a-f]*/platform=$platform sha=$sum/" scripts/fetch-deps
-            done
-          else
-            sum=$(curl -fsSL "https://github.com/apache/arrow-nanoarrow/archive/refs/tags/apache-arrow-nanoarrow-$LATEST.tar.gz" | sha256sum | cut -d' ' -f1)
-            sed -i "s/^nanoarrow_sha=.*/nanoarrow_sha=$sum/" scripts/fetch-deps
-          fi
+          sum=$(curl -fsSL "https://github.com/apache/arrow-nanoarrow/archive/refs/tags/apache-arrow-nanoarrow-$LATEST.tar.gz" | sha256sum | cut -d' ' -f1)
+          sed -i "s/^nanoarrow_sha=.*/nanoarrow_sha=$sum/" scripts/fetch-deps
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git switch -c "$branch"

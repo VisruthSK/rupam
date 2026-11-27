@@ -1,5 +1,4 @@
 open Rupam
-open Rupam_native
 module C = TransformIR
 module T = Types
 
@@ -547,23 +546,10 @@ and table env (t : C.table) : frame =
   List.fold_left (fun frame (s : C.stage) -> stage env frame s.step) frame t.stages
 
 and read (file : C.file) =
-  let options =
-    match file.format with
-    | Parquet -> ""
-    | Csv | Tsv ->
-      Printf.sprintf
-        ", all_varchar = true, header = true, delim = %s, nullstr = [%s]"
-        (Data_file.literal (if file.format = Tsv then "\t" else ","))
-        (String.concat ", " (List.map Data_file.literal file.missing))
-  in
-  let reader =
-    match file.format with
-    | Parquet -> "read_parquet"
-    | Csv | Tsv -> "read_csv"
-  in
   let names, rows =
-    Data_file.query
-      ("SELECT * FROM " ^ reader ^ "(" ^ Data_file.literal file.path ^ options ^ ")")
+    match file.format with
+    | Parquet -> invalid_arg "the reference evaluator reads CSV and TSV inputs"
+    | Csv | Tsv -> delimited file
   in
   let parse typ = function
     | None -> Missing
@@ -585,6 +571,25 @@ and read (file : C.file) =
            n, Array.map (fun row -> parse typ row.(i)) rows)
         file.columns
   }
+
+and delimited (file : C.file) =
+  In_channel.with_open_bin file.path (fun channel ->
+    let sep = if file.format = Tsv then '\t' else ',' in
+    let s = Talon.Scan.make ~sep ~quote:'"' channel in
+    let header = ref None
+    and rows = ref [] in
+    while Talon.Scan.next s do
+      for r = 0 to Talon.Scan.rows s - 1 do
+        let fields = Array.init (Talon.Scan.fields s r) (Talon.Scan.text s r) in
+        match !header with
+        | None -> header := Some fields
+        | Some _ ->
+          rows
+          := Array.map (fun v -> if List.mem v file.missing then None else Some v) fields
+             :: !rows
+      done
+    done;
+    Option.value !header ~default:[||], Array.of_list (List.rev !rows))
 
 and join env (j : C.join) =
   let left = table env j.left

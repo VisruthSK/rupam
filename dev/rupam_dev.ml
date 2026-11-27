@@ -343,17 +343,33 @@ let guarded f path =
 
 let file = Arg.(required & pos 0 (some file) None & info [] ~docv:"FILE")
 
+let rows_script =
+  {|import sys
+import pyarrow.parquet as pq
+
+path, keys = sys.argv[1], sys.argv[2:]
+rows = pq.read_table(path).to_pylist()
+rows.sort(key=lambda r: tuple((r[k] is None, 0 if r[k] is None else r[k]) for k in keys))
+
+
+def text(v):
+    if v is None:
+        return "None"
+    if isinstance(v, bool):
+        return "true" if v else "false"
+    if isinstance(v, float):
+        return repr(v)
+    if hasattr(v, "isoformat"):
+        return v.isoformat()
+    return str(v)
+
+
+for row in rows:
+    print(" | ".join(text(v) for v in row.values()))
+|}
+;;
+
 let show path keys =
-  let order =
-    match keys with
-    | [] -> ""
-    | keys ->
-      " ORDER BY "
-      ^ String.concat ", " (List.map (fun k -> Printf.sprintf "%S NULLS LAST" k) keys)
-  in
-  let names, rows =
-    Data_file.query ("SELECT * FROM read_parquet(" ^ Data_file.literal path ^ ")" ^ order)
-  in
   let typed (c : Input.column) =
     c.name
     ^ ": "
@@ -366,14 +382,18 @@ let show path keys =
     (String.concat
        ", "
        (List.map typed (Data_file.columns ~missing:Input.default_missing path)));
-  ignore names;
-  Array.iter
-    (fun row ->
-       print_endline
-         (String.concat
-            " | "
-            (Array.to_list (Array.map (Option.value ~default:"None") row))))
-    rows
+  flush stdout;
+  let pid =
+    Unix.create_process
+      "python"
+      (Array.of_list ("python" :: "-c" :: rows_script :: path :: keys))
+      Unix.stdin
+      Unix.stdout
+      Unix.stderr
+  in
+  match Unix.waitpid [] pid with
+  | _, WEXITED 0 -> ()
+  | _ -> failwith ("python could not read the rows of " ^ path)
 ;;
 
 let frame () =
