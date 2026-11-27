@@ -9,6 +9,7 @@ Set Height 1080
 Set Padding 24
 Set Theme "Catppuccin Mocha"
 Set TypingSpeed 30ms
+Set Framerate 30
 
 Hide
 Type "rupam repl --target r-dplyr"
