@@ -10,9 +10,23 @@ permissions:
 
 jobs:
   checks:
-    uses: ./.github/workflows/ci.yml
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions:
-      contents: read
+      actions: read
+    steps:
+      - name: Require passing CI and Format runs for this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for workflow in CI Format; do
+            passed=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow "$workflow" \
+              --commit "$GITHUB_SHA" --status success --json databaseId --jq length)
+            if [ "$passed" = 0 ]; then
+              echo "$workflow has not passed on $GITHUB_SHA; push to main and wait for green before tagging" >&2
+              exit 1
+            fi
+          done
 
   build:
     needs: checks
