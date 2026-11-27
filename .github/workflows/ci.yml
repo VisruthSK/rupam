@@ -71,9 +71,9 @@ jobs:
           path: ${{ runner.os == 'Windows' && 'C:\.opam' || '~/.opam' }}
           key: opam-${{ runner.os }}-${{ runner.arch }}-${{ matrix.ocaml || '5.5' }}-${{ hashFiles('*.opam', '*.opam.locked') }}
       - if: ${{ matrix.fresh }}
-        run: opam install . --deps-only --with-test
+        run: opam install . --deps-only --with-test --with-dev-setup
       - if: ${{ !matrix.fresh && steps.opam.outputs.cache-hit != 'true' }}
-        run: opam install --deps-only --with-test ./rupam.opam.locked ./rupam-dev.opam.locked
+        run: opam install --deps-only --with-test --with-dev-setup ./rupam.opam.locked ./rupam-dev.opam.locked
       - uses: actions/cache@v6.1.0
         with:
           path: ${{ github.workspace }}/../dune-cache

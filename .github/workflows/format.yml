@@ -17,11 +17,26 @@ jobs:
       - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
-      - run: scripts/fetch-deps
+      - id: vendor
+        uses: actions/cache@v6.1.0
+        with:
+          path: |
+            vendor/duckdb
+            vendor/nanoarrow
+          key: vendor-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/fetch-deps') }}
+      - if: steps.vendor.outputs.cache-hit != 'true'
+        run: scripts/fetch-deps
       - uses: ocaml/setup-ocaml@v3.9.1
         with:
           ocaml-compiler: "5.5"
-      - uses: ocaml/setup-ocaml/lint-fmt@v3.9.1
+      - id: opam
+        uses: actions/cache@v6.1.0
+        with:
+          path: ~/.opam
+          key: opam-${{ runner.os }}-${{ runner.arch }}-5.5-${{ hashFiles('*.opam', '*.opam.locked') }}
+      - if: steps.opam.outputs.cache-hit != 'true'
+        run: opam install --deps-only --with-test --with-dev-setup ./rupam.opam.locked ./rupam-dev.opam.locked
+      - run: opam exec -- dune build @fmt
 
   verify-lockfile:
     runs-on: ubuntu-slim

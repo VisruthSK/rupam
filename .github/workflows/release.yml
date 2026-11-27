@@ -67,7 +67,7 @@ jobs:
         with:
           path: ${{ runner.os == 'Windows' && 'C:\.opam' || '~/.opam' }}
           key: opam-${{ runner.os }}-${{ runner.arch }}-5.5-${{ hashFiles('*.opam', '*.opam.locked') }}
-      - run: opam install --deps-only --with-test ./rupam.opam.locked ./rupam-dev.opam.locked
+      - run: opam install --deps-only --with-test --with-dev-setup ./rupam.opam.locked ./rupam-dev.opam.locked
       - run: |
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then export RUPAM_VERSION=${GITHUB_REF_NAME#v}; fi
           opam exec -- dune build --profile release bin/rupam_cli.exe
