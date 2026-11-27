@@ -458,10 +458,9 @@ and call ctx span (f : Syntax.expr) args =
            span
            Wrong_arguments
            (Printf.sprintf
-              "%s takes %d argument%s"
+              "%s takes %s"
               n
-              (List.length template.params)
-              (if List.length template.params = 1 then "" else "s"));
+              (Display.count (List.length template.params) "argument"));
        let free n =
          match List.assoc_opt n ctx.env.names with
          | Some (Function { id = None; _ }) -> true
@@ -694,9 +693,8 @@ and apply ctx span (f : C.expr) values =
       span
       Wrong_arguments
       (Printf.sprintf
-         "Expected %d argument%s, got %d"
-         (List.length params)
-         (if List.length params = 1 then "" else "s")
+         "Expected %s, got %d"
+         (Display.count (List.length params) "argument")
          (List.length values))
   | _ ->
     let result = T.fresh ctx.level in

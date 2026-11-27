@@ -80,11 +80,10 @@ let lock target strict path =
     let entry = Lock.establish ~project ~source:path items in
     Lock.print_schemas entry;
     Printf.printf
-      "Locked %s for %s: %d input%s\n"
+      "Locked %s for %s: %s\n"
       entry.source
       (Target.name entry.target)
-      (List.length entry.inputs)
-      (if List.length entry.inputs = 1 then "" else "s"))
+      (Display.count (List.length entry.inputs) "input"))
 ;;
 
 type emit =

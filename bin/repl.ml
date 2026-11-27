@@ -325,11 +325,10 @@ let present r (event : Session.event) =
   | Viewed (subject, result) -> r.view subject result
   | Inspection_failed d -> r.fail d
   | Schema (rows, columns) ->
-    let plural n noun = Printf.sprintf "%d %s%s" n noun (if n = 1 then "" else "s") in
     Printf.printf
       "%s \xc3\x97 %s\n"
-      (plural rows "row")
-      (plural (List.length columns) "column");
+      (Display.count rows "row")
+      (Display.count (List.length columns) "column");
     print_columns columns
   | Typed t -> print_endline (Types.display t)
   | Bars (column, f) -> List.iter print_endline (bars column f)

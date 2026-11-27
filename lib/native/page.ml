@@ -30,11 +30,9 @@ let format_cell ~digits typ =
 
 let summary page =
   Printf.sprintf
-    "%d %s × %d %s, %s"
-    page.total
-    (if page.total = 1 then "row" else "rows")
-    page.width
-    (if page.width = 1 then "column" else "columns")
+    "%s × %s, %s"
+    (Display.count page.total "row")
+    (Display.count page.width "column")
     page.ordering
 ;;
 
@@ -144,14 +142,7 @@ let lines ?(limit = 100) ~digits page =
   let remaining = page.total - page.offset - shown in
   let more =
     (if remaining > 0
-     then
-       [ [ ( Note
-           , Printf.sprintf
-               "… %d more %s"
-               remaining
-               (if remaining = 1 then "row" else "rows") )
-         ]
-       ]
+     then [ [ Note, Printf.sprintf "… %s more" (Display.count remaining "row") ] ]
      else [])
     @
     match hidden with

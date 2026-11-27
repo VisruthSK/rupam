@@ -45,3 +45,5 @@ let width text =
   in
   count 0 0
 ;;
+
+let count n noun = Printf.sprintf "%d %s%s" n noun (if n = 1 then "" else "s")
