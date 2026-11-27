@@ -438,58 +438,141 @@ let numeric t column =
   | Boolean | Text _ | Dictionary _ | Opaque -> false
 ;;
 
-let scan t column f =
-  Array.iter
-    (fun batch ->
-       let at = decoder t batch column ~lo:0 ~hi:batch.rows in
-       for i = 0 to batch.rows - 1 do
-         match at i with
-         | Missing -> f None
-         | Int n -> f (Some (Int64.to_float n))
-         | Float x -> f (Some x)
-         | Bool _ | Text _ | Date _ | Unsupported -> ()
-       done)
-    t.batches
+let unreadable () = failwith "The result file has an unreadable batch"
+
+let bitmap channel column ~rows =
+  if column.nulls = 0 || column.buffers.(0).length = 0 || rows = 0
+  then None
+  else (
+    let length = (rows + 7) / 8 in
+    if length > column.buffers.(0).length then unreadable ();
+    Some (bigbytes channel ~position:column.buffers.(0).position ~length))
 ;;
 
-let numbers t column size =
-  if not (numeric t column) then failwith "Expected a numeric column";
-  let values = Array.make size 0. in
+let bit (b : bigbytes) i =
+  Bigarray.Array1.unsafe_get b (i lsr 3) land (1 lsl (i land 7)) <> 0
+;;
+
+let decode_floats storage (b : bigbytes) (dst : float array) ~at ~rows =
+  match storage with
+  | Real 8 ->
+    for i = 0 to rows - 1 do
+      Array.unsafe_set dst (at + i) (Int64.float_of_bits (get64 b (8 * i)))
+    done
+  | Real _ ->
+    for i = 0 to rows - 1 do
+      Array.unsafe_set dst (at + i) (Int32.float_of_bits (get32 b (4 * i)))
+    done
+  | Integer { width = 8; _ } ->
+    for i = 0 to rows - 1 do
+      Array.unsafe_set dst (at + i) (Int64.to_float (get64 b (8 * i)))
+    done
+  | Integer { width = 4; signed = true } ->
+    for i = 0 to rows - 1 do
+      Array.unsafe_set dst (at + i) (Int32.to_float (get32 b (4 * i)))
+    done
+  | Integer { width = 4; signed = false } ->
+    for i = 0 to rows - 1 do
+      Array.unsafe_set
+        dst
+        (at + i)
+        (Int64.to_float (Int64.logand (Int64.of_int32 (get32 b (4 * i))) 0xFFFF_FFFFL))
+    done
+  | Integer { width = 2; signed } ->
+    for i = 0 to rows - 1 do
+      let v = get16 b (2 * i) in
+      Array.unsafe_set
+        dst
+        (at + i)
+        (float_of_int (if signed && v > 32767 then v - 65536 else v))
+    done
+  | Integer { signed; _ } ->
+    for i = 0 to rows - 1 do
+      let v = Bigarray.Array1.unsafe_get b i in
+      Array.unsafe_set
+        dst
+        (at + i)
+        (float_of_int (if signed && v > 127 then v - 256 else v))
+    done
+  | Boolean | Text _ | Dictionary _ | Opaque -> invalid_arg "decode_floats"
+;;
+
+let width = function
+  | Real w -> w
+  | Integer { width; _ } -> width
+  | Boolean | Text _ | Dictionary _ | Opaque -> invalid_arg "width"
+;;
+
+let floats t column =
+  let channel = live t in
+  let storage = t.storages.(column) in
+  let present =
+    Array.fold_left
+      (fun n batch -> n + batch.rows - batch.columns.(column).nulls)
+      0
+      t.batches
+  in
+  if present < 0 then unreadable ();
+  let values = Array.create_float present in
+  let scratch =
+    Array.create_float (Array.fold_left (fun m batch -> max m batch.rows) 0 t.batches)
+  in
   let count = ref 0 in
-  scan t column (function
-    | Some x when !count < size ->
-      values.(!count) <- x;
-      incr count
-    | _ -> ());
+  Array.iter
+    (fun batch ->
+       let c = batch.columns.(column) in
+       let rows = batch.rows in
+       if rows > 0
+       then (
+         let data = fixed channel c.buffers.(1) ~width:(width storage) ~lo:0 ~hi:rows in
+         match bitmap channel c ~rows with
+         | None ->
+           if !count + rows > present then unreadable ();
+           decode_floats storage data values ~at:!count ~rows;
+           count := !count + rows
+         | Some valid ->
+           decode_floats storage data scratch ~at:0 ~rows;
+           for i = 0 to rows - 1 do
+             if bit valid i
+             then (
+               if !count >= present then unreadable ();
+               Array.unsafe_set values !count (Array.unsafe_get scratch i);
+               incr count)
+           done))
+    t.batches;
+  if !count <> present then unreadable ();
   values
 ;;
 
-let distinct_floats values =
+let distinct_floats (values : float array) =
   let n = Array.length values in
   let capacity =
     let rec grow c = if c < 2 * n then grow (2 * c) else c in
     grow 16
   in
-  let slots = Array.make capacity 0L
+  let mask = capacity - 1 in
+  let slots = Bigarray.Array1.create Bigarray.int64 Bigarray.c_layout capacity
   and used = Bytes.make capacity '\000' in
   let distinct = ref 0 in
-  Array.iter
-    (fun x ->
-       let bits = Int64.bits_of_float (if x = 0. then 0. else x) in
-       let h = Int64.mul bits 0x9E3779B97F4A7C15L in
-       let rec probe s =
-         if Bytes.get used s = '\000'
-         then (
-           Bytes.set used s '\001';
-           slots.(s) <- bits;
-           incr distinct)
-         else if not (Int64.equal slots.(s) bits)
-         then probe ((s + 1) land (capacity - 1))
-       in
-       probe
-         (Int64.to_int (Int64.logxor h (Int64.shift_right_logical h 32))
-          land (capacity - 1)))
-    values;
+  for i = 0 to n - 1 do
+    let x = Array.unsafe_get values i in
+    let bits = Int64.bits_of_float (if x = 0. then 0. else x) in
+    let h = Int64.mul bits 0x9E3779B97F4A7C15L in
+    let s =
+      ref (Int64.to_int (Int64.logxor h (Int64.shift_right_logical h 32)) land mask)
+    in
+    while
+      Bytes.unsafe_get used !s <> '\000'
+      && not (Int64.equal (Bigarray.Array1.unsafe_get slots !s) bits)
+    do
+      s := (!s + 1) land mask
+    done;
+    if Bytes.unsafe_get used !s = '\000'
+    then (
+      Bytes.unsafe_set used !s '\001';
+      Bigarray.Array1.unsafe_set slots !s bits;
+      incr distinct)
+  done;
   !distinct
 ;;
 
@@ -500,35 +583,41 @@ type histogram =
   ; missing : int
   }
 
+let histogram_of (values : float array) ~missing ~bins =
+  let n = Array.length values in
+  let low = ref 0.
+  and high = ref 0. in
+  for i = 0 to n - 1 do
+    let x = Array.unsafe_get values i in
+    if i = 0 || x < !low then low := x;
+    if i = 0 || x > !high then high := x
+  done;
+  let low = !low
+  and high = !high in
+  let counts = Array.make bins 0 in
+  let span = (high /. 2.) -. (low /. 2.) in
+  let scale = float_of_int bins in
+  for i = 0 to n - 1 do
+    let x = Array.unsafe_get values i in
+    let position =
+      if span > 0. then ((x /. 2.) -. (low /. 2.)) /. span *. scale else 0.
+    in
+    let k =
+      if position >= scale
+      then bins - 1
+      else if position > 0.
+      then int_of_float position
+      else 0
+    in
+    counts.(k) <- counts.(k) + 1
+  done;
+  { low; high; counts; missing }
+;;
+
 let histogram t ~column ~bins =
   if not (numeric t column) then failwith "!hist needs a numeric column";
-  let low = ref 0.
-  and high = ref 0.
-  and present = ref 0
-  and missing = ref 0 in
-  scan t column (function
-    | None -> incr missing
-    | Some x ->
-      if !present = 0 || x < !low then low := x;
-      if !present = 0 || x > !high then high := x;
-      incr present);
-  let counts = Array.make bins 0 in
-  let span = (!high /. 2.) -. (!low /. 2.) in
-  scan t column (function
-    | None -> ()
-    | Some x ->
-      let position =
-        if span > 0. then ((x /. 2.) -. (!low /. 2.)) /. span *. float_of_int bins else 0.
-      in
-      let k =
-        if position >= float_of_int bins
-        then bins - 1
-        else if position > 0.
-        then int_of_float position
-        else 0
-      in
-      counts.(k) <- counts.(k) + 1);
-  { low = !low; high = !high; counts; missing = !missing }
+  let values = floats t column in
+  histogram_of values ~missing:(rows t - Array.length values) ~bins
 ;;
 
 type summary =
@@ -570,29 +659,63 @@ let rec select random (a : float array) lo hi k =
     if k <= !j then select random a lo !j k else if k >= !i then select random a !i hi k)
 ;;
 
-let quantile (values : float array) p =
+let quartiles (values : float array) =
   let n = Array.length values in
   if n = 0
-  then None
+  then None, None, None
   else (
-    let k = float_of_int (n - 1) *. p in
-    let i = int_of_float k in
-    let weight = k -. float_of_int i in
-    select (Random.State.make [| n |]) values 0 (n - 1) i;
-    let next = ref values.(min (i + 1) (n - 1)) in
-    for j = i + 2 to n - 1 do
-      if values.(j) < !next then next := values.(j)
+    let random = Random.State.make [| n |] in
+    let position p =
+      let k = float_of_int (n - 1) *. p in
+      let i = int_of_float k in
+      i, k -. float_of_int i
+    in
+    let value (i, weight) =
+      let next = ref values.(min (i + 1) (n - 1)) in
+      for j = i + 2 to n - 1 do
+        if values.(j) < !next then next := values.(j)
+      done;
+      Some (((1. -. weight) *. values.(i)) +. (weight *. !next))
+    in
+    let lower = position 0.25
+    and middle = position 0.5
+    and upper = position 0.75 in
+    let m = fst middle in
+    select random values 0 (n - 1) m;
+    if fst lower < m then select random values 0 (m - 1) (fst lower);
+    if fst upper > m then select random values (m + 1) (n - 1) (fst upper);
+    value lower, value middle, value upper)
+;;
+
+let moments (values : float array) ~midpoint ~scale =
+  let n = Array.length values in
+  let observations = float_of_int n in
+  let sum = ref 0. in
+  for i = 0 to n - 1 do
+    sum := !sum +. ((Array.unsafe_get values i -. midpoint) /. scale)
+  done;
+  let center = !sum /. observations in
+  let second = ref 0.
+  and third = ref 0. in
+  for i = 0 to n - 1 do
+    let d = ((Array.unsafe_get values i -. midpoint) /. scale) -. center in
+    second := !second +. (d *. d)
+  done;
+  if n >= 3 && !second <> 0.
+  then
+    for i = 0 to n - 1 do
+      let d = ((Array.unsafe_get values i -. midpoint) /. scale) -. center in
+      third := !third +. (d *. d *. d)
     done;
-    Some (((1. -. weight) *. values.(i)) +. (weight *. !next)))
+  center, !second, !third
 ;;
 
 let summary t ~column =
-  let histogram = histogram t ~column ~bins:20 in
-  let n = rows t - histogram.missing in
-  let values = numbers t column n in
-  let distinct = ref (distinct_floats values) in
-  let quantile = quantile values in
-  let scaled_sum f = Array.fold_left (fun sum value -> sum +. f value) 0. values in
+  if not (numeric t column) then failwith "!hist needs a numeric column";
+  let values = floats t column in
+  let n = Array.length values in
+  let histogram = histogram_of values ~missing:(rows t - n) ~bins:20 in
+  let distinct = distinct_floats values in
   let mean, sd, skewness =
     if n = 0
     then None, None, None
@@ -603,25 +726,13 @@ let summary t ~column =
       if scale = 0.
       then Some midpoint, (if n > 1 then Some 0. else None), None
       else (
-        let scaled x = (x -. midpoint) /. scale in
-        let center = scaled_sum scaled /. observations in
+        let center, second, third = moments values ~midpoint ~scale in
         let mean = midpoint +. (scale *. center) in
-        let deviation x = scaled x -. center in
-        let second =
-          scaled_sum (fun x ->
-            let d = deviation x in
-            d *. d)
-        in
         let sd = scale *. sqrt (second /. (observations -. 1.)) in
         let skewness =
           if n < 3 || second = 0.
           then None
           else (
-            let third =
-              scaled_sum (fun x ->
-                let d = deviation x in
-                d *. d *. d)
-            in
             let variance = second /. observations in
             let correction =
               sqrt (observations *. (observations -. 1.)) /. (observations -. 2.)
@@ -630,15 +741,8 @@ let summary t ~column =
         in
         Some mean, (if n > 1 && Float.is_finite sd then Some sd else None), skewness))
   in
-  { histogram
-  ; q1 = quantile 0.25
-  ; median = quantile 0.5
-  ; q3 = quantile 0.75
-  ; mean
-  ; sd
-  ; skewness
-  ; distinct = !distinct
-  }
+  let q1, median, q3 = quartiles values in
+  { histogram; q1; median; q3; mean; sd; skewness; distinct }
 ;;
 
 type frequencies =
@@ -651,8 +755,142 @@ type profile =
   | Numeric of summary
   | Frequencies of frequencies
 
-let frequencies t ~column =
-  let counts = Hashtbl.create 32 in
+type counter =
+  { mutable keys : string array
+  ; mutable hashes : int array
+  ; mutable counts : int array
+  ; mutable size : int
+  }
+
+let counter () =
+  { keys = Array.make 64 ""
+  ; hashes = Array.make 64 (-1)
+  ; counts = Array.make 64 0
+  ; size = 0
+  }
+;;
+
+let hash (data : Bytes.t) start stop =
+  let h = ref 0x0bf29ce484222325 in
+  for i = start to stop - 1 do
+    h := !h lxor Char.code (Bytes.unsafe_get data i) * 0x100000001b3
+  done;
+  !h land max_int
+;;
+
+let matches key (data : Bytes.t) start length =
+  String.length key = length
+  &&
+  let rec go i =
+    i = length
+    || (String.unsafe_get key i = Bytes.unsafe_get data (start + i) && go (i + 1))
+  in
+  go 0
+;;
+
+let rec grow c =
+  let capacity = 2 * Array.length c.keys in
+  let keys = c.keys
+  and hashes = c.hashes
+  and counts = c.counts in
+  c.keys <- Array.make capacity "";
+  c.hashes <- Array.make capacity (-1);
+  c.counts <- Array.make capacity 0;
+  c.size <- 0;
+  Array.iteri
+    (fun i h ->
+       if h >= 0
+       then (
+         let key = keys.(i) in
+         add c (Bytes.unsafe_of_string key) 0 (String.length key) h counts.(i)))
+    hashes
+
+and add c data start length h n =
+  if 2 * (c.size + 1) > Array.length c.keys then grow c;
+  let mask = Array.length c.keys - 1 in
+  let s = ref (h land mask) in
+  while
+    c.hashes.(!s) >= 0 && not (c.hashes.(!s) = h && matches c.keys.(!s) data start length)
+  do
+    s := (!s + 1) land mask
+  done;
+  if c.hashes.(!s) < 0
+  then (
+    c.hashes.(!s) <- h;
+    c.keys.(!s) <- Bytes.sub_string data start length;
+    c.size <- c.size + 1);
+  c.counts.(!s) <- c.counts.(!s) + n
+;;
+
+let count_texts t column ~width c =
+  let channel = live t in
+  let missing = ref 0 in
+  Array.iter
+    (fun batch ->
+       let col = batch.columns.(column) in
+       let rows = batch.rows in
+       if rows > 0
+       then (
+         let valid = bitmap channel col ~rows in
+         let offsets = fixed channel col.buffers.(1) ~width ~lo:0 ~hi:(rows + 1) in
+         let first = offset offsets ~width 0
+         and last = offset offsets ~width rows in
+         if first < 0 || last < first || last > col.buffers.(2).length then unreadable ();
+         let data =
+           bytes
+             channel
+             ~position:(col.buffers.(2).position + first)
+             ~length:(last - first)
+         in
+         for i = 0 to rows - 1 do
+           match valid with
+           | Some v when not (bit v i) -> incr missing
+           | _ ->
+             let start = offset offsets ~width i - first
+             and stop = offset offsets ~width (i + 1) - first in
+             if start < 0 || stop < start || stop > last - first then unreadable ();
+             add c data start (stop - start) (hash data start stop) 1
+         done))
+    t.batches;
+  !missing
+;;
+
+let count_dictionary t column ~width ~signed ~id c =
+  let channel = live t in
+  let values = dictionary t id in
+  let tally = Array.make (Array.length values) 0 in
+  let missing = ref 0 in
+  Array.iter
+    (fun batch ->
+       let col = batch.columns.(column) in
+       let rows = batch.rows in
+       if rows > 0
+       then (
+         let valid = bitmap channel col ~rows in
+         let indices = fixed channel col.buffers.(1) ~width ~lo:0 ~hi:rows in
+         for i = 0 to rows - 1 do
+           match valid with
+           | Some v when not (bit v i) -> incr missing
+           | _ ->
+             let k = Int64.to_int (integer indices ~width ~signed i) in
+             if k < 0 || k >= Array.length tally then unreadable ();
+             tally.(k) <- tally.(k) + 1
+         done))
+    t.batches;
+  Array.iteri
+    (fun k n ->
+       if n > 0
+       then (
+         match values.(k) with
+         | None -> missing := !missing + n
+         | Some s ->
+           let data = Bytes.unsafe_of_string s in
+           add c data 0 (String.length s) (hash data 0 (String.length s)) n))
+    tally;
+  !missing
+;;
+
+let count_cells t column c =
   let missing = ref 0 in
   let total = rows t in
   let rec scan offset =
@@ -663,23 +901,37 @@ let frequencies t ~column =
         (function
           | None -> incr missing
           | Some value ->
-            let n = Option.value (Hashtbl.find_opt counts value) ~default:0 in
-            Hashtbl.replace counts value (n + 1))
+            let data = Bytes.unsafe_of_string value in
+            add c data 0 (String.length value) (hash data 0 (String.length value)) 1)
         (cells t ~columns:[| column |] ~offset ~limit).(0);
       scan (offset + limit))
   in
   scan 0;
+  !missing
+;;
+
+let frequencies t ~column =
+  let c = counter () in
+  let missing =
+    match t.storages.(column) with
+    | Text width -> count_texts t column ~width c
+    | Dictionary { width; signed; id } -> count_dictionary t column ~width ~signed ~id c
+    | Boolean | Integer _ | Real _ | Opaque -> count_cells t column c
+  in
   let compare (left, n) (right, m) =
     match Int.compare m n with
     | 0 -> String.compare left right
     | order -> order
   in
-  let top =
-    Hashtbl.fold
-      (fun value count top ->
-         List.filteri (fun i _ -> i < 3) (List.merge compare [ value, count ] top))
-      counts
-      []
-  in
-  { missing = !missing; distinct = Hashtbl.length counts; top }
+  let top = ref [] in
+  Array.iteri
+    (fun i h ->
+       if h >= 0
+       then
+         top
+         := List.filteri
+              (fun i _ -> i < 3)
+              (List.merge compare [ c.keys.(i), c.counts.(i) ] !top))
+    c.hashes;
+  { missing; distinct = c.size; top = !top }
 ;;

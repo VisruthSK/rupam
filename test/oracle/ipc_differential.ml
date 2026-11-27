@@ -95,8 +95,98 @@ let compare_file file =
           Some (((1. -. w) *. sorted.(i)) +. (w *. sorted.(min (i + 1) (size - 1)))))
       in
       if not (Option.equal Float.equal a.median median)
-      then report file "median %s" names.(column)
+      then report file "median %s" names.(column);
+      let quantile p =
+        if size = 0
+        then None
+        else (
+          let k = float_of_int (size - 1) *. p in
+          let i = int_of_float k in
+          let w = k -. float_of_int i in
+          Some (((1. -. w) *. sorted.(i)) +. (w *. sorted.(min (i + 1) (size - 1)))))
+      in
+      let bits = Option.map Int64.bits_of_float in
+      if
+        not
+          (Option.equal Float.equal a.q1 (quantile 0.25)
+           && Option.equal Float.equal a.q3 (quantile 0.75))
+      then report file "quartiles %s" names.(column);
+      let distinct =
+        let seen = Hashtbl.create 64 in
+        Array.iter
+          (fun x ->
+             Hashtbl.replace seen (Int64.bits_of_float (if x = 0. then 0. else x)) ())
+          values;
+        Hashtbl.length seen
+      in
+      if a.distinct <> distinct then report file "distinct %s" names.(column);
+      let mean, sd, skewness =
+        if size = 0
+        then None, None, None
+        else (
+          let low = a.histogram.low
+          and high = a.histogram.high in
+          let midpoint = (high /. 2.) +. (low /. 2.) in
+          let scale = max (high -. midpoint) (midpoint -. low) in
+          let observations = float_of_int size in
+          if scale = 0.
+          then Some midpoint, (if size > 1 then Some 0. else None), None
+          else (
+            let scaled_sum f = Array.fold_left (fun sum v -> sum +. f v) 0. values in
+            let scaled x = (x -. midpoint) /. scale in
+            let center = scaled_sum scaled /. observations in
+            let deviation x = scaled x -. center in
+            let second = scaled_sum (fun x -> deviation x *. deviation x) in
+            let sd = scale *. sqrt (second /. (observations -. 1.)) in
+            let skewness =
+              if size < 3 || second = 0.
+              then None
+              else (
+                let third =
+                  scaled_sum (fun x ->
+                    let d = deviation x in
+                    d *. d *. d)
+                in
+                let variance = second /. observations in
+                let correction =
+                  sqrt (observations *. (observations -. 1.)) /. (observations -. 2.)
+                in
+                Some (correction *. (third /. observations) /. (variance *. sqrt variance)))
+            in
+            ( Some (midpoint +. (scale *. center))
+            , (if size > 1 && Float.is_finite sd then Some sd else None)
+            , skewness )))
+      in
+      if
+        bits a.mean <> bits mean
+        || bits a.sd <> bits sd
+        || bits a.skewness <> bits skewness
+      then report file "moments %s" names.(column)
     | _ -> ()
+  done;
+  for column = 0 to width - 1 do
+    let reference = Hashtbl.create 64
+    and missing = ref 0 in
+    Array.iter
+      (function
+        | None -> incr missing
+        | Some s ->
+          Hashtbl.replace
+            reference
+            s
+            (1 + Option.value (Hashtbl.find_opt reference s) ~default:0))
+      (O.cells theirs 0 rows [| column |]).(0);
+    let f = A.frequencies ours ~column in
+    let top =
+      Hashtbl.fold (fun k v acc -> (k, v) :: acc) reference []
+      |> List.sort (fun (a, n) (b, m) ->
+        match Int.compare m n with
+        | 0 -> String.compare a b
+        | order -> order)
+      |> List.filteri (fun i _ -> i < 3)
+    in
+    if f.missing <> !missing || f.distinct <> Hashtbl.length reference || f.top <> top
+    then report file "frequencies %s" names.(column)
   done;
   A.close ours;
   O.close theirs
