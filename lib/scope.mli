@@ -39,7 +39,7 @@ and env =
   }
 
 and inputs =
-  { columns : string -> Input.column list
+  { columns : missing:string list -> string -> Input.column list
   ; digest : string -> string
   ; contract : string -> Contract.t
   }

@@ -316,6 +316,7 @@ let file (f : C.file) =
     ; R.Call
         ( R.Name "c"
         , List.map (fun (n, t) -> R.Named (n, R.String (Host.column_kind t))) f.columns )
+    ; R.Call (R.Name "c", List.map (fun s -> R.String s) f.missing)
     ]
 ;;
 

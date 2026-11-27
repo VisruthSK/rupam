@@ -19,8 +19,10 @@ let policy_of (x : Syntax.expr) =
 ;;
 
 let sources =
-  [ "read_csv", "(String) -> Table; reads a CSV file"
-  ; "read_tsv", "(String) -> Table; reads a TSV file"
+  [ ( "read_csv"
+    , "(String) -> Table; reads a CSV file; missing_tokens = [\"\", \"NA\"] by default" )
+  ; ( "read_tsv"
+    , "(String) -> Table; reads a TSV file; missing_tokens = [\"\", \"NA\"] by default" )
   ; "read_parquet", "(String) -> Table; reads a Parquet file"
   ; "load", "(contract table) -> Table; reads a table declared in a contract"
   ]
@@ -1211,7 +1213,25 @@ and source ctx span (f : Syntax.expr) args : C.table =
   in
   match f.form, args with
   | ( Name (_, (("read_csv" | "read_tsv" | "read_parquet") as reader))
-    , [ (None, { form = Literal (Text path); _ }) ] ) ->
+    , (None, { form = Literal (Text path); _ }) :: options ) ->
+    let missing =
+      match options with
+      | [] -> Input.default_missing
+      | [ (Some "missing_tokens", ({ form = List tokens; _ } as given)) ] ->
+        if reader = "read_parquet"
+        then fail given.span Wrong_arguments "read_parquet has no missing_tokens";
+        List.map
+          (function
+            | ({ form = Literal (Text token); _ } : Syntax.expr) -> token
+            | other ->
+              fail other.span Wrong_arguments "missing_tokens takes a list of strings")
+          tokens
+      | (_, (other : Syntax.expr)) :: _ ->
+        fail
+          other.span
+          Wrong_arguments
+          (reader ^ " takes a path and optionally missing_tokens = [\"...\"]")
+    in
     let path = plain path in
     let format = Input.format path in
     let expected : Input.format =
@@ -1232,9 +1252,10 @@ and source ctx span (f : Syntax.expr) args : C.table =
                span
                Unsupported_column_type
                (Printf.sprintf "Column %s has unsupported type %s" c.name other))
-        (Diagnostic.locate span (fun () -> ctx.env.inputs.columns path))
+        (Diagnostic.locate span (fun () -> ctx.env.inputs.columns ~missing path))
     in
-    { source = Read { path; digest = ctx.env.inputs.digest path; format; columns }
+    { source =
+        Read { path; digest = ctx.env.inputs.digest path; format; columns; missing }
     ; stages = []
     ; schema = columns
     ; rest = None
@@ -1260,7 +1281,9 @@ and source ctx span (f : Syntax.expr) args : C.table =
         fail span Wrong_arguments ("Contracted table " ^ n ^ " has no Parquet source")
     in
     let physical =
-      List.map (fun (c : Input.column) -> c.name, c.typ) (ctx.env.inputs.columns path)
+      List.map
+        (fun (c : Input.column) -> c.name, c.typ)
+        (ctx.env.inputs.columns ~missing:Input.default_missing path)
     in
     let columns =
       List.map
@@ -1293,7 +1316,12 @@ and source ctx span (f : Syntax.expr) args : C.table =
           { contract
           ; table
           ; file =
-              { path; digest = ctx.env.inputs.digest path; format = Parquet; columns }
+              { path
+              ; digest = ctx.env.inputs.digest path
+              ; format = Parquet
+              ; columns
+              ; missing = Input.default_missing
+              }
           }
     ; stages = []
     ; schema = columns

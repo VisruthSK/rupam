@@ -135,6 +135,7 @@ and file =
   ; digest : string
   ; format : Input.format
   ; columns : (string * Types.t) list
+  ; missing : string list
   }
 
 and join =

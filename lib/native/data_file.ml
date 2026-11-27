@@ -22,9 +22,7 @@ let digest path =
     feed Digestif.SHA256.empty)
 ;;
 
-let columns path : Input.column list =
-  if not (Sys.file_exists path)
-  then Diagnostic.fail Unreadable_input ("No such data file " ^ path);
+let parquet_columns path : Input.column list =
   let names, rows = query ("DESCRIBE SELECT * FROM " ^ reader path) in
   let field name row =
     match Array.find_index (String.equal name) names with
@@ -64,4 +62,12 @@ let columns path : Input.column list =
        ; nullable = Option.value counts.(0).(i) ~default:"0" <> "0"
        })
     described
+;;
+
+let columns ~missing path : Input.column list =
+  if not (Sys.file_exists path)
+  then Diagnostic.fail Unreadable_input ("No such data file " ^ path);
+  match format path with
+  | Parquet -> parquet_columns path
+  | (Csv | Tsv) as format -> Delimited.columns ~missing ~path format
 ;;

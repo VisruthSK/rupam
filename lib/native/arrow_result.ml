@@ -1,4 +1,4 @@
-open Talon_ipc
+open Talon
 
 type bigbytes = Ipc.bigbytes
 

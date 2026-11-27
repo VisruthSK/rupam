@@ -42,7 +42,7 @@ and env =
   }
 
 and inputs =
-  { columns : string -> Input.column list
+  { columns : missing:string list -> string -> Input.column list
   ; digest : string -> string
   ; contract : string -> Contract.t
   }
@@ -53,7 +53,12 @@ let unresolved path =
     ("The compiler was given no way to read " ^ path ^ "; resolve inputs before checking")
 ;;
 
-let offline = { columns = unresolved; digest = unresolved; contract = unresolved }
+let offline =
+  { columns = (fun ~missing:_ path -> unresolved path)
+  ; digest = unresolved
+  ; contract = unresolved
+  }
+;;
 
 let empty ?(inputs = offline) ~directory ~strict () =
   { names = []

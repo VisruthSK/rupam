@@ -6,7 +6,7 @@ import pyarrow.parquet as pq
 ARROW_TYPES = {"Int64": pa.int64(), "Float64": pa.float64(), "Bool": pa.bool_(), "String": pa.string(), "Date": pa.date32()}
 
 
-def rp_read(path, format, columns):
+def rp_read(path, format, columns, missing):
     if format == "parquet":
         table = pq.read_table(path, columns=list(columns))
     else:
@@ -15,7 +15,7 @@ def rp_read(path, format, columns):
             parse_options=pacsv.ParseOptions(ignore_empty_lines=False, delimiter="\t" if format == "tsv" else ","),
             convert_options=pacsv.ConvertOptions(
                 column_types={name: ARROW_TYPES[kind] for name, kind in columns.items()},
-                null_values=[""],
+                null_values=missing,
                 strings_can_be_null=True,
             ),
         )

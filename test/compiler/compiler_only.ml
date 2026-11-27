@@ -3,7 +3,7 @@ open Rupam
 let inputs : Scope.inputs =
   { Scope.offline with
     columns =
-      (fun _ ->
+      (fun ~missing:_ _ ->
         [ { Input.name = "species"; typ = Supported String; nullable = false }
         ; { name = "mass"; typ = Supported Int; nullable = true }
         ])

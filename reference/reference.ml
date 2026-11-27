@@ -547,13 +547,23 @@ and table env (t : C.table) : frame =
   List.fold_left (fun frame (s : C.stage) -> stage env frame s.step) frame t.stages
 
 and read (file : C.file) =
+  let options =
+    match file.format with
+    | Parquet -> ""
+    | Csv | Tsv ->
+      Printf.sprintf
+        ", all_varchar = true, header = true, delim = %s, nullstr = [%s]"
+        (Data_file.literal (if file.format = Tsv then "\t" else ","))
+        (String.concat ", " (List.map Data_file.literal file.missing))
+  in
   let reader =
     match file.format with
     | Parquet -> "read_parquet"
     | Csv | Tsv -> "read_csv"
   in
   let names, rows =
-    Data_file.query ("SELECT * FROM " ^ reader ^ "(" ^ Data_file.literal file.path ^ ")")
+    Data_file.query
+      ("SELECT * FROM " ^ reader ^ "(" ^ Data_file.literal file.path ^ options ^ ")")
   in
   let parse typ = function
     | None -> Missing

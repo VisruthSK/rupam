@@ -347,6 +347,7 @@ let file (f : C.file) =
     [ P.Str f.path
     ; P.Str (Input.format_name f.format)
     ; P.Dict (List.map (fun (n, t) -> P.Str n, P.Str (Host.column_kind t)) f.columns)
+    ; P.List (List.map (fun s -> P.Str s) f.missing)
     ]
 ;;
 

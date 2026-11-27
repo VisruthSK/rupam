@@ -362,7 +362,10 @@ let show path keys =
     | Supported t -> Types.display (if c.nullable then Types.optional t else t)
     | Unsupported raw -> raw
   in
-  print_endline (String.concat ", " (List.map typed (Data_file.columns path)));
+  print_endline
+    (String.concat
+       ", "
+       (List.map typed (Data_file.columns ~missing:Input.default_missing path)));
   ignore names;
   Array.iter
     (fun row ->

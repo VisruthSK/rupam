@@ -28,3 +28,5 @@ let format_name = function
   | Csv -> "csv"
   | Tsv -> "tsv"
 ;;
+
+let default_missing = [ ""; "NA" ]
