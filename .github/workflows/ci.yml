@@ -3,8 +3,14 @@ name: CI
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - 'docs/spec/**'
+      - 'docs/theory/**'
+      - 'formal/**'
+      - '.github/workflows/lean.yml'
   pull_request:
   merge_group:
+  workflow_dispatch:
 
 permissions: {}
 
@@ -18,14 +24,36 @@ jobs:
     timeout-minutes: 5
     permissions:
       contents: read
+    outputs:
+      compiler: ${{ steps.paths.outputs.compiler }}
     steps:
       - uses: actions/checkout@v7.0.1
         with:
+          fetch-depth: ${{ (github.event_name == 'pull_request' || github.event_name == 'merge_group') && '0' || '1' }}
           persist-credentials: false
+      # The required PR checks need a status even when all paths are ignored.
+      - name: Check for compiler changes
+        id: paths
+        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+        shell: bash
+        run: |
+          changed=$(git diff --name-only --no-renames "$BASE" HEAD -- . \
+            ':(exclude,glob)docs/spec/**' \
+            ':(exclude,glob)docs/theory/**' \
+            ':(exclude,glob)formal/**' \
+            ':(exclude,literal).github/workflows/lean.yml')
+          if [[ -z "$changed" ]]; then
+            echo 'compiler=false' >> "$GITHUB_OUTPUT"
+          fi
       - run: shellcheck scripts/fetch-deps scripts/dev scripts/lock-deps
+        if: steps.paths.outputs.compiler != 'false'
       - run: python3 dev/declared.py .
+        if: steps.paths.outputs.compiler != 'false'
 
   test:
+    needs: scripts
     strategy:
       fail-fast: false
       matrix:
@@ -37,7 +65,8 @@ jobs:
           - os: ubuntu-latest
             ocaml: "5.4"
             fresh: true
-    runs-on: ${{ matrix.os }}
+    # Keep the required matrix check names while skipping the compiler steps.
+    runs-on: ${{ needs.scripts.outputs.compiler == 'false' && 'ubuntu-slim' || matrix.os }}
     timeout-minutes: 60
     permissions:
       contents: read
@@ -45,57 +74,69 @@ jobs:
       run:
         shell: bash
     env:
+      RUN_COMPILER: ${{ needs.scripts.outputs.compiler != 'false' }}
       DUNE_CACHE: enabled
       DUNE_CACHE_ROOT: ${{ github.workspace }}/../dune-cache
     steps:
       - uses: actions/checkout@v7.0.1
+        if: env.RUN_COMPILER == 'true'
         with:
           persist-credentials: false
 
       - id: vendor
+        if: env.RUN_COMPILER == 'true'
         uses: actions/cache@v6.1.0
         with:
           path: |
             vendor/duckdb
             vendor/nanoarrow
           key: vendor-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/fetch-deps') }}
-      - if: steps.vendor.outputs.cache-hit != 'true'
+      - if: env.RUN_COMPILER == 'true' && steps.vendor.outputs.cache-hit != 'true'
         run: scripts/fetch-deps
 
       - uses: ocaml/setup-ocaml@v3.9.1
+        if: env.RUN_COMPILER == 'true'
         with:
           ocaml-compiler: ${{ matrix.ocaml || '5.5.2' }}
       - id: opam
-        if: ${{ !matrix.fresh }}
+        if: env.RUN_COMPILER == 'true' && !matrix.fresh
         uses: actions/cache@v6.1.0
         with:
           path: _opam
           key: opam-${{ runner.os }}-${{ runner.arch }}-${{ matrix.ocaml || '5.5.2' }}-${{ hashFiles('*.opam', '*.opam.locked') }}
-      - if: ${{ !matrix.fresh }}
+      - if: env.RUN_COMPILER == 'true' && !matrix.fresh
         run: opam install --deps-only --depext-only --with-test --with-dev-setup ./rupam.opam.locked ./rupam-dev.opam.locked
-      - if: ${{ matrix.fresh }}
+      - if: env.RUN_COMPILER == 'true' && matrix.fresh
         run: opam install . --deps-only --with-test --with-dev-setup
-      - if: ${{ !matrix.fresh && steps.opam.outputs.cache-hit != 'true' }}
+      - if: env.RUN_COMPILER == 'true' && !matrix.fresh && steps.opam.outputs.cache-hit != 'true'
         run: opam install --deps-only --with-test --with-dev-setup ./rupam.opam.locked ./rupam-dev.opam.locked
       - uses: actions/cache@v6.1.0
+        if: env.RUN_COMPILER == 'true'
         with:
           path: ${{ github.workspace }}/../dune-cache
           key: dune-${{ runner.os }}-${{ runner.arch }}-${{ matrix.ocaml || '5.5.2' }}-${{ github.sha }}
           restore-keys: dune-${{ runner.os }}-${{ runner.arch }}-${{ matrix.ocaml || '5.5.2' }}-
       - run: opam exec -- dune build @all
+        if: env.RUN_COMPILER == 'true'
 
       - uses: astral-sh/setup-uv@v10.4.0
+        if: env.RUN_COMPILER == 'true'
         with:
           enable-cache: true
       - run: uv sync --locked
+        if: env.RUN_COMPILER == 'true'
 
       - uses: r-lib/actions/setup-r@v2.14.0
+        if: env.RUN_COMPILER == 'true'
         with:
           use-public-rspm: true
           windows-path-include-rtools: false
       - uses: r-lib/actions/setup-r-dependencies@v2.14.0
+        if: env.RUN_COMPILER == 'true'
         with:
           packages: any::dplyr, any::tidyr, any::bit64, any::jsonlite, any::arrow, any::tzdb
 
       - run: opam exec -- uv run --locked dune runtest
+        if: env.RUN_COMPILER == 'true'
       - run: opam exec -- uv run --locked dune build @integration
+        if: env.RUN_COMPILER == 'true'
