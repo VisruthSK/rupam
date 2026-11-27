@@ -97,7 +97,9 @@ jobs:
       - uses: actions/upload-artifact@v7.0.2
         with:
           name: ${{ matrix.platform }}
-          path: dist/rupam-*.*
+          path: |
+            dist/rupam-*.tar.gz
+            dist/rupam-*.zip
 
   publish:
     needs: build
