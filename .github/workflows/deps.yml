@@ -10,54 +10,38 @@ permissions:
   pull-requests: write
 
 jobs:
-  update:
+  duckdb:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        dependency: [duckdb, nanoarrow]
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v7.0.1
 
-      - name: Compare pinned and latest versions
-        id: versions
+      - name: Open a pull request when the development oracle has a newer DuckDB
         run: |
-          case "${{ matrix.dependency }}" in
-            duckdb) latest=$(gh release view --repo duckdb/duckdb --json tagName --jq '.tagName | ltrimstr("v")') ;;
-            nanoarrow) latest=$(gh release view --repo apache/arrow-nanoarrow --json tagName --jq '.tagName | ltrimstr("apache-arrow-nanoarrow-")') ;;
-          esac
-          echo "current=$(sed -n 's/^${{ matrix.dependency }}=//p' scripts/fetch-deps)" >> "$GITHUB_OUTPUT"
-          echo "latest=$latest" >> "$GITHUB_OUTPUT"
-
-      - name: Open a pull request with the new pin and checksums
-        if: steps.versions.outputs.latest != steps.versions.outputs.current
-        env:
-          NAME: ${{ matrix.dependency }}
-          LATEST: ${{ steps.versions.outputs.latest }}
-        run: |
-          branch="$NAME-$LATEST"
+          latest=$(gh release view --repo duckdb/duckdb --json tagName --jq '.tagName | ltrimstr("v")')
+          current=$(sed -n 's/^duckdb=//p' scripts/fetch-deps)
+          if [ "$latest" = "$current" ]; then
+            echo "DuckDB $current is current"
+            exit 0
+          fi
+          branch="duckdb-$latest"
           if git ls-remote --exit-code --heads origin "$branch" > /dev/null; then
             echo "$branch already proposed"
             exit 0
           fi
-          sed -i "s/^$NAME=.*/$NAME=$LATEST/" scripts/fetch-deps
-          if [ "$NAME" = duckdb ]; then
-            for platform in linux-amd64 linux-arm64 osx-amd64 osx-arm64 windows-mingw; do
-              sum=$(curl -fsSL "https://github.com/duckdb/duckdb/releases/download/v$LATEST/duckdb-static-libs-$platform.tar.gz" | sha256sum | cut -d' ' -f1)
-              sed -i "s/platform=$platform sha=[0-9a-f]*/platform=$platform sha=$sum/" scripts/fetch-deps
-            done
-          else
-            sum=$(curl -fsSL "https://github.com/apache/arrow-nanoarrow/archive/refs/tags/apache-arrow-nanoarrow-$LATEST.tar.gz" | sha256sum | cut -d' ' -f1)
-            sed -i "s/^nanoarrow_sha=.*/nanoarrow_sha=$sum/" scripts/fetch-deps
-          fi
+          sed -i "s/^duckdb=.*/duckdb=$latest/" scripts/fetch-deps
+          for platform in linux-amd64 linux-arm64 osx-amd64 osx-arm64 windows-mingw; do
+            sum=$(curl -fsSL "https://github.com/duckdb/duckdb/releases/download/v$latest/duckdb-static-libs-$platform.tar.gz" | sha256sum | cut -d' ' -f1)
+            sed -i "s/platform=$platform sha=[0-9a-f]*/platform=$platform sha=$sum/" scripts/fetch-deps
+          done
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git switch -c "$branch"
-          git commit -am "Update $NAME to $LATEST"
+          git commit -am "Update the DuckDB development oracle to $latest"
           git push -u origin "$branch"
-          gh pr create --title "Update $NAME to $LATEST" \
-            --body "Pins $NAME $LATEST in scripts/fetch-deps with fresh SHA-256 checksums. CI must pass, including the viewer and session tests, before merging."
+          gh pr create --title "Update the DuckDB development oracle to $latest" \
+            --body "Pins DuckDB $latest in scripts/fetch-deps with fresh SHA-256 checksums. DuckDB is a development oracle only; rupam.exe never links it."
 
   opam:
     runs-on: ubuntu-latest

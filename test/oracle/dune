@@ -1,16 +1,7 @@
-(library
- (name nanoarrow_oracle)
- (modules nanoarrow_oracle)
- (libraries nanoarrow)
- (foreign_stubs
-  (language c)
-  (names arrow_stubs)
-  (include_dirs ../../vendor/nanoarrow/include)))
-
 (executable
  (name ipc_differential)
  (modules ipc_differential)
- (libraries yojson rupam_native nanoarrow_oracle))
+ (libraries yojson rupam_native))
 
 (rule
  (alias integration)
@@ -23,7 +14,7 @@
 (executable
  (name ipc_bench)
  (modules ipc_bench)
- (libraries unix rupam_native nanoarrow_oracle))
+ (libraries unix rupam_native))
 
 (rule
  (alias bench)

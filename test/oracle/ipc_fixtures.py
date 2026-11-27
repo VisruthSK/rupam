@@ -95,5 +95,21 @@ pl.concat([frame] * 5, rechunk=False).write_ipc(
 levels = [maybe(rng.choice(["low", "mid", "high", "é"])) for _ in range(n)]
 dictionary = pa.table({"level": pa.array(levels, pa.string()).dictionary_encode()})
 write("dictionary", dictionary, [400, 0, 600])
-with open(os.path.join(out, "dictionary.json"), "w", encoding="utf-8") as f:
-    json.dump(levels, f)
+epoch = datetime.date(1970, 1, 1)
+
+
+def plain(v):
+    if isinstance(v, float) and (math.isnan(v) or math.isinf(v)):
+        return "nan" if math.isnan(v) else ("inf" if v > 0 else "-inf")
+    if isinstance(v, datetime.date):
+        return (v - epoch).days
+    return v
+
+
+for name in sorted(os.listdir(out)):
+    if name.endswith(".arrow"):
+        table = pa.ipc.open_file(os.path.join(out, name)).read_all()
+        columns = [{"name": f.name, "values": [plain(v) for v in c.to_pylist()]}
+                   for f, c in zip(table.schema, table.columns)]
+        with open(os.path.join(out, name[: -len(".arrow")] + ".json"), "w", encoding="utf-8") as f:
+            json.dump(columns, f)
