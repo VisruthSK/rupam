@@ -53,11 +53,12 @@ freely, and every file and schema format stays at version 1.
 | tidyr | 1.0.0 | `pivot_wider` |
 | arrow (R) | current CRAN release | ingestion and Parquet; requires R ≥ 4.2 |
 | bit64 | 4.0 | exact `Int` |
+| tzdb | current CRAN release | arrow's time zone database; without it arrow prints a warning on Windows |
 | R | 4.2 | arrow's `Depends`; dplyr 1.1.0 alone needs 3.5 |
 | Polars | 2.2 | 2.x expression API; the locked development environment |
 | pyarrow | 20 | Arrow transfer |
 | Python | 3.10 | Polars 2.x; generated code needs 3.8 (`:=`) |
-| OCaml | 5.5 | build only |
+| OCaml | 5.4 | build only |
 
 The R and Python floors are derived, not yet tested; they become supported
 once CI passes the oldest combination. Minimum supported, tested and recommended versions are listed separately in

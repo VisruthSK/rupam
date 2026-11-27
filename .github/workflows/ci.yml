@@ -66,7 +66,7 @@ jobs:
           windows-path-include-rtools: false
       - uses: r-lib/actions/setup-r-dependencies@v2.14.0
         with:
-          packages: any::dplyr, any::tidyr, any::bit64, any::jsonlite, any::arrow
+          packages: any::dplyr, any::tidyr, any::bit64, any::jsonlite, any::arrow, any::tzdb
 
       - run: opam exec -- uv run --locked dune runtest
       - run: opam exec -- uv run --locked dune build @integration
