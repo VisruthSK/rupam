@@ -3,8 +3,8 @@
  (libraries unix)
  (foreign_stubs
   (language c)
-  (extra_deps blake3_neon.c)
-  (names blake3 blake3_dispatch blake3_portable arm_neon blake3_stubs))
+  (extra_deps blake3.c blake3_neon.c)
+  (names blake3_dispatch blake3_portable arm_neon blake3_stubs))
  (foreign_stubs
   (language c)
   (flags

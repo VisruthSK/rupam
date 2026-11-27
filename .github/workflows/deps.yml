@@ -135,26 +135,28 @@ jobs:
     steps:
       - uses: actions/checkout@v7.0.1
 
-      - name: Report upstream changes to the forked Talon and lz sources
+      - name: Propose reviewing a Raven release that changes the forked sources
         run: |
           pinned=$(cat vendor/talon/UPSTREAM)
-          latest=$(gh api repos/raven-ml/raven/commits/main --jq .sha)
-          if [ "$latest" = "$pinned" ]; then
-            echo "Raven $pinned is current"
+          tag=$(gh release view --repo raven-ml/raven --json tagName --jq .tagName)
+          status=$(gh api "repos/raven-ml/raven/compare/$pinned...$tag" --jq .status)
+          if [ "$status" != ahead ]; then
+            echo "Raven $tag is not ahead of the pinned base $pinned"
             exit 0
           fi
-          files=$(gh api "repos/raven-ml/raven/compare/$pinned...$latest" --jq '.files[].filename' \
+          files=$(gh api "repos/raven-ml/raven/compare/$pinned...$tag" --jq '.files[].filename' \
             | grep -E '^packages/(talon/lib/(arrow/ipc|arrow/types|csv/scan|parquet/(thrift|meta))\.mli?|lz/lib/)' || true)
-          branch="talon-upstream-${latest:0:12}"
+          branch="raven-$tag"
           if [ -z "$files" ] || git ls-remote --exit-code --heads origin "$branch" > /dev/null; then
-            echo "Nothing new to review"
+            echo "Raven $tag changes nothing this fork vendors"
             exit 0
           fi
+          commit=$(gh api "repos/raven-ml/raven/commits/$tag" --jq .sha)
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git switch -c "$branch"
-          echo "$latest" > vendor/talon/UPSTREAM
-          git commit -am "Review Raven upstream changes to the forked readers"
+          echo "$commit" > vendor/talon/UPSTREAM
+          git commit -am "Review Raven $tag changes to the forked readers"
           git push -u origin "$branch"
-          gh pr create --title "Review Raven changes to the forked Talon readers" \
-            --body "$(printf 'Raven %s...%s changed files this fork vendors:\n\n%s\n\nPort the relevant changes into vendor/talon and vendor/lz before merging.' "$pinned" "$latest" "$files")"
+          gh pr create --title "Review Raven $tag changes to the forked Talon readers" \
+            --body "$(printf 'Raven %s changed files this fork vendors since %s:\n\n%s\n\nPort the relevant changes into vendor/talon and vendor/lz before merging.' "$tag" "$pinned" "$files")"
