@@ -21,6 +21,7 @@ val env : t -> Scope.env
 val directory : t -> string
 val project : t -> Project.t
 val target : t -> Target.t option
+val warm : t -> unit
 val set_target : t -> Target.t -> origin:string -> unit
 val path : t -> string option
 val revision : t -> int

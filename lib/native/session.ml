@@ -108,7 +108,7 @@ let host ?(started = fun _ -> ()) t =
     if h.target <> target
     then (
       let module B = (val Backend.of_target target) in
-      ignore (Worker.evaluate h.worker B.preamble);
+      Worker.send h.worker B.preamble;
       h.target <- target);
     h
   | _ ->
@@ -126,7 +126,7 @@ let host ?(started = fun _ -> ()) t =
     in
     t.host <- Some h;
     started worker;
-    ignore (Worker.evaluate worker B.preamble);
+    Worker.send worker B.preamble;
     h
 ;;
 
@@ -574,9 +574,16 @@ let code t ?(mode = Definition) target source =
   | (Definition | Full | Expression), _ -> B.table names (table t source)
 ;;
 
+let warm t =
+  match host t with
+  | _ -> ()
+  | exception Diagnostic.Error _ -> ()
+;;
+
 let set_target t target ~origin =
   t.project
-  <- { t.project with target = { value = Some target; origin = Project.Session origin } }
+  <- { t.project with target = { value = Some target; origin = Project.Session origin } };
+  warm t
 ;;
 
 let undo t =

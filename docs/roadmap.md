@@ -30,7 +30,8 @@ not yet built.
   compiler and browser worker.
 - Generate differential programs from typed TransformIR rather than source
   text, and shrink each failure into a pending fixture.
-- `DateTime`, `Time` and zones; nominal types and units (C33, C34, C95).
+>>>>
+
 
 ## 2. Analytical core
 
@@ -68,8 +69,8 @@ In order of conformance cases unlocked:
   ~740 ms interpreter and package start (`rupam-dev bench`).
 - Reading CSV in R takes ~435 ms for penguins against ~117 ms in Python;
   profile the R reader and the separate schema scan.
-- Set regression budgets from `frames.exe` (1M rows: PgDn/PgUp p95 2.5 ms,
-  viewer open 21 ms) and `rupam-dev bench`, and run both in CI.
+>>>>
+
 
 ## 4. Public MVP
 
@@ -85,6 +86,7 @@ with R and Python only as reference backends.
 ## 5. After the MVP
 
 - Data-discovered enums and `as_enum` ([Future](spec/future.md)).
+- `DateTime`, `Time` and zones; nominal types and units (C33, C34, C95).
 - A minimal Talon-based columnar library replacing DuckDB and nanoarrow
   ([brief](briefs/talon-columnar-extraction.md)), against the service
   interfaces from the platform separation.

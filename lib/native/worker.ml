@@ -20,6 +20,7 @@ type t =
   ; requests : out_channel
   ; replies : in_channel
   ; mutable revision : int
+  ; mutable pending : int list
   ; lifecycle : Mutex.t
   ; mutable stopped : bool
   }
@@ -43,7 +44,10 @@ for line in sys.stdin:
         reply = {"error": str(exc)}
         if getattr(exc, "code", None):
             reply["code"] = exc.code
-    print(json.dumps(dict(reply, revision=request["revision"])), flush=True)
+    try:
+        print(json.dumps(dict(reply, revision=request["revision"])), flush=True)
+    except BrokenPipeError:
+        break
 |}
 ;;
 
@@ -60,8 +64,12 @@ repeat {
     list(output = paste(c(output, ""), collapse = "\n"))
   }, error = function(e) c(list(error = conditionMessage(e)), if (is.character(e$code)) list(code = e$code)))
   reply$revision <- request$revision
-  cat(jsonlite::toJSON(reply, auto_unbox = TRUE), "\n", sep = "")
-  flush(stdout())
+  delivered <- tryCatch({
+    cat(jsonlite::toJSON(reply, auto_unbox = TRUE), "\n", sep = "")
+    flush(stdout())
+    TRUE
+  }, error = function(e) FALSE)
+  if (!delivered) break
 }
 |}
 ;;
@@ -87,6 +95,7 @@ let start (runtime : Runtime.t) (language : Target.language) =
   ; requests = Unix.out_channel_of_descr requests
   ; replies = Unix.in_channel_of_descr replies
   ; revision = 0
+  ; pending = []
   ; lifecycle = Mutex.create ()
   ; stopped = false
   }
@@ -131,22 +140,42 @@ let host_error message =
 
 let language w = w.language
 
-let evaluate w script =
+let request w script =
   w.revision <- w.revision + 1;
+  try
+    Yojson.Safe.to_channel w.requests (yojson_of_request { revision = w.revision; script });
+    output_char w.requests '\n';
+    flush w.requests;
+    w.revision
+  with
+  | exn ->
+    stop w;
+    raise exn
+;;
+
+let receive w revision =
   let reply =
-    try
-      Yojson.Safe.to_channel
-        w.requests
-        (yojson_of_request { revision = w.revision; script });
-      output_char w.requests '\n';
-      flush w.requests;
-      reply_of_yojson (Yojson.Safe.from_string (input_line w.replies))
-    with
+    try reply_of_yojson (Yojson.Safe.from_string (input_line w.replies)) with
     | exn ->
       stop w;
       raise exn
   in
-  if reply.revision <> w.revision then invalid_arg "Stale backend response";
+  if reply.revision <> revision then invalid_arg "Stale backend response";
+  reply
+;;
+
+let send w script = w.pending <- w.pending @ [ request w script ]
+
+let evaluate w script =
+  let pending = w.pending in
+  w.pending <- [];
+  List.iter
+    (fun revision ->
+       match (receive w revision).error with
+       | Some message -> Diagnostic.fail Host_failure (host_error message)
+       | None -> ())
+    pending;
+  let reply = receive w (request w script) in
   match reply.error, reply.output with
   | Some message, _ ->
     Diagnostic.fail

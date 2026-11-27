@@ -579,6 +579,7 @@ let plain ~digits page = List.iter print_endline (Page.plain ~digits page)
 let open_session ~project ?path () =
   let directory = Option.fold ~none:"." ~some:Filename.dirname path in
   let session = Session.create ~project ~directory in
+  if Session.target session <> None then Session.warm session;
   let r =
     { session
     ; directory

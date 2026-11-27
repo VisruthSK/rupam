@@ -117,6 +117,7 @@ let rec expression names (e : C.expr) : R.expr =
   | Constant (Text s) -> R.String s
   | Constant (Date d) -> R.call "as.Date" [ R.String (Calendar.to_iso d) ]
   | Absent -> missing e.typ
+  | If (c, a, b) when c.shape = Scalar -> R.If (go c, go a, go b)
   | If (c, a, b) -> if_else (go c) (go a) (go b)
   | Coalesce (a, b) ->
     R.qualified "dplyr" "coalesce" [ R.Positional (go a); R.Positional (go b) ]

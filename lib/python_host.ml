@@ -387,14 +387,11 @@ let statement names : C.item -> P.statement option = function
 
 let statements names items = List.filter_map (statement names) items
 
-let preamble items =
-  P.Verbatim Adapters.python
-  :: (if C.tabular items then [ P.Verbatim Adapters.polars ] else [])
-;;
-
 let script items =
-  let names = names () in
-  P.program (preamble items @ statements names items)
+  let body = statements (names ()) items in
+  let adapters = Adapters.python ^ if C.tabular items then Adapters.polars else "" in
+  let code = fst (P.program body) in
+  P.program (P.Verbatim (Preamble.used adapters code) :: statements (names ()) items)
 ;;
 
 let result names (t : C.table) ~path =
