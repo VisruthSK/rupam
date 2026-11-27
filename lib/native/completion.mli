@@ -13,7 +13,6 @@ type suggestion =
 
 val suggestion : ?kind:kind -> string -> string -> suggestion
 val insert : suggestion -> string
-
 val verb : string -> string option
 val word_start : string -> int
 val complete : Session.t -> string -> int * suggestion list

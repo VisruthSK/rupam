@@ -4,7 +4,12 @@ module C = Matrix_test.Child
 module K = Matrix.Input.Keystroke
 
 let rupam = Sys.getenv "RUPAM_TEST_BIN"
-let rows = try int_of_string (Sys.getenv "FRAMES_ROWS") with Not_found -> 1_000_000
+
+let rows =
+  try int_of_string (Sys.getenv "FRAMES_ROWS") with
+  | Not_found -> 1_000_000
+;;
+
 let text term = S.text (T.screen term)
 
 let generate dir =
@@ -13,8 +18,8 @@ let generate dir =
       "import polars as pl\n\
        n = %d\n\
        pl.DataFrame({'id': range(n), 'group': [f'g{i %% 97}' for i in range(n)], \
-       'value': [i * 0.5 for i in range(n)], 'flag': [i %% 3 == 0 for i in range(n)]})\
-       .write_parquet('big.parquet')\n"
+       'value': [i * 0.5 for i in range(n)], 'flag': [i %% 3 == 0 for i in \
+       range(n)]}).write_parquet('big.parquet')\n"
       rows
   in
   let file = Filename.concat dir "make.py" in
@@ -53,18 +58,28 @@ let () =
   generate dir;
   let term = T.create ~cols:120 ~rows:40 () in
   let env = [ "PATH", Sys.getenv "PATH"; "HOME", dir; "TERM", "xterm-256color" ] in
-  C.with_spawn term ~env ~cwd:dir ~prog:rupam ~args:[ "repl"; "--target"; "python-polars"; "frames.rp" ]
+  C.with_spawn
+    term
+    ~env
+    ~cwd:dir
+    ~prog:rupam
+    ~args:[ "repl"; "--target"; "python-polars"; "frames.rp" ]
     (fun c ->
        let start = Unix.gettimeofday () in
-       C.wait c ~within:600. (fun term -> Astring.String.is_infix ~affix:"rupam \xe2\x9d\xaf" (text term));
-       Printf.printf "%d rows; REPL ready with the table bound in %.0f ms\n%!" rows
+       C.wait c ~within:600. (fun term ->
+         Astring.String.is_infix ~affix:"rupam \xe2\x9d\xaf" (text term));
+       Printf.printf
+         "%d rows; REPL ready with the table bound in %.0f ms\n%!"
+         rows
          ((Unix.gettimeofday () -. start) *. 1000.);
        C.send c (T.text term ":view big");
        C.send c (T.key term K.Enter);
        let start = Unix.gettimeofday () in
        C.wait c ~within:300. (fun term ->
          Astring.String.is_infix ~affix:"rows \xc3\x97" (text term));
-       Printf.printf "%d rows; viewer opened in %.0f ms\n%!" rows
+       Printf.printf
+         "%d rows; viewer opened in %.0f ms\n%!"
+         rows
          ((Unix.gettimeofday () -. start) *. 1000.);
        measure c term "PgDn" K.Page_down 40;
        measure c term "PgUp" K.Page_up 40;

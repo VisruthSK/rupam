@@ -53,7 +53,6 @@ let verb name =
   List.find_map (fun (v, signature, _) -> if v = name then Some signature else None) verbs
 ;;
 
-
 let choices = function
   | "missing" | "group_missing" -> [ "skip"; "keep"; "error" ]
   | "relationship" -> [ "one_to_one"; "many_to_one"; "one_to_many"; "many_to_many" ]
@@ -139,7 +138,9 @@ let bindings session =
 ;;
 
 let functions session =
-  List.map (fun (text, detail) -> suggestion ~kind:Function text detail) (Elaborate.builtins ())
+  List.map
+    (fun (text, detail) -> suggestion ~kind:Function text detail)
+    (Elaborate.builtins ())
   @ List.filter_map
       (fun (_, (b : Scope.binding), s) ->
          match b with
@@ -173,7 +174,9 @@ let accepted before =
     then String.sub before 0 (String.length before - 1)
     else before
   in
-  match String.sub before (word_start before) (String.length before - word_start before) with
+  match
+    String.sub before (word_start before) (String.length before - word_start before)
+  with
   | "read_csv" | "write_csv" -> Some ([ ".csv" ], "CSV file")
   | "read_tsv" | "write_tsv" -> Some ([ ".tsv" ], "TSV file")
   | "read_parquet" | "write_parquet" -> Some ([ ".parquet" ], "Parquet file")
@@ -202,7 +205,8 @@ let files session ?kind prefix =
         else Filename.concat (Filename.dirname prefix) e
       in
       { text = path
-      ; kind = (if Sys.is_directory (Filename.concat directory e) then Directory else File)
+      ; kind =
+          (if Sys.is_directory (Filename.concat directory e) then Directory else File)
       ; detail =
           (if Sys.is_directory (Filename.concat directory e)
            then "directory"
@@ -235,9 +239,7 @@ let complete session line =
       in
       match Scope.lookup (Session.env session) owner with
       | Some (Contract contract) ->
-        ( List.map
-            (fun (t : Contract.table) -> suggestion t.name "table")
-            contract.tables
+        ( List.map (fun (t : Contract.table) -> suggestion t.name "table") contract.tables
         , start
         , word )
       | _ -> [], start, word)

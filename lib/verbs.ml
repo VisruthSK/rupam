@@ -358,41 +358,42 @@ let mutate context span (t : C.table) arguments =
   in
   let keys = List.map (fun k -> Option.value (List.assoc_opt k entry) ~default:k) keys in
   let t =
-  List.fold_left
-    (fun (t : C.table) -> function
-       | Some "by", _ -> t
-       | None, (x : Syntax.expr) ->
-         fail x.span Wrong_arguments "mutate needs named columns"
-       | Some name, x ->
-         let value = context.expression ?missing (C.row t) x in
-         ordered x.span t value;
-         let value =
-           if policy = Some Skip && C.reduces value
-           then
-             make
-               value.span
-               Columnar
-               (T.optional value.typ)
-               (If
-                  ( present span t keys
-                  , value
-                  , make span Scalar (T.optional value.typ) Absent ))
-           else value
-         in
-         let exists = List.mem_assoc name t.schema in
-         let t = if exists then restrict (fun c -> c <> name) t else t in
-         let schema =
-           if exists
-           then List.map (fun (n, typ) -> n, if n = name then value.typ else typ) t.schema
-           else t.schema @ [ name, value.typ ]
-         in
-         let restricted =
-           List.filter (( <> ) name) t.restricted
-           @ if private_ t value then [ name ] else []
-         in
-         add x.span (Mutate { name; value; by = keys }) { t with schema; restricted })
-    t
-    rest
+    List.fold_left
+      (fun (t : C.table) -> function
+         | Some "by", _ -> t
+         | None, (x : Syntax.expr) ->
+           fail x.span Wrong_arguments "mutate needs named columns"
+         | Some name, x ->
+           let value = context.expression ?missing (C.row t) x in
+           ordered x.span t value;
+           let value =
+             if policy = Some Skip && C.reduces value
+             then
+               make
+                 value.span
+                 Columnar
+                 (T.optional value.typ)
+                 (If
+                    ( present span t keys
+                    , value
+                    , make span Scalar (T.optional value.typ) Absent ))
+             else value
+           in
+           let exists = List.mem_assoc name t.schema in
+           let t = if exists then restrict (fun c -> c <> name) t else t in
+           let schema =
+             if exists
+             then
+               List.map (fun (n, typ) -> n, if n = name then value.typ else typ) t.schema
+             else t.schema @ [ name, value.typ ]
+           in
+           let restricted =
+             List.filter (( <> ) name) t.restricted
+             @ if private_ t value then [ name ] else []
+           in
+           add x.span (Mutate { name; value; by = keys }) { t with schema; restricted })
+      t
+      rest
   in
   if entry = []
   then t

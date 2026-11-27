@@ -44,44 +44,44 @@ let builtin (row : Prelude.row) args =
   match Dplyr.dates row args with
   | Some e -> e
   | None ->
-  match row, args with
-  | Abs, [ a ] -> R.call "abs" [ a ]
-  | Sign, [ a ] -> integer64 (R.call "sign" [ number a ])
-  | Sqrt, [ a ] -> R.call "sqrt" [ a ]
-  | Exp, [ a ] -> R.call "exp" [ a ]
-  | Log, [ a ] -> R.call "log" [ a ]
-  | Log2, [ a ] -> R.call "log2" [ a ]
-  | Log10, [ a ] -> R.call "log10" [ a ]
-  | Floor, [ a ] -> R.call "floor" [ a ]
-  | Ceiling, [ a ] -> R.call "ceiling" [ a ]
-  | Trunc, [ a ] -> R.call "trunc" [ a ]
-  | Round, [ a ] -> R.call "round" [ a ]
-  | Round_digits, [ a; d ] -> R.call "round" [ a; R.call "as.integer" [ d ] ]
-  | Pmin, [ a; b ] -> R.call "min" [ a; b ]
-  | Pmax, [ a; b ] -> R.call "max" [ a; b ]
-  | Present, [ a ] -> R.Not (is_null a)
-  | Absent, [ a ] -> is_null a
-  | Length, [ a ] ->
-    integer64
-      (R.Call (R.Name "nchar", [ R.Positional a; R.Named ("type", R.String "chars") ]))
-  | Lower, [ a ] -> R.call "tolower" [ a ]
-  | Upper, [ a ] -> R.call "toupper" [ a ]
-  | Trim, [ a ] -> R.call "trimws" [ a ]
-  | Starts, [ a; b ] -> R.call "startsWith" [ a; b ]
-  | Ends, [ a; b ] -> R.call "endsWith" [ a; b ]
-  | Detect, [ a; b ] ->
-    R.Call
-      ( R.Name "grepl"
-      , [ R.Positional b; R.Positional a; R.Named ("perl", R.Logical true) ] )
-  | Size, [ a ] -> integer64 (R.call "length" [ a ])
-  | Reverse, [ a ] -> R.call "rev" [ a ]
-  | Sorted, [ a ] -> R.call "rp_sort" [ a ]
-  | Deduplicate, [ a ] -> R.call "rp_unique" [ a ]
-  | Map_each, [ a; f ] -> R.call "lapply" [ a; f ]
-  | Retain, [ a; f ] -> R.call "Filter" [ f; a ]
-  | Fold, [ a; init; f ] -> R.call "Reduce" [ f; a; init ]
-  | Sequence, [ a; b; s ] -> R.call "rp_seq" [ a; b; s ]
-  | _ -> invalid_arg "Wrong arguments to a builtin"
+    (match row, args with
+     | Abs, [ a ] -> R.call "abs" [ a ]
+     | Sign, [ a ] -> integer64 (R.call "sign" [ number a ])
+     | Sqrt, [ a ] -> R.call "sqrt" [ a ]
+     | Exp, [ a ] -> R.call "exp" [ a ]
+     | Log, [ a ] -> R.call "log" [ a ]
+     | Log2, [ a ] -> R.call "log2" [ a ]
+     | Log10, [ a ] -> R.call "log10" [ a ]
+     | Floor, [ a ] -> R.call "floor" [ a ]
+     | Ceiling, [ a ] -> R.call "ceiling" [ a ]
+     | Trunc, [ a ] -> R.call "trunc" [ a ]
+     | Round, [ a ] -> R.call "round" [ a ]
+     | Round_digits, [ a; d ] -> R.call "round" [ a; R.call "as.integer" [ d ] ]
+     | Pmin, [ a; b ] -> R.call "min" [ a; b ]
+     | Pmax, [ a; b ] -> R.call "max" [ a; b ]
+     | Present, [ a ] -> R.Not (is_null a)
+     | Absent, [ a ] -> is_null a
+     | Length, [ a ] ->
+       integer64
+         (R.Call (R.Name "nchar", [ R.Positional a; R.Named ("type", R.String "chars") ]))
+     | Lower, [ a ] -> R.call "tolower" [ a ]
+     | Upper, [ a ] -> R.call "toupper" [ a ]
+     | Trim, [ a ] -> R.call "trimws" [ a ]
+     | Starts, [ a; b ] -> R.call "startsWith" [ a; b ]
+     | Ends, [ a; b ] -> R.call "endsWith" [ a; b ]
+     | Detect, [ a; b ] ->
+       R.Call
+         ( R.Name "grepl"
+         , [ R.Positional b; R.Positional a; R.Named ("perl", R.Logical true) ] )
+     | Size, [ a ] -> integer64 (R.call "length" [ a ])
+     | Reverse, [ a ] -> R.call "rev" [ a ]
+     | Sorted, [ a ] -> R.call "rp_sort" [ a ]
+     | Deduplicate, [ a ] -> R.call "rp_unique" [ a ]
+     | Map_each, [ a; f ] -> R.call "lapply" [ a; f ]
+     | Retain, [ a; f ] -> R.call "Filter" [ f; a ]
+     | Fold, [ a; init; f ] -> R.call "Reduce" [ f; a; init ]
+     | Sequence, [ a; b; s ] -> R.call "rp_seq" [ a; b; s ]
+     | _ -> invalid_arg "Wrong arguments to a builtin")
 ;;
 
 let operator : Syntax.binary -> R.operator = function
@@ -204,8 +204,7 @@ and node names (e : C.expr) : R.expr =
     R.call
       "rp_vreduce"
       [ R.String (Prelude.name (Reduction r))
-      ; R.String
-          (Host.policy_name names policy)
+      ; R.String (Host.policy_name names policy)
       ; go x
       ]
   | Column _ | Reduce _ | Count ->

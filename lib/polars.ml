@@ -38,7 +38,10 @@ let batches e f dtype' =
 ;;
 
 let dt x name = cast (P.meth (P.Attribute (x, "dt")) name []) "Int64"
-let truncate x every = P.meth (P.Attribute (x, "dt")) "truncate" [ P.Positional (P.Str every) ]
+
+let truncate x every =
+  P.meth (P.Attribute (x, "dt")) "truncate" [ P.Positional (P.Str every) ]
+;;
 
 let builtin (row : Prelude.row) args =
   let on x name = P.meth x name [] in
@@ -150,18 +153,27 @@ let rec expression ?(deferred = false) ~checked ~scalar (e : C.expr) : P.expr =
         , P.Binary
             ( Multiply
             , P.Float "1.4901161193847656e-08"
-            , P.Call (pl "max_horizontal", positional [ magnitude (go a); magnitude (go b) ]) ) )
+            , P.Call
+                (pl "max_horizontal", positional [ magnitude (go a); magnitude (go b) ])
+            ) )
     | Binary (((Add | Sub) as op), a, b) when T.repr (T.present a.typ) = Date ->
       let offset sign =
         P.meth
           (P.Attribute (go a, "dt"))
           "offset_by"
-          [ P.Positional (P.Call (pl "format", [ P.Positional (P.Str (sign ^ "{}mo")); P.Positional (go b) ])) ]
+          [ P.Positional
+              (P.Call
+                 ( pl "format"
+                 , [ P.Positional (P.Str (sign ^ "{}mo")); P.Positional (go b) ] ))
+          ]
       in
       (match op, T.repr (T.present b.typ) with
        | Add, Period -> offset ""
        | Sub, Period -> offset "-"
-       | Sub, Date -> cast (P.meth (P.Attribute (P.Binary (Subtract, go a, go b), "dt")) "total_days" []) "Int64"
+       | Sub, Date ->
+         cast
+           (P.meth (P.Attribute (P.Binary (Subtract, go a, go b), "dt")) "total_days" [])
+           "Int64"
        | _ -> P.Binary (operator op, go a, go b))
     | Binary (((Add | Sub | Mul) as op), a, b) when integer && checked ->
       narrow (P.Binary (operator op, wide (go a), go b))
@@ -254,11 +266,13 @@ and reduce ?(deferred = false) ~checked ~scalar (e : C.expr) r policy x =
 let finite n = batches (col n) (P.Name "rp_finite") "Float64"
 
 let checks ~checked columns =
-  if not checked then [] else
-  match List.filter (fun (_, x) -> Host.risky x && Host.float x) columns with
-  | [] -> []
-  | risky ->
-    [ P.link "with_columns" (List.map (fun (n, _) -> P.Positional (finite n)) risky) ]
+  if not checked
+  then []
+  else (
+    match List.filter (fun (_, x) -> Host.risky x && Host.float x) columns with
+    | [] -> []
+    | risky ->
+      [ P.link "with_columns" (List.map (fun (n, _) -> P.Positional (finite n)) risky) ])
 ;;
 
 let step ~checked ~scalar span : C.step -> P.link list =
@@ -332,13 +346,7 @@ let file (f : C.file) =
     "rp_read"
     [ P.Str f.path
     ; P.Str (Input.format_name f.format)
-    ; P.Dict
-        (List.map
-           (fun (n, t) ->
-              ( P.Str n
-              , P.Str
-                  (Host.column_kind t) ))
-           f.columns)
+    ; P.Dict (List.map (fun (n, t) -> P.Str n, P.Str (Host.column_kind t)) f.columns)
     ]
 ;;
 
@@ -388,7 +396,9 @@ let rec table ~checked ~scalar ~name (t : C.table) =
           ; P.link "select" [ P.Positional (P.names fields) ]
           ] )
   in
-  match List.concat_map (fun (s : C.stage) -> step ~checked ~scalar s.at s.step) t.stages with
+  match
+    List.concat_map (fun (s : C.stage) -> step ~checked ~scalar s.at s.step) t.stages
+  with
   | [] -> base
   | links -> P.Chain (base, links)
 ;;

@@ -40,8 +40,7 @@ let fits d render =
   let scratch = create () in
   render scratch;
   let flat = Buffer.contents scratch.buffer in
-  (not (String.contains flat '
-')) && d.column - 1 + String.length flat <= width
+  (not (String.contains flat '\n')) && d.column - 1 + String.length flat <= width
 ;;
 
 let separated d separator f xs =

@@ -48,8 +48,10 @@ let dates (row : Prelude.row) args =
   | Day_of, [ a ] -> Some (integer64 (posix a "mday"))
   | Wday, [ a ] -> Some (integer64 (plus (monday_offset a) "1L"))
   | Yday, [ a ] -> Some (integer64 (plus (posix a "yday") "1L"))
-  | Floor_year, [ a ] -> Some (R.call "as.Date" [ R.call "format" [ a; R.String "%Y-01-01" ] ])
-  | Floor_month, [ a ] -> Some (R.call "as.Date" [ R.call "format" [ a; R.String "%Y-%m-01" ] ])
+  | Floor_year, [ a ] ->
+    Some (R.call "as.Date" [ R.call "format" [ a; R.String "%Y-01-01" ] ])
+  | Floor_month, [ a ] ->
+    Some (R.call "as.Date" [ R.call "format" [ a; R.String "%Y-%m-01" ] ])
   | Floor_week, [ a ] -> Some (R.Binary (Subtract, a, monday_offset a))
   | (Days | Months), [ n ] -> Some (R.call "as.integer" [ n ])
   | Years, [ n ] -> Some (R.Binary (Multiply, R.call "as.integer" [ n ], R.Number "12L"))
@@ -61,7 +63,8 @@ let date_arithmetic (op : Syntax.binary) ta tb a b =
   match op, T.repr (T.present ta), T.repr (T.present tb) with
   | Add, Date, Period -> Some (R.call "rp_add_months" [ a; b ])
   | Sub, Date, Period -> Some (R.call "rp_add_months" [ a; R.Negate b ])
-  | Sub, Date, Date -> Some (integer64 (R.call "as.numeric" [ R.Binary (Subtract, a, b) ]))
+  | Sub, Date, Date ->
+    Some (integer64 (R.call "as.numeric" [ R.Binary (Subtract, a, b) ]))
   | _ -> None
 ;;
 
@@ -69,39 +72,39 @@ let builtin (row : Prelude.row) args =
   match dates row args with
   | Some e -> e
   | None ->
-  match row, args with
-  | Abs, [ x ] -> R.call "abs" [ x ]
-  | Sign, [ x ] -> integer64 (R.call "sign" [ x ])
-  | Sqrt, [ x ] -> R.call "sqrt" [ x ]
-  | Exp, [ x ] -> R.call "exp" [ x ]
-  | Log, [ x ] -> R.call "log" [ x ]
-  | Log2, [ x ] -> R.call "log2" [ x ]
-  | Log10, [ x ] -> R.call "log10" [ x ]
-  | Floor, [ x ] -> R.call "floor" [ x ]
-  | Ceiling, [ x ] -> R.call "ceiling" [ x ]
-  | Trunc, [ x ] -> R.call "trunc" [ x ]
-  | Round, [ x ] -> R.call "round" [ x ]
-  | Round_digits, [ x; d ] -> R.call "round" [ x; R.call "as.integer" [ d ] ]
-  | Pmin, [ a; b ] -> R.call "pmin" [ a; b ]
-  | Pmax, [ a; b ] -> R.call "pmax" [ a; b ]
-  | Present, [ x ] -> R.Not (R.call "is.na" [ x ])
-  | Absent, [ x ] -> R.call "is.na" [ x ]
-  | Length, [ x ] ->
-    integer64
-      (R.Call (R.Name "nchar", [ R.Positional x; R.Named ("type", R.String "chars") ]))
-  | Lower, [ x ] -> R.call "tolower" [ x ]
-  | Upper, [ x ] -> R.call "toupper" [ x ]
-  | Trim, [ x ] -> R.call "trimws" [ x ]
-  | Starts, [ x; p ] -> R.call "startsWith" [ x; p ]
-  | Ends, [ x; p ] -> R.call "endsWith" [ x; p ]
-  | Detect, [ x; p ] ->
-    if_else
-      (R.call "is.na" [ x ])
-      R.Na
-      (R.Call
-         ( R.Name "grepl"
-         , [ R.Positional p; R.Positional x; R.Named ("perl", R.Logical true) ] ))
-  | _ -> invalid_arg "Wrong arguments to a builtin"
+    (match row, args with
+     | Abs, [ x ] -> R.call "abs" [ x ]
+     | Sign, [ x ] -> integer64 (R.call "sign" [ x ])
+     | Sqrt, [ x ] -> R.call "sqrt" [ x ]
+     | Exp, [ x ] -> R.call "exp" [ x ]
+     | Log, [ x ] -> R.call "log" [ x ]
+     | Log2, [ x ] -> R.call "log2" [ x ]
+     | Log10, [ x ] -> R.call "log10" [ x ]
+     | Floor, [ x ] -> R.call "floor" [ x ]
+     | Ceiling, [ x ] -> R.call "ceiling" [ x ]
+     | Trunc, [ x ] -> R.call "trunc" [ x ]
+     | Round, [ x ] -> R.call "round" [ x ]
+     | Round_digits, [ x; d ] -> R.call "round" [ x; R.call "as.integer" [ d ] ]
+     | Pmin, [ a; b ] -> R.call "pmin" [ a; b ]
+     | Pmax, [ a; b ] -> R.call "pmax" [ a; b ]
+     | Present, [ x ] -> R.Not (R.call "is.na" [ x ])
+     | Absent, [ x ] -> R.call "is.na" [ x ]
+     | Length, [ x ] ->
+       integer64
+         (R.Call (R.Name "nchar", [ R.Positional x; R.Named ("type", R.String "chars") ]))
+     | Lower, [ x ] -> R.call "tolower" [ x ]
+     | Upper, [ x ] -> R.call "toupper" [ x ]
+     | Trim, [ x ] -> R.call "trimws" [ x ]
+     | Starts, [ x; p ] -> R.call "startsWith" [ x; p ]
+     | Ends, [ x; p ] -> R.call "endsWith" [ x; p ]
+     | Detect, [ x; p ] ->
+       if_else
+         (R.call "is.na" [ x ])
+         R.Na
+         (R.Call
+            ( R.Name "grepl"
+            , [ R.Positional p; R.Positional x; R.Named ("perl", R.Logical true) ] ))
+     | _ -> invalid_arg "Wrong arguments to a builtin")
 ;;
 
 let rec expression names (e : C.expr) : R.expr =
@@ -121,7 +124,8 @@ let rec expression names (e : C.expr) : R.expr =
   | If (c, a, b) -> if_else (go c) (go a) (go b)
   | Guarded (selects, value) ->
     R.If
-      ( R.Call (R.Name "any", [ R.Positional (go selects); R.Named ("na.rm", R.Logical true) ])
+      ( R.Call
+          (R.Name "any", [ R.Positional (go selects); R.Named ("na.rm", R.Logical true) ])
       , go value
       , R.Na )
   | Coalesce (a, b) ->
@@ -143,8 +147,7 @@ let rec expression names (e : C.expr) : R.expr =
     R.call
       "rp_vreduce"
       [ R.String (Prelude.name (Reduction r))
-      ; R.String
-          (Host.policy_name names policy)
+      ; R.String (Host.policy_name names policy)
       ; go x
       ]
   | Reduce (r, policy, x) -> reduce names r policy x
@@ -190,7 +193,9 @@ let rec expression names (e : C.expr) : R.expr =
 and reduce names r policy x =
   let source = expression names x in
   let x =
-    if policy = C.Fail && Host.checked names then R.call "rp_present" [ source ] else source
+    if policy = C.Fail && Host.checked names
+    then R.call "rp_present" [ source ]
+    else source
   in
   let present f = R.Call (f, [ R.Positional x; R.Named ("na.rm", R.Logical true) ]) in
   let unless_empty value = if_else (R.call "all" [ R.call "is.na" [ x ] ]) R.Na value in
@@ -310,13 +315,7 @@ let file (f : C.file) =
     ; R.String (Input.format_name f.format)
     ; R.Call
         ( R.Name "c"
-        , List.map
-            (fun (n, t) ->
-               R.Named
-                 ( n
-                 , R.String
-                     (Host.column_kind t) ))
-            f.columns )
+        , List.map (fun (n, t) -> R.Named (n, R.String (Host.column_kind t))) f.columns )
     ]
 ;;
 

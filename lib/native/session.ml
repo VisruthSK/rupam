@@ -69,7 +69,12 @@ let create ~project ~directory =
   ; path = None
   ; current =
       { number = 0
-      ; env = Scope.empty ~inputs:Native.inputs ~directory ~strict:project.Project.strict.value ()
+      ; env =
+          Scope.empty
+            ~inputs:Native.inputs
+            ~directory
+            ~strict:project.Project.strict.value
+            ()
       ; accepted = []
       }
   ; past = []
@@ -214,7 +219,6 @@ let ordering t (table : TransformIR.table) =
      | _ -> "ordered by (" ^ String.concat ", " keys ^ ")")
 ;;
 
-
 let materialize h ~ordering table =
   let file = Filename.temp_file "rupam" ".arrow" in
   match
@@ -259,13 +263,7 @@ let column_index r name =
 let ordering_of r = r.ordering
 
 let page ?columns r ~offset ~limit =
-  Page.of_arrow
-    ?columns
-    r.arrow
-    ~ordering:r.ordering
-    ~offset
-    ~limit
-    r.table.schema
+  Page.of_arrow ?columns r.arrow ~ordering:r.ordering ~offset ~limit r.table.schema
 ;;
 
 let column_summary r name =
@@ -307,9 +305,7 @@ let bins (summary : Arrow_result.summary) =
 let histogram r name =
   let column = column_index r name in
   let summary = Arrow_result.summary r.arrow ~column in
-  { summary with
-    histogram = Arrow_result.histogram r.arrow ~column ~bins:(bins summary)
-  }
+  { summary with histogram = Arrow_result.histogram r.arrow ~column ~bins:(bins summary) }
 ;;
 
 let cell r ~row name =
@@ -317,7 +313,9 @@ let cell r ~row name =
   then Diagnostic.fail Restricted_output "This column is restricted";
   let typ = List.assoc name r.table.schema in
   ( typ
-  , match Types.repr (Types.present typ), Arrow_result.value r.arrow row (column_index r name) with
+  , match
+      Types.repr (Types.present typ), Arrow_result.value r.arrow row (column_index r name)
+    with
     | Date, Int days -> Arrow_result.Date (Int64.to_int days)
     | _, value -> value )
 ;;

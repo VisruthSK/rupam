@@ -45,7 +45,8 @@ let help =
   ; ":explain TABLE", "plan from source to result"
   ; ":contract TABLE", "where a table's rows come from"
   ; ":validate TABLE", "run data-dict validation now"
-  ; ":code [TARGET] NAME [--full | --expr]", "generated code: the definition, a standalone script, or the expression"
+  ; ( ":code [TARGET] NAME [--full | --expr]"
+    , "generated code: the definition, a standalone script, or the expression" )
   ; ":target [TARGET]", "show or set the target: r-dplyr or python-polars"
   ; ":language LANGUAGE", "switch the host language: r or python"
   ; ":dialect DIALECT", "switch the dialect: dplyr or polars"
@@ -89,7 +90,9 @@ let parse line =
   in
   let code target text =
     let flag suffix = String.ends_with ~suffix:(" " ^ suffix) text in
-    let strip suffix = String.trim (String.sub text 0 (String.length text - String.length suffix)) in
+    let strip suffix =
+      String.trim (String.sub text 0 (String.length text - String.length suffix))
+    in
     if flag "--full"
     then Code (target, Session.Full, strip "--full")
     else if flag "--expr"
@@ -161,7 +164,9 @@ let digits r = (Session.project r.session).preview_digits.value
 
 let print_columns columns =
   let width = List.fold_left (fun w (n, _) -> max w (String.length n)) 0 columns in
-  List.iter (fun (n, typ) -> Printf.printf "  %-*s  %s\n" width n (Types.display typ)) columns
+  List.iter
+    (fun (n, typ) -> Printf.printf "  %-*s  %s\n" width n (Types.display typ))
+    columns
 ;;
 
 let print_schema r (t : TransformIR.table) =
@@ -206,8 +211,7 @@ let ticks ~count low high =
     let raw = range /. float_of_int (max 2 count) in
     let magnitude = 10. ** Float.floor (Float.log10 raw) in
     let step =
-      magnitude
-      *. List.find (fun m -> m *. magnitude >= raw) [ 1.; 2.; 2.5; 5.; 10. ]
+      magnitude *. List.find (fun m -> m *. magnitude >= raw) [ 1.; 2.; 2.5; 5.; 10. ]
     in
     let first = Float.ceil (low /. step) in
     let last = Float.floor (high /. step) in
@@ -253,7 +257,8 @@ let histogram ~digits (s : Arrow_result.summary) =
   let place at label =
     let n = String.length label in
     let start = max 0 (min (span - n) (at - (n / 2))) in
-    let lo = max 0 (start - 1) and hi = min span (start + n + 1) in
+    let lo = max 0 (start - 1)
+    and hi = min span (start + n + 1) in
     if String.for_all (( = ) ' ') (Bytes.sub_string axis lo (hi - lo))
     then Bytes.blit_string label 0 axis start n
   in
@@ -285,7 +290,12 @@ let histogram ~digits (s : Arrow_result.summary) =
     (fun i bar ->
        match List.nth_opt stats i with
        | Some (name, value) ->
-         Printf.sprintf "%s%s   %-6s %s" bar (String.make (span - Display.width bar) ' ') name value
+         Printf.sprintf
+           "%s%s   %-6s %s"
+           bar
+           (String.make (span - Display.width bar) ' ')
+           name
+           value
        | None -> bar)
     bars
 ;;
@@ -522,8 +532,7 @@ let dispatch r = function
       | _ -> Diagnostic.fail Wrong_arguments "Expected one expression");
     true
   | Code (chosen, mode, source) ->
-    guard (fun () ->
-      print_endline (Session.code r.session ~mode chosen source));
+    guard (fun () -> print_endline (Session.code r.session ~mode chosen source));
     true
   | View (Schema, "") ->
     schemas r;

@@ -39,7 +39,10 @@ let load file =
        | Some "active" -> Active
        | Some "pending" -> Pending
        | Some "dialect" ->
-         (match get Toml.Lenses.(key "dialects" |-- array |-- strings), get Toml.Lenses.(key "reason" |-- string) with
+         (match
+            ( get Toml.Lenses.(key "dialects" |-- array |-- strings)
+            , get Toml.Lenses.(key "reason" |-- string) )
+          with
           | Some dialects, Some _ -> Dialect dialects
           | _ -> failwith (file ^ ": a dialect fixture lists dialects and a reason"))
        | _ -> failwith (file ^ ": status must be active, pending or dialect"))
@@ -67,7 +70,9 @@ let evaluate source =
   match
     let declarations = Frontend.parse (Lexing.from_string source) in
     let _, items =
-      Elaborate.program (Scope.empty ~inputs:Native.inputs ~directory:"." ~strict:true ()) declarations
+      Elaborate.program
+        (Scope.empty ~inputs:Native.inputs ~directory:"." ~strict:true ())
+        declarations
     in
     let env, shown = Reference.run [] items in
     match List.rev items with
@@ -111,7 +116,6 @@ let rows session name =
   , List.init (Session.total result) (fun row ->
       List.map (fun n -> cell (snd (Session.cell result ~row n))) names) )
 ;;
-
 
 let on_session session source =
   match
@@ -161,7 +165,9 @@ let check ?session fixture =
              (match actual, outcome.diagnostic with
               | Some a, _ -> a
               | None, Some code ->
-                "diagnostic " ^ code ^ Option.fold ~none:"" ~some:(( ^ ) ": ") outcome.message
+                "diagnostic "
+                ^ code
+                ^ Option.fold ~none:"" ~some:(( ^ ) ": ") outcome.message
               | None, None -> "nothing"))
       | _ -> None
     in
@@ -182,7 +188,9 @@ let targets = [ "r-dplyr"; "python-polars" ]
 let on_target name fixture =
   let session = Session.create ~project:Project.standalone ~directory:"." in
   Session.set_target session (List.assoc name Target.targets) ~origin:"fixture";
-  Fun.protect ~finally:(fun () -> Session.close session) (fun () -> check ~session fixture)
+  Fun.protect
+    ~finally:(fun () -> Session.close session)
+    (fun () -> check ~session fixture)
 ;;
 
 let quote text =

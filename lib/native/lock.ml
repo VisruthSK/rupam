@@ -60,8 +60,8 @@ let load root =
     match file_of_yojson (Yojson.Safe.from_file path) with
     | { version = v; entries } when v = version -> Some entries
     | _ -> None
-    | exception (Yojson.Json_error _ | Ppx_yojson_conv_lib.Yojson_conv.Of_yojson_error _) ->
-      None)
+    | exception (Yojson.Json_error _ | Ppx_yojson_conv_lib.Yojson_conv.Of_yojson_error _)
+      -> None)
 ;;
 
 let save root entries =
@@ -168,7 +168,9 @@ let require ~project ~source items =
            source)
   in
   match
-    List.find_opt (fun e -> e.source = current.source && e.target = current.target) entries
+    List.find_opt
+      (fun e -> e.source = current.source && e.target = current.target)
+      entries
   with
   | Some locked ->
     (match differences locked current with

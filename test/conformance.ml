@@ -11,17 +11,27 @@ let triage fixtures =
        | Pending, Some source ->
          let outcome = Fixture.evaluate source in
          let key = Option.value outcome.diagnostic ~default:"wrong or missing value" in
-         Hashtbl.replace groups key (f.id :: Option.value (Hashtbl.find_opt groups key) ~default:[])
+         Hashtbl.replace
+           groups
+           key
+           (f.id :: Option.value (Hashtbl.find_opt groups key) ~default:[])
        | Pending, None ->
          let key = "needs a program" in
-         Hashtbl.replace groups key (f.id :: Option.value (Hashtbl.find_opt groups key) ~default:[])
+         Hashtbl.replace
+           groups
+           key
+           (f.id :: Option.value (Hashtbl.find_opt groups key) ~default:[])
        | _ -> ())
     fixtures;
   Hashtbl.to_seq groups
   |> List.of_seq
   |> List.sort (fun (_, a) (_, b) -> compare (List.length b) (List.length a))
   |> List.iter (fun (key, ids) ->
-    Printf.printf "%3d  %-28s %s\n" (List.length ids) key (String.concat " " (List.rev ids)));
+    Printf.printf
+      "%3d  %-28s %s\n"
+      (List.length ids)
+      key
+      (String.concat " " (List.rev ids)));
   []
 ;;
 
@@ -40,7 +50,8 @@ let reference fixtures =
       | { id; status = Active | Dialect _; _ }, Unspecified ->
         Some (id ^ ": no program or expectation")
       | { id; status = Pending; _ }, Passed -> Some (id ^ ": now passes; mark it active")
-      | { id; status = Pending; _ }, Failed problems when Array.mem "--pending" Sys.argv ->
+      | { id; status = Pending; _ }, Failed problems when Array.mem "--pending" Sys.argv
+        ->
         print_endline (id ^ " (pending): " ^ String.concat "; " problems);
         None
       | _ -> None)

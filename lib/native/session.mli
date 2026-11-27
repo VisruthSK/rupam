@@ -46,6 +46,7 @@ val cell : result -> row:int -> string -> Types.t * Arrow_result.value
 val total : result -> int
 val table_of_result : result -> TransformIR.table
 val preview : t -> TransformIR.table -> offset:int -> limit:int -> Page.t
+
 type code =
   | Definition
   | Full

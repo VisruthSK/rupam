@@ -44,8 +44,7 @@ let cell t = function
     Some
       (match Types.repr (Types.present t) with
        | Bool -> Display.bool (String.lowercase_ascii text = "true")
-       | Date ->
-         Option.fold ~none:text ~some:Calendar.to_iso (int_of_string_opt text)
+       | Date -> Option.fold ~none:text ~some:Calendar.to_iso (int_of_string_opt text)
        | _ -> text)
 ;;
 
@@ -75,7 +74,6 @@ let of_arrow ?columns arrow ~ordering ~offset ~limit fields =
   ; width = Array.length names
   }
 ;;
-
 
 let width = Display.width
 

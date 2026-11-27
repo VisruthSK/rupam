@@ -54,6 +54,7 @@ let math name a = P.Call (P.Attribute (P.Name "math", name), [ P.Positional a ])
 let math2 name a b =
   P.Call (P.Attribute (P.Name "math", name), [ P.Positional a; P.Positional b ])
 ;;
+
 let as_float e = P.call "float" [ e ]
 let is_none e = P.Binary (Is, e, P.Null)
 
@@ -105,13 +106,18 @@ let builtin (row : Prelude.row) args =
       ( P.Name "sorted"
       , [ P.Positional a
         ; P.Keyword
-            ("key", P.Lambda ([ "v" ], P.Tuple [ P.Binary (Is, P.Name "v", P.Null); P.Name "v" ]))
+            ( "key"
+            , P.Lambda ([ "v" ], P.Tuple [ P.Binary (Is, P.Name "v", P.Null); P.Name "v" ])
+            )
         ] )
-  | Deduplicate, [ a ] -> P.call "list" [ P.Call (P.Attribute (P.Name "dict", "fromkeys"), [ P.Positional a ]) ]
+  | Deduplicate, [ a ] ->
+    P.call "list" [ P.Call (P.Attribute (P.Name "dict", "fromkeys"), [ P.Positional a ]) ]
   | Map_each, [ a; f ] -> P.call "list" [ P.call "map" [ f; a ] ]
   | Retain, [ a; f ] -> P.call "list" [ P.call "filter" [ f; a ] ]
   | Fold, [ a; init; f ] ->
-    P.Call (P.Attribute (P.Name "functools", "reduce"), [ P.Positional f; P.Positional a; P.Positional init ])
+    P.Call
+      ( P.Attribute (P.Name "functools", "reduce")
+      , [ P.Positional f; P.Positional a; P.Positional init ] )
   | Sequence, [ a; b; s ] -> P.call "rp_seq" [ a; b; s ]
   | Year_of, [ a ] -> P.Attribute (a, "year")
   | Month_of, [ a ] -> P.Attribute (a, "month")
@@ -267,15 +273,16 @@ and node names (e : C.expr) : P.expr =
   | Reduce (r, policy, x) when x.shape = Scalar ->
     P.call
       "rp_vreduce"
-      [ P.Str (Prelude.name (Reduction r))
-      ; P.Str
-          (Host.policy_name names policy)
-      ; go x
-      ]
+      [ P.Str (Prelude.name (Reduction r)); P.Str (Host.policy_name names policy); go x ]
   | Column _ | Reduce _ | Count ->
     Diagnostic.fail ~span:e.span Column_required "A column expression needs a table verb"
 
-and table names t = Polars.table ~checked:(Host.checked names) ~scalar:(value names) ~name:(Host.name names) t
+and table names t =
+  Polars.table
+    ~checked:(Host.checked names)
+    ~scalar:(value names)
+    ~name:(Host.name names)
+    t
 
 and match_ names subject arms =
   let go = value names in

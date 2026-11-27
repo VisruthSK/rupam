@@ -23,16 +23,27 @@ let rec int depth =
       ; G.map3 binary (pick [ "+"; "-"; "*" ]) sub sub
       ; G.map (fun a -> call "abs" [ a ]) sub
       ; G.map3 (fun f a b -> call f [ a; b ]) (pick [ "pmin"; "pmax" ]) sub sub
-      ; G.map3 (fun c a b -> "if (" ^ c ^ ") " ^ a ^ " else " ^ b) (bool (depth - 1)) sub sub
+      ; G.map3
+          (fun c a b -> "if (" ^ c ^ ") " ^ a ^ " else " ^ b)
+          (bool (depth - 1))
+          sub
+          sub
       ; G.map (fun xs -> call "length" [ xs ]) (ints (depth - 1))
-      ; G.map (fun xs -> call "reduce" [ xs; "0"; "fn(a, v) => a + v" ]) (ints (depth - 1))
+      ; G.map
+          (fun xs -> call "reduce" [ xs; "0"; "fn(a, v) => a + v" ])
+          (ints (depth - 1))
       ; G.map (fun a -> call "coalesce" [ "None"; a ]) sub
-      ; G.map2 (fun f d -> call f [ d ]) (pick [ "year"; "month"; "day"; "wday"; "yday" ]) (date (depth - 1))
+      ; G.map2
+          (fun f d -> call f [ d ])
+          (pick [ "year"; "month"; "day"; "wday"; "yday" ])
+          (date (depth - 1))
       ; G.map2 (fun a b -> binary "-" a b) (date (depth - 1)) (date (depth - 1))
       ])
 
 and float depth =
-  let leaf = G.map (fun n -> Printf.sprintf "%.2f" (float_of_int n /. 4.)) (G.int_range (-40) 40) in
+  let leaf =
+    G.map (fun n -> Printf.sprintf "%.2f" (float_of_int n /. 4.)) (G.int_range (-40) 40)
+  in
   if depth = 0
   then leaf
   else (
@@ -56,7 +67,10 @@ and bool depth =
       ; G.map3 binary (pick [ "<"; "<="; "=="; "!=" ]) (int (depth - 1)) (int (depth - 1))
       ; G.map (fun a -> "(not " ^ a ^ ")") sub
       ; G.map3 binary (pick [ "and"; "or" ]) sub sub
-      ; G.map2 (fun s p -> call "str_detect" [ s; p ]) (text (depth - 1)) (pick [ {|"o"|}; {|"^b"|} ])
+      ; G.map2
+          (fun s p -> call "str_detect" [ s; p ])
+          (text (depth - 1))
+          (pick [ {|"o"|}; {|"^b"|} ])
       ])
 
 and date depth =
@@ -73,9 +87,20 @@ and date depth =
     let sub = date (depth - 1) in
     G.oneof
       [ leaf
-      ; G.map3 binary (pick [ "+"; "-" ]) sub (G.map (fun n -> call "months" [ string_of_int n ]) (G.int_range (-30) 30))
-      ; G.map3 binary (pick [ "+"; "-" ]) sub (G.map (fun n -> call "days" [ string_of_int n ]) (G.int_range (-400) 400))
-      ; G.map2 (fun d u -> call "floor_date" [ d; u ]) sub (pick [ {|"year"|}; {|"month"|}; {|"week"|} ])
+      ; G.map3
+          binary
+          (pick [ "+"; "-" ])
+          sub
+          (G.map (fun n -> call "months" [ string_of_int n ]) (G.int_range (-30) 30))
+      ; G.map3
+          binary
+          (pick [ "+"; "-" ])
+          sub
+          (G.map (fun n -> call "days" [ string_of_int n ]) (G.int_range (-400) 400))
+      ; G.map2
+          (fun d u -> call "floor_date" [ d; u ])
+          sub
+          (pick [ {|"year"|}; {|"month"|}; {|"week"|} ])
       ])
 
 and text depth =
@@ -85,7 +110,10 @@ and text depth =
   else
     G.oneof
       [ leaf
-      ; G.map2 (fun f s -> call f [ s ]) (pick [ "str_to_upper"; "str_to_lower"; "str_trim" ]) (text (depth - 1))
+      ; G.map2
+          (fun f s -> call f [ s ])
+          (pick [ "str_to_upper"; "str_to_lower"; "str_trim" ])
+          (text (depth - 1))
       ]
 
 and ints depth =
@@ -103,12 +131,20 @@ and ints depth =
       ; G.map2 (fun f xs -> call f [ xs ]) (pick [ "sort"; "rev"; "unique" ]) sub
       ; G.map (fun xs -> call "map" [ xs; "fn(v) => v * 2" ]) sub
       ; G.map (fun xs -> call "keep" [ xs; "fn(v) => v > 0" ]) sub
-      ; G.map3 (fun a b s -> call "seq" [ a; b; s ]) (int 0) (int 0) (pick [ "1"; "2"; "-1"; "-3" ])
+      ; G.map3
+          (fun a b s -> call "seq" [ a; b; s ])
+          (int 0)
+          (int 0)
+          (pick [ "1"; "2"; "-1"; "-3" ])
       ])
 ;;
 
 let scalar =
-  let* parts = G.list_size (G.int_range 1 4) (G.oneof [ int 3; float 3; bool 3; text 2; ints 2; date 2 ]) in
+  let* parts =
+    G.list_size
+      (G.int_range 1 4)
+      (G.oneof [ int 3; float 3; bool 3; text 2; ints 2; date 2 ])
+  in
   G.return
     (match parts with
      | [ one ] -> one
@@ -124,7 +160,8 @@ let pipeline =
       ; "mutate(z = x * 3 + 1)"
       ; "mutate(w = coalesce(y, 0.0) * 2.0)"
       ; "mutate(u = str_to_upper(coalesce(s, \"none\")))"
-      ; "mutate(e = d + months(1), f = floor_date(d, \"week\"), k = d - d\"2025-01-01\", q = wday(d))"
+      ; "mutate(e = d + months(1), f = floor_date(d, \"week\"), k = d - d\"2025-01-01\", \
+         q = wday(d))"
       ; "filter(d >= d\"2025-01-01\", missing = skip)"
       ]
   in
@@ -138,8 +175,7 @@ let pipeline =
       ; [ "summarize(mean_y = mean(y, missing = skip))" ]
       ]
   in
-  G.return
-    (String.concat " |> " ({|read_csv("small.csv")|} :: (stages @ order @ last)))
+  G.return (String.concat " |> " ({|read_csv("small.csv")|} :: (stages @ order @ last)))
 ;;
 
 let reference source =
@@ -161,7 +197,6 @@ let reference source =
   | exception Diagnostic.Error _ -> Failed
 ;;
 
-
 let counter = ref 0
 
 let host session source ~table =
@@ -176,7 +211,9 @@ let host session source ~table =
       Rows
         ( names
         , List.init (Session.total result) (fun row ->
-            List.map (fun n -> Rupam_fixture.Fixture.cell (snd (Session.cell result ~row n))) names) ))
+            List.map
+              (fun n -> Rupam_fixture.Fixture.cell (snd (Session.cell result ~row n)))
+              names) ))
     else (
       match
         List.find_map
@@ -231,9 +268,15 @@ let agree ~table source =
 
 let () =
   let tests =
-    [ QCheck.Test.make ~count:150 ~name:"scalars and vectors" (QCheck.make ~print:Fun.id scalar)
+    [ QCheck.Test.make
+        ~count:150
+        ~name:"scalars and vectors"
+        (QCheck.make ~print:Fun.id scalar)
         (agree ~table:false)
-    ; QCheck.Test.make ~count:60 ~name:"table pipelines" (QCheck.make ~print:Fun.id pipeline)
+    ; QCheck.Test.make
+        ~count:60
+        ~name:"table pipelines"
+        (QCheck.make ~print:Fun.id pipeline)
         (agree ~table:true)
     ]
   in
@@ -249,8 +292,11 @@ let () =
   in
   Hashtbl.iter
     (fun name (total, failed) ->
-       Printf.printf "differential %s: %d programs, %d rejected by the reference
-" name total failed)
+       Printf.printf
+         "differential %s: %d programs, %d rejected by the reference\n"
+         name
+         total
+         failed)
     ran;
   List.iter (fun (_, s) -> Session.close s) sessions;
   if failed <> [] then exit 1

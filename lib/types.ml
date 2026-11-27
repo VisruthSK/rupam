@@ -194,7 +194,13 @@ let rec unify a b =
      | _ -> ());
     occurs_and_adjust v level t;
     v := Link t
-  | Int, Int | Float, Float | Bool, Bool | String, String | Date, Date | Duration, Duration | Period, Period -> ()
+  | Int, Int
+  | Float, Float
+  | Bool, Bool
+  | String, String
+  | Date, Date
+  | Duration, Duration
+  | Period, Period -> ()
   | Option a, Option b | List a, List b -> unify a b
   | Tuple xs, Tuple ys when List.length xs = List.length ys -> List.iter2 unify xs ys
   | Variant (m, xs), Variant (n, ys) when m = n && List.length xs = List.length ys ->

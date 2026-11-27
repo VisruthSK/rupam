@@ -44,7 +44,11 @@ let targeted directory target strict action =
 let elaborate (project : Project.t) path ds =
   snd
     (Elaborate.program
-       (Scope.empty ~inputs:Native.inputs ~directory:(Filename.dirname path) ~strict:project.strict.value ())
+       (Scope.empty
+          ~inputs:Native.inputs
+          ~directory:(Filename.dirname path)
+          ~strict:project.strict.value
+          ())
        ds)
 ;;
 

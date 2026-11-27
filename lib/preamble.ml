@@ -1,6 +1,7 @@
 let definition =
   Re.compile
-    (Re.Perl.re {|^(?:def\s+([A-Za-z_][A-Za-z0-9_]*)|class\s+([A-Za-z_][A-Za-z0-9_]*)|([A-Za-z_][A-Za-z0-9_.]*)\s*(?:<-|=)\s)|})
+    (Re.Perl.re
+       {|^(?:def\s+([A-Za-z_][A-Za-z0-9_]*)|class\s+([A-Za-z_][A-Za-z0-9_]*)|([A-Za-z_][A-Za-z0-9_.]*)\s*(?:<-|=)\s)|})
 ;;
 
 let word = Re.compile (Re.Perl.re {|[A-Za-z_.][A-Za-z0-9_.]*|})
@@ -30,7 +31,9 @@ let words text = List.map (fun g -> Re.Group.get g 0) (Re.all word text)
 let used adapters code =
   let blocks = blocks adapters in
   let named = Hashtbl.create 64 in
-  List.iter (fun (n, body) -> Option.iter (fun n -> Hashtbl.replace named n body) n) blocks;
+  List.iter
+    (fun (n, body) -> Option.iter (fun n -> Hashtbl.replace named n body) n)
+    blocks;
   let needed = Hashtbl.create 64 in
   let rec close = function
     | [] -> ()

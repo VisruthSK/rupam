@@ -53,4 +53,3 @@ let validate path =
               (String.concat "; " (problems @ failed))))
     [ "validate-meta"; "validate-data" ]
 ;;
-

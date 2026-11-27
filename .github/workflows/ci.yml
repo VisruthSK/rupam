@@ -50,7 +50,6 @@ jobs:
           dune-cache: true
       - run: opam install . --deps-only --with-test
       - run: opam exec -- dune build @all
-      - run: opam exec -- dune runtest
 
       - uses: astral-sh/setup-uv@v10.4.0
         with:
@@ -64,4 +63,5 @@ jobs:
         with:
           packages: any::dplyr, any::tidyr, any::bit64, any::jsonlite, any::arrow
 
+      - run: opam exec -- uv run --locked dune runtest
       - run: opam exec -- uv run --locked dune build @integration

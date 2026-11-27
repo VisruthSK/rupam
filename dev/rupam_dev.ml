@@ -210,7 +210,9 @@ let bench examples =
     let a = Array.of_list (List.sort compare xs) in
     a.(min (Array.length a - 1) (int_of_float (p *. float_of_int (Array.length a))))
   in
-  let startup = List.init 10 (fun _ -> time (fun () -> Sys.command "rupam --version > /dev/null")) in
+  let startup =
+    List.init 10 (fun _ -> time (fun () -> Sys.command "rupam --version > /dev/null"))
+  in
   Printf.printf "%-28s p50 %7.1f ms\n%!" "rupam --version" (percentile startup 0.5);
   List.iter
     (fun name ->
@@ -231,7 +233,9 @@ let bench examples =
          (name ^ " round trip")
          (percentile warm 0.5)
          (percentile warm 0.95);
-       report "read_csv penguins" (time (fun () -> submit {|let p = read_csv("penguins.csv")|}));
+       report
+         "read_csv penguins"
+         (time (fun () -> submit {|let p = read_csv("penguins.csv")|}));
        report "show table" (time (fun () -> submit "p"));
        Session.close session)
     Rupam_fixture.Fixture.targets
@@ -259,7 +263,11 @@ let eval source =
 
 let activate id =
   let path = Printf.sprintf "test/conformance/%s.toml" id in
-  match List.find_opt (fun (f : Rupam_fixture.Fixture.t) -> f.id = id) (Rupam_fixture.Fixture.all "test/conformance") with
+  match
+    List.find_opt
+      (fun (f : Rupam_fixture.Fixture.t) -> f.id = id)
+      (Rupam_fixture.Fixture.all "test/conformance")
+  with
   | None -> failwith ("No fixture " ^ id)
   | Some f ->
     let failures =
@@ -279,7 +287,8 @@ let activate id =
       exit 1);
     let text = In_channel.with_open_text path In_channel.input_all in
     let active =
-      Astring.String.cuts ~sep:{|status = "pending"|} text |> String.concat {|status = "active"|}
+      Astring.String.cuts ~sep:{|status = "pending"|} text
+      |> String.concat {|status = "active"|}
     in
     Out_channel.with_open_text path (fun oc -> output_string oc active);
     Printf.printf "%s passes everywhere and is active\n" id
@@ -420,17 +429,23 @@ let () =
           ; Cmd.v
               (Cmd.info
                  "eval"
-                 ~doc:"Run SOURCE on the reference evaluator and every target; print disagreements.")
+                 ~doc:
+                   "Run SOURCE on the reference evaluator and every target; print \
+                    disagreements.")
               Term.(
                 const (fun s -> guarded eval s)
                 $ Arg.(required & pos 0 (some string) None & info [] ~docv:"SOURCE"))
           ; Cmd.v
-              (Cmd.info "bench" ~doc:"Time startup, worker start and round trips on every target.")
+              (Cmd.info
+                 "bench"
+                 ~doc:"Time startup, worker start and round trips on every target.")
               Term.(
                 const (fun d -> guarded bench d)
                 $ Arg.(value & pos 0 dir "examples" & info [] ~docv:"EXAMPLES"))
           ; Cmd.v
-              (Cmd.info "activate" ~doc:"Mark fixture ID active once it passes on every target.")
+              (Cmd.info
+                 "activate"
+                 ~doc:"Mark fixture ID active once it passes on every target.")
               Term.(
                 const (fun id -> guarded activate id)
                 $ Arg.(required & pos 0 (some string) None & info [] ~docv:"ID"))

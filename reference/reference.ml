@@ -1,6 +1,5 @@
 open Rupam
 open Rupam_native
-
 module C = TransformIR
 module T = Types
 
@@ -59,8 +58,8 @@ let rows = function
   | Frame f ->
     Some
       ( List.map fst f.columns
-      , List.init f.rows (fun i -> List.map (fun (_, column) -> display column.(i)) f.columns)
-      )
+      , List.init f.rows (fun i ->
+          List.map (fun (_, column) -> display column.(i)) f.columns) )
   | _ -> None
 ;;
 
@@ -114,7 +113,9 @@ let binary e (op : Syntax.binary) a b =
   | Approx, a, b ->
     let a = number a
     and b = number b in
-    Bool (Float.abs (a -. b) <= Float.sqrt Float.epsilon *. Float.max (Float.abs a) (Float.abs b))
+    Bool
+      (Float.abs (a -. b)
+       <= Float.sqrt Float.epsilon *. Float.max (Float.abs a) (Float.abs b))
   | Less, a, b -> Bool (compare_values a b < 0)
   | Greater, a, b -> Bool (compare_values a b > 0)
   | Less_equal, a, b -> Bool (compare_values a b <= 0)
@@ -165,8 +166,16 @@ let missing_last a b =
 ;;
 
 let sequence e first last step =
-  let ints = List.for_all (function Int _ -> true | _ -> false) [ first; last; step ] in
-  let first = number first and last = number last and step = number step in
+  let ints =
+    List.for_all
+      (function
+        | Int _ -> true
+        | _ -> false)
+      [ first; last; step ]
+  in
+  let first = number first
+  and last = number last
+  and step = number step in
   if step = 0.
   then fail e Wrong_arguments "seq needs a nonzero step"
   else (
@@ -225,19 +234,32 @@ let builtin e call (row : Prelude.row) args =
   | Ends, [ v; p ] -> Bool (String.ends_with ~suffix:(text p) (text v))
   | Detect, [ v; p ] -> Bool (Re.execp (Re.compile (Re.Perl.re (text p))) (text v))
   | Sequence, [ first; last; step ] -> sequence e first last step
-  | Year_of, [ Date d ] -> let y, _, _ = Calendar.ymd d in Int (Int64.of_int y)
-  | Month_of, [ Date d ] -> let _, m, _ = Calendar.ymd d in Int (Int64.of_int m)
-  | Day_of, [ Date d ] -> let _, _, day = Calendar.ymd d in Int (Int64.of_int day)
+  | Year_of, [ Date d ] ->
+    let y, _, _ = Calendar.ymd d in
+    Int (Int64.of_int y)
+  | Month_of, [ Date d ] ->
+    let _, m, _ = Calendar.ymd d in
+    Int (Int64.of_int m)
+  | Day_of, [ Date d ] ->
+    let _, _, day = Calendar.ymd d in
+    Int (Int64.of_int day)
   | Wday, [ Date d ] -> Int (Int64.of_int (Calendar.weekday d))
   | Yday, [ Date d ] -> Int (Int64.of_int (Calendar.year_day d))
-  | Floor_year, [ Date d ] -> let y, _, _ = Calendar.ymd d in Date (Option.get (Calendar.of_ymd (y, 1, 1)))
-  | Floor_month, [ Date d ] -> let y, m, _ = Calendar.ymd d in Date (Option.get (Calendar.of_ymd (y, m, 1)))
+  | Floor_year, [ Date d ] ->
+    let y, _, _ = Calendar.ymd d in
+    Date (Option.get (Calendar.of_ymd (y, 1, 1)))
+  | Floor_month, [ Date d ] ->
+    let y, m, _ = Calendar.ymd d in
+    Date (Option.get (Calendar.of_ymd (y, m, 1)))
   | Floor_week, [ Date d ] -> Date (d - Calendar.weekday d + 1)
   | Days, [ n ] -> Duration (Int64.to_int (integer n))
   | Months, [ n ] -> Period (Int64.to_int (integer n))
   | Years, [ n ] -> Period (12 * Int64.to_int (integer n))
   | Parse_date, [ s; f ] ->
-    Option.fold ~none:Missing ~some:(fun d -> Date d) (Calendar.parse ~format:(text f) (text s))
+    Option.fold
+      ~none:Missing
+      ~some:(fun d -> Date d)
+      (Calendar.parse ~format:(text f) (text s))
   | _ -> invalid_arg "Wrong arguments to a builtin"
 ;;
 
@@ -408,7 +430,10 @@ let rec eval env ?rows (e : C.expr) =
   | Guarded (selects, value) ->
     (match rows with
      | Some ({ group; _ } as at) ->
-       if Array.exists (fun row -> eval env ~rows:{ at with row } selects = Bool true) group
+       if
+         Array.exists
+           (fun row -> eval env ~rows:{ at with row } selects = Bool true)
+           group
        then here value
        else Missing
      | None -> here value)
@@ -565,7 +590,9 @@ and join env (j : C.join) =
   for k = right.rows - 1 downto 0 do
     if rk.(k) <> Missing then Hashtbl.add index (normal rk.(k)) k
   done;
-  let matches i = if lk.(i) = Missing then [] else Hashtbl.find_all index (normal lk.(i)) in
+  let matches i =
+    if lk.(i) = Missing then [] else Hashtbl.find_all index (normal lk.(i))
+  in
   let pairs =
     List.concat_map
       (fun i ->
@@ -592,10 +619,11 @@ and join env (j : C.join) =
   let right_unmatched = unmatched_right <> [] in
   if
     j.covered
-    && (match j.kind with
-        | Left -> left_unmatched
-        | Right -> right_unmatched
-        | _ -> left_unmatched || right_unmatched)
+    &&
+    match j.kind with
+    | Left -> left_unmatched
+    | Right -> right_unmatched
+    | _ -> left_unmatched || right_unmatched
   then
     Diagnostic.fail
       Join_keys

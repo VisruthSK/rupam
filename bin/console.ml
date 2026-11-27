@@ -40,7 +40,8 @@ type msg =
   | Name_cancel
   | Draft_tick
   | Draft_ready of int * (Rupam_native.Session.result, Rupam.Diagnostic.t) result
-  | Column_ready of int * string * (Rupam_native.Arrow_result.profile, Rupam.Diagnostic.t) result
+  | Column_ready of
+      int * string * (Rupam_native.Arrow_result.profile, Rupam.Diagnostic.t) result
 
 type model =
   { session : Repl.t
@@ -458,7 +459,11 @@ let grid model (v : Viewer.t) =
         ; "g G", "first, last"
         ] )
     ; ( "Data"
-      , [ "s S", "sort asc, desc"; "=", "filter to value"; "d", "describe column"; "u", "undo" ] )
+      , [ "s S", "sort asc, desc"
+        ; "=", "filter to value"
+        ; "d", "describe column"
+        ; "u", "undo"
+        ] )
     ; ( "Edit"
       , [ "i Tab", "prompt"
         ; "Shift+Tab", "back to grid"
@@ -466,7 +471,8 @@ let grid model (v : Viewer.t) =
         ; "Ctrl+Shift+M", "insert |>"
         ] )
     ; ( "Leave"
-      , [ "Enter", "run"; "Ctrl+G", "$EDITOR"; "?", "hide keys"; "Esc", "close, no save" ] )
+      , [ "Enter", "run"; "Ctrl+G", "$EDITOR"; "?", "hide keys"; "Esc", "close, no save" ]
+      )
     ]
   in
   let keys =
@@ -587,7 +593,8 @@ let view model =
       match model.search, Repl.hint (Editor.text model.input) with
       | Some (query, _, _), _ ->
         [ text ~style:(style faint) (Printf.sprintf "  reverse search: %s" query) ]
-      | None, Some hint when model.menu = None -> [ text ~style:(style faint) ("  " ^ hint) ]
+      | None, Some hint when model.menu = None ->
+        [ text ~style:(style faint) ("  " ^ hint) ]
       | None, _ -> []
     in
     box
@@ -714,7 +721,8 @@ let complete_editor session input menu =
       | Some i -> (i + 1) mod List.length items
     in
     let item = List.nth items next in
-    insert_completion input menu.before (Rupam_native.Completion.insert item), Some { menu with selected = Some next }
+    ( insert_completion input menu.before (Rupam_native.Completion.insert item)
+    , Some { menu with selected = Some next } )
   | _ ->
     let line = completion_prefix input in
     let start, candidates = Repl.complete session line in
@@ -806,7 +814,8 @@ let change_draft model f =
     if next.generation = v.generation
     then { model with viewer = Some next; input }
     else (
-      if model.working = Some Preview_work then Rupam_native.Session.cancel_draft v.context;
+      if model.working = Some Preview_work
+      then Rupam_native.Session.cancel_draft v.context;
       { model with viewer = Some next; input; save_requested = None })
 ;;
 
@@ -860,32 +869,39 @@ let step msg model =
   | Name_cancel -> { model with naming = None }, Cmd.none
   | Submit source when Repl.missing_argument source ->
     let input =
-      if String.ends_with ~suffix:" " source then model.input else Editor.insert " " model.input
+      if String.ends_with ~suffix:" " source
+      then model.input
+      else Editor.insert " " model.input
     in
     { model with input; menu = None }, Cmd.none
   | Submit source -> evaluate model source
   | Accept -> { model with menu = None }, Cmd.none
   | Search key ->
     let find query skip =
-      List.filter (fun entry -> query <> "" && Astring.String.is_infix ~affix:query entry) model.history
+      List.filter
+        (fun entry -> query <> "" && Astring.String.is_infix ~affix:query entry)
+        model.history
       |> fun matches -> List.nth_opt matches skip
     in
     let show query skip original =
-      let input =
-        Option.fold ~none:original ~some:Editor.of_string (find query skip)
-      in
+      let input = Option.fold ~none:original ~some:Editor.of_string (find query skip) in
       { model with search = Some (query, skip, original); input; menu = None }, Cmd.none
     in
     (match key, model.search with
      | Start, None -> show "" 0 model.input
      | Start, Some (query, skip, original) ->
-       if find query (skip + 1) = None then model, Cmd.none else show query (skip + 1) original
+       if find query (skip + 1) = None
+       then model, Cmd.none
+       else show query (skip + 1) original
      | Type text, Some (query, _, original) -> show (query ^ text) 0 original
      | Erase, Some (query, _, original) ->
-       let query = if query = "" then "" else String.sub query 0 (String.length query - 1) in
+       let query =
+         if query = "" then "" else String.sub query 0 (String.length query - 1)
+       in
        show query 0 original
      | Keep, Some _ -> { model with search = None }, Cmd.none
-     | Cancel, Some (_, _, original) -> { model with search = None; input = original }, Cmd.none
+     | Cancel, Some (_, _, original) ->
+       { model with search = None; input = original }, Cmd.none
      | _, None -> model, Cmd.none)
   | Recall step -> { (recall model step) with menu = None }, Cmd.none
   | Choose step ->
@@ -898,7 +914,9 @@ let step msg model =
          | Some i -> (i + step + count) mod count
        in
        let item = List.nth items next in
-       let input = insert_completion model.input menu.before (Rupam_native.Completion.insert item) in
+       let input =
+         insert_completion model.input menu.before (Rupam_native.Completion.insert item)
+       in
        ( change_draft
            { model with input; menu = Some { menu with selected = Some next } }
            (fun v -> Viewer.edit v (Editor.text input))
@@ -1012,7 +1030,8 @@ let step msg model =
        ( { model with working = Some Preview_work }
        , Cmd.perform (fun dispatch ->
            let result =
-             result_of (fun () -> Rupam_native.Session.preview_draft v.context (Viewer.source v))
+             result_of (fun () ->
+               Rupam_native.Session.preview_draft v.context (Viewer.source v))
            in
            dispatch (Draft_ready (v.generation, result))) )
      | _ -> model, Cmd.none)
@@ -1199,11 +1218,11 @@ let subscriptions model =
             then [ Shortcut.up, Recall (-1); Shortcut.down, Recall 1 ]
             else [ Shortcut.up, Choose (-1); Shortcut.down, Choose 1 ])
            @ [ Shortcut.tab, Complete
-           ; Shortcut.ctrl 'r', Search Start
-           ; ( Shortcut.enter
-             , match model.menu with
-               | Some { selected = Some _; _ } -> Accept
-               | _ -> Submit (Editor.text model.input) )
+             ; Shortcut.ctrl 'r', Search Start
+             ; ( Shortcut.enter
+               , match model.menu with
+                 | Some { selected = Some _; _ } -> Accept
+                 | _ -> Submit (Editor.text model.input) )
              ; Shortcut.ctrl 'l', Clear
              ; Shortcut.ctrl 'c', Discard
              ]

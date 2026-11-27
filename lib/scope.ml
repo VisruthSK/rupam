@@ -82,7 +82,12 @@ let table_parameters template =
     (match x.form with
      | Pipe ({ form = Name (Bare, p); _ }, _) -> piped := p :: !piped
      | _ -> ());
-    ignore (Syntax.map (fun child -> visit child; child) x)
+    ignore
+      (Syntax.map
+         (fun child ->
+            visit child;
+            child)
+         x)
   in
   visit template.body;
   List.filter (fun p -> List.mem p !piped) template.params

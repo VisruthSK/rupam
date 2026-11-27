@@ -148,7 +148,9 @@ let language w = w.language
 let request w script =
   w.revision <- w.revision + 1;
   try
-    Yojson.Safe.to_channel w.requests (yojson_of_request { revision = w.revision; script });
+    Yojson.Safe.to_channel
+      w.requests
+      (yojson_of_request { revision = w.revision; script });
     output_char w.requests '\n';
     flush w.requests;
     w.revision

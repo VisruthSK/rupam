@@ -40,7 +40,12 @@ let uses_table_verb body =
      | Call ({ form = Name (Bare, n); _ }, _)
        when Verbs.mem n || List.mem_assoc n TransformIR.join_kinds -> found := true
      | _ -> ());
-    ignore (Syntax.map (fun child -> visit child; child) x)
+    ignore
+      (Syntax.map
+         (fun child ->
+            visit child;
+            child)
+         x)
   in
   visit body;
   !found
@@ -110,7 +115,9 @@ let rec expr ctx (x : Syntax.expr) : C.expr =
     expect c.span T.Bool c.typ;
     let a, b, t = common span (expr (present_after ctx c) a) (here b) in
     let guard selects (x : C.expr) =
-      if c.shape = Columnar && C.reduces x then { x with node = Guarded (selects, x) } else x
+      if c.shape = Columnar && C.reduces x
+      then { x with node = Guarded (selects, x) }
+      else x
     in
     let a = guard c a
     and b = guard (make c.shape T.Bool (Unary (Not, c))) b in
@@ -270,9 +277,7 @@ and name ctx span reference n =
   | (Bare | Lexical), _ ->
     (match lexical (), ctx.columns with
      | Some v, _ -> v
-     | None, Some row
-       when reference = Bare
-            && Option.is_some (T.field ctx.level row n) ->
+     | None, Some row when reference = Bare && Option.is_some (T.field ctx.level row n) ->
        as_column (Option.get (T.field ctx.level row n))
      | None, _ ->
        (match Prelude.find n with
@@ -282,12 +287,19 @@ and name ctx span reference n =
           fail
             span
             Not_a_value
-            (n ^ " reads its table's columns, so it can be called but not passed as a value")
+            (n
+             ^ " reads its table's columns, so it can be called but not passed as a value"
+            )
         | None when List.mem_assoc n Syntax.taps ->
-          fail span Unknown_name (Printf.sprintf "Unknown name: %s. Did you mean the inspection !%s()?" n n)
+          fail
+            span
+            Unknown_name
+            (Printf.sprintf "Unknown name: %s. Did you mean the inspection !%s()?" n n)
         | None ->
           let columns = List.map fst known in
-          let names = List.map fst ctx.env.names @ Verbs.names @ List.map fst Prelude.all in
+          let names =
+            List.map fst ctx.env.names @ Verbs.names @ List.map fst Prelude.all
+          in
           (match closest n (columns @ names) with
            | Some m when List.mem m columns ->
              fail span Unknown_column ("No column named " ^ n ^ did_you_mean (Some m))
@@ -338,9 +350,7 @@ and present_after ctx condition =
        match x.node, ctx.columns with
        | Column name, Some row ->
          let fields =
-           List.map
-             (fun (n, t) -> n, if n = name then T.present t else t)
-             row.fields
+           List.map (fun (n, t) -> n, if n = name then T.present t else t) row.fields
          in
          { ctx with columns = Some { row with fields } }
        | Variable id, _ ->
@@ -363,7 +373,8 @@ and binary ctx span op a b =
       number (T.present a.typ);
       number (T.present b.typ);
       to_float a, to_float b, T.Bool
-    | (Add | Sub) when T.repr (T.present a.typ) = Date || T.repr (T.present b.typ) = Date ->
+    | (Add | Sub) when T.repr (T.present a.typ) = Date || T.repr (T.present b.typ) = Date
+      ->
       let result =
         match op, T.repr (T.present a.typ), T.repr (T.present b.typ) with
         | (Add | Sub), Date, (Duration | Period) -> T.Date
@@ -375,8 +386,7 @@ and binary ctx span op a b =
             "Dates take + or - with days(), months() or years(), and - with another Date"
       in
       a, b, result
-    | (Add | Sub)
-      when List.mem (T.repr (T.present a.typ)) [ T.Duration; T.Period ] ->
+    | (Add | Sub) when List.mem (T.repr (T.present a.typ)) [ T.Duration; T.Period ] ->
       let a, b, t = common span a b in
       a, b, t
     | _ ->
@@ -432,8 +442,7 @@ and call ctx span (f : Syntax.expr) args =
      | _ -> fail span Wrong_arguments (n ^ " needs a table"))
     |> fun e -> retype_table e
   | Name (Bare, (("center" | "scale" | "standardize" | "rescale") as n))
-    when not (List.mem_assoc n ctx.env.names) ->
-    expr ctx (transform ctx span n args)
+    when not (List.mem_assoc n ctx.env.names) -> expr ctx (transform ctx span n args)
   | Name (Bare, n) when List.mem_assoc n sources ->
     retype_table (make Scalar (T.fresh ctx.level) (Table (source ctx span f args)))
   | Name (Bare, n)
@@ -471,7 +480,12 @@ and call ctx span (f : Syntax.expr) args =
            (match e.form with
             | Name (Bare, n) when free n -> found := true
             | _ -> ());
-           ignore (Syntax.map (fun child -> visit child; child) e)
+           ignore
+             (Syntax.map
+                (fun child ->
+                   visit child;
+                   child)
+                e)
          in
          visit x;
          !found
@@ -601,7 +615,9 @@ and transform ctx span n args =
     | "center" -> [ "·mean", reduce "mean" ], None
     | "scale" -> [ "·sd", reduce "sd" ], Some (name "·sd")
     | "standardize" -> [ "·mean", reduce "mean"; "·sd", reduce "sd" ], Some (name "·sd")
-    | _ -> [ "·min", reduce "min"; "·max", reduce "max" ], Some (binary Sub (name "·max") (name "·min"))
+    | _ ->
+      ( [ "·min", reduce "min"; "·max", reduce "max" ]
+      , Some (binary Sub (name "·max") (name "·min")) )
   in
   let shifted v =
     match n with
@@ -624,10 +640,15 @@ and transform ctx span n args =
            , binary Div (shifted v) d
            , node (Literal Absent) ))
   in
-  let bind body = List.fold_right (fun (n, e) body -> node (Local (n, e, body))) numerator body in
+  let bind body =
+    List.fold_right (fun (n, e) body -> node (Local (n, e, body))) numerator body
+  in
   if ctx.columns <> None
   then bind (value x)
-  else bind (node (Call (name "map", [ None, x; None, node (Lambda ([ "·v" ], value (name "·v"))) ])))
+  else
+    bind
+      (node
+         (Call (name "map", [ None, x; None, node (Lambda ([ "·v" ], value (name "·v"))) ])))
 
 and apply ctx span (f : C.expr) values =
   let make = make span in
@@ -773,9 +794,14 @@ and builtin ctx span n b args =
            | "year" -> Prelude.Floor_year
            | "month" -> Floor_month
            | "week" -> Floor_week
-           | _ -> fail span Wrong_arguments "floor_date takes unit \"year\", \"month\" or \"week\"")
+           | _ ->
+             fail
+               span
+               Wrong_arguments
+               "floor_date takes unit \"year\", \"month\" or \"week\"")
         , [ x ] )
-      | Floor_month, [ _; _ ] -> fail span Wrong_arguments "floor_date needs a literal unit"
+      | Floor_month, [ _; _ ] ->
+        fail span Wrong_arguments "floor_date needs a literal unit"
       | row, _ -> row, values
     in
     let params, result = row_signature ctx.level row in
@@ -799,9 +825,9 @@ and builtin ctx span n b args =
     if ctx.columns = None then fail span Column_required "n() counts the rows of a table";
     make Scalar T.Int Count
   | Reduction r, [ ({ typ; shape = Scalar; _ } as v) ]
-    when (match T.repr typ with
-          | List _ -> true
-          | _ -> false) ->
+    when match T.repr typ with
+         | List _ -> true
+         | _ -> false ->
     let element =
       match T.repr typ with
       | List e -> e
@@ -815,7 +841,9 @@ and builtin ctx span n b args =
         fail
           span
           Missing_policy_required
-          (n ^ " reads a vector that can hold None. Say what to do with them: missing = skip, keep or error")
+          (n
+           ^ " reads a vector that can hold None. Say what to do with them: missing = \
+              skip, keep or error")
     in
     let element = T.present element in
     let result =
@@ -1244,7 +1272,8 @@ and source ctx span (f : Syntax.expr) args : C.table =
         Load
           { contract
           ; table
-          ; file = { path; digest = ctx.env.inputs.digest path; format = Parquet; columns }
+          ; file =
+              { path; digest = ctx.env.inputs.digest path; format = Parquet; columns }
           }
     ; stages = []
     ; schema = columns
@@ -1372,33 +1401,33 @@ let function_ env name params body =
   if uses_table_verb body
   then bind env name (Function { id = None; scheme = None; template }), []
   else (
-  let ctx = { env; level = 1; columns = None; missing = env.missing } in
-  let host () =
-    let lambda = expr ctx { body with form = Lambda (params, body) } in
-    let id = fresh_id env name in
-    ( bind
-        env
-        name
-        (Function { id = Some id; scheme = Some (T.generalize 0 lambda.typ); template })
-    , [ C.Define (id, finish ~default:false lambda) ] )
-  in
-  let contextual () =
-    let types = List.map (fun _ -> T.fresh 1) params in
-    let inner =
-      List.fold_left2
-        (fun inner p t ->
-           bind inner p (Inline (make body.span Columnar t (Variable (fresh_id env p)))))
-        env
-        params
-        types
+    let ctx = { env; level = 1; columns = None; missing = env.missing } in
+    let host () =
+      let lambda = expr ctx { body with form = Lambda (params, body) } in
+      let id = fresh_id env name in
+      ( bind
+          env
+          name
+          (Function { id = Some id; scheme = Some (T.generalize 0 lambda.typ); template })
+      , [ C.Define (id, finish ~default:false lambda) ] )
     in
-    let result = expr { ctx with env = inner } body in
-    let scheme = T.generalize 0 (T.Arrow (types, result.typ)) in
-    bind env name (Function { id = None; scheme = Some scheme; template }), []
-  in
-  try host () with
-  | Diagnostic.Error { code = Column_required | Missing_policy_required; _ } ->
-    contextual ())
+    let contextual () =
+      let types = List.map (fun _ -> T.fresh 1) params in
+      let inner =
+        List.fold_left2
+          (fun inner p t ->
+             bind inner p (Inline (make body.span Columnar t (Variable (fresh_id env p)))))
+          env
+          params
+          types
+      in
+      let result = expr { ctx with env = inner } body in
+      let scheme = T.generalize 0 (T.Arrow (types, result.typ)) in
+      bind env name (Function { id = None; scheme = Some scheme; template }), []
+    in
+    try host () with
+    | Diagnostic.Error { code = Column_required | Missing_policy_required; _ } ->
+      contextual ())
 ;;
 
 let printed (x : Syntax.expr) =
@@ -1564,11 +1593,12 @@ let program env declarations =
 let builtins () =
   sources
   @ List.map
-    (fun (n, b) ->
-       ( n
-       , match b with
-         | Prelude.Coalesce ->
-           "(a?, ..., a?, a) -> a; the first present argument, or a? when every argument is optional"
-         | b -> T.display (builtin_type 1 b) ))
-    Prelude.all
+      (fun (n, b) ->
+         ( n
+         , match b with
+           | Prelude.Coalesce ->
+             "(a?, ..., a?, a) -> a; the first present argument, or a? when every \
+              argument is optional"
+           | b -> T.display (builtin_type 1 b) ))
+      Prelude.all
 ;;
