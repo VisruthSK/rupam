@@ -104,6 +104,10 @@ with R and Python only as reference backends.
   interfaces from the platform separation.
 - Idiomatic R and Python formatting of generated code beyond line breaking,
   if a light dependency or printer pass suffices.
+- Replace `scripts/dev` with a `justfile` (or an equally small runner) as a
+  development dependency, so build, test, bench and format commands are short
+  and reusable; formatting runs ocamlformat, air and jarl for R, and ruff for
+  Python.
 - Splitting each backend into a `HOST` and a `DIALECT` once a language has a
   second table library.
 - Modules, package export, test blocks, `repeat`, and the relational
