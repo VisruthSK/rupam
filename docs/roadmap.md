@@ -52,20 +52,19 @@ not yet built.
 
 In order of conformance cases unlocked:
 
-1. Multi-column `match` in verbs (C127) and quoted output names (C103).
-2. A fixture runner for the session protocol: drafts, holes, decisions,
+1. A fixture runner for the session protocol: drafts, holes, decisions,
    `define`, `fork`, `save`, target switches and taps (about 11 cases).
-3. Contract validation: required, range, NaN and infinity in sources, keys
+2. Contract validation: required, range, NaN and infinity in sources, keys
    and foreign keys, malformed fields (about 9 cases).
-4. Evidence and locking: incremental `:lock`, `:unlock`, `:refresh`, schema
+3. Evidence and locking: incremental `:lock`, `:unlock`, `:refresh`, schema
    discovery accepted by lock, and obligations discharged by locked evidence
    (about 13 cases).
-5. Reshaping: `bind_rows`, `complete`, `expand`, pivot duplicates and
+4. Reshaping: `bind_rows`, `complete`, `expand`, pivot duplicates and
    `values_fn` (about 7 cases).
-6. `across` and the remaining column transforms (C77, C106).
-7. Ordered windows: `lag`, `lead`, `slice_min` with total-order obligations
+5. `across` and the remaining column transforms (C77, C106).
+6. Ordered windows: `lag`, `lead`, `slice_min` with total-order obligations
    (5 cases).
-8. Strict mode and effect sets (5 cases); restricted columns (3 cases).
+7. Strict mode and effect sets (5 cases); restricted columns (3 cases).
 
 ## 4. Interactive experience
 
