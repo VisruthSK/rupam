@@ -3,6 +3,9 @@ _build/
 __pycache__/
 *.parquet
 !examples/orders.parquet
+vendor/duckdb/*
+!vendor/duckdb/dune
+!vendor/duckdb/ucrt.c
 vendor/nanoarrow/*
 !vendor/nanoarrow/dune
 examples/trips.parquet

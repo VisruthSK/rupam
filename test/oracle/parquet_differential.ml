@@ -1,3 +1,5 @@
+module Source = Rupam_native.Parquet_source
+
 let describe (c : Input.column) =
   match c.typ with
   | Supported t ->
@@ -5,16 +7,47 @@ let describe (c : Input.column) =
   | Unsupported raw -> Printf.sprintf "%s unsupported(%s)" c.name raw
 ;;
 
-let agrees (c : Input.column) expected =
-  let field name = Yojson.Safe.Util.member name expected in
-  String.equal c.name (Yojson.Safe.Util.to_string (field "name"))
+let agree (a : Input.column) (b : Input.column) =
+  String.equal a.name b.name
   &&
-  match c.typ, field "type" with
-  | Supported t, `String kind ->
-    String.equal (Types.display t) kind
-    && Bool.equal c.nullable (Yojson.Safe.Util.to_bool (field "nullable"))
-  | Unsupported _, `Null -> true
+  match a.typ, b.typ with
+  | Supported x, Supported y -> x = y && Bool.equal a.nullable b.nullable
+  | Unsupported _, Unsupported _ -> true
   | _ -> false
+;;
+
+let same_cell (cell : Source.cell) (duck : string option) =
+  match cell, duck with
+  | Missing, None -> true
+  | Bool b, Some s -> String.equal s (if b then "true" else "false")
+  | Int n, Some s -> String.equal (Int64.to_string n) s
+  | Float f, Some s ->
+    (Float.is_nan f && String.equal s "nan")
+    || Int64.equal (Int64.bits_of_float f) (Int64.bits_of_float (float_of_string s))
+  | Text a, Some b -> String.equal a b
+  | Date d, Some s -> Calendar.of_iso s = Some d
+  | _ -> false
+;;
+
+let values_disagree path =
+  let names, rows = Duckdb_oracle.rows path in
+  List.filter_map
+    (fun (name, cells) ->
+       match Array.find_index (String.equal name) names with
+       | None -> Some (name ^ " is not a DuckDB column")
+       | Some _ when Array.length cells <> Array.length rows ->
+         Some
+           (Printf.sprintf
+              "%s has %d values, DuckDB %d"
+              name
+              (Array.length cells)
+              (Array.length rows))
+       | Some j ->
+         Seq.find
+           (fun i -> not (same_cell cells.(i) rows.(i).(j)))
+           (Seq.init (Array.length rows) Fun.id)
+         |> Option.map (fun i -> Printf.sprintf "%s differs at row %d" name i))
+    (Source.rows path)
 ;;
 
 let () =
@@ -29,31 +62,29 @@ let () =
   List.iter
     (fun f ->
        let path = Filename.concat dir f in
-       let ours = Rupam_native.Data_file.columns ~missing:Input.default_missing path in
-       let expected =
-         Yojson.Safe.Util.to_list
-           (Yojson.Safe.from_file (Filename.remove_extension path ^ ".json"))
-       in
-       if
-         List.length ours <> List.length expected
-         || not (List.for_all2 agrees ours expected)
+       let ours = Rupam_native.Data_file.columns ~missing:Input.default_missing path
+       and theirs = Duckdb_oracle.parquet_columns path in
+       if List.length ours <> List.length theirs || not (List.for_all2 agree ours theirs)
        then (
          incr failures;
          Printf.printf
-           "%s\n  ours:    %s\n  pyarrow: %s\n"
+           "%s\n  ours:   %s\n  duckdb: %s\n"
            f
            (String.concat ", " (List.map describe ours))
-           (String.concat ", " (List.map Yojson.Safe.to_string expected))))
+           (String.concat ", " (List.map describe theirs)));
+       match values_disagree path with
+       | [] -> ()
+       | problems ->
+         incr failures;
+         Printf.printf "%s values: %s\n" f (String.concat "; " problems))
     files;
   if !failures > 0
   then (
     Printf.printf
-      "parquet differential: %d of %d files disagree\n"
+      "parquet differential: %d disagreements over %d files\n"
       !failures
       (List.length files);
     exit 1)
   else
-    Printf.printf
-      "parquet differential: %d files agree with pyarrow\n"
-      (List.length files)
+    Printf.printf "parquet differential: %d files agree with DuckDB\n" (List.length files)
 ;;

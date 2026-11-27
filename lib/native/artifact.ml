@@ -21,7 +21,7 @@ type manifest =
   { compiler : string
   ; target : Target.t
   ; source : string
-  ; program_sha256 : string
+  ; program_blake3 : string
   ; inputs : Lock.input list
   ; dependencies : string list
   ; nonportable : string list
@@ -45,7 +45,7 @@ let write_json path json =
     output_string channel (Yojson.Safe.pretty_to_string json ^ "\n"))
 ;;
 
-let write ~(entry : Lock.entry) ~program_sha256 ~locations ~output ~code items =
+let write ~(entry : Lock.entry) ~program_blake3 ~locations ~output ~code items =
   let target = entry.target in
   let extension = Runtime.suffix target.language in
   if not (Filename.check_suffix output extension)
@@ -66,7 +66,7 @@ let write ~(entry : Lock.entry) ~program_sha256 ~locations ~output ~code items =
     { compiler = entry.compiler
     ; target = entry.target
     ; source = entry.source
-    ; program_sha256
+    ; program_blake3
     ; inputs = entry.inputs
     ; dependencies = dependencies target ~tabular:(TransformIR.tabular items)
     ; nonportable = Host.nonportable items

@@ -19,7 +19,6 @@
   sexplib0
   astring
   re
-  digestif
   ptime
   uucp
   toml
@@ -34,4 +33,6 @@
  (name rupam-dev)
  (synopsis "Internal tools for developing Rupam")
  (allow_empty)
- (depends rupam))
+ (depends
+  rupam
+  (conf-mingw-w64-g++-x86_64 (= :os "win32"))))

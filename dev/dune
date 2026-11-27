@@ -5,6 +5,7 @@
  (libraries
   rupam
   rupam_native
+  duckdb_oracle
   reference
   rupam_fixture
   cmdliner

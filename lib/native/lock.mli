@@ -1,6 +1,6 @@
 type input =
   { path : string
-  ; sha256 : string
+  ; blake3 : string
   }
 [@@deriving yojson_of]
 

@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        dependency: [nanoarrow]
+        dependency: [duckdb, nanoarrow]
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
@@ -23,7 +23,10 @@ jobs:
       - name: Compare pinned and latest versions
         id: versions
         run: |
-          latest=$(gh release view --repo apache/arrow-nanoarrow --json tagName --jq '.tagName | ltrimstr("apache-arrow-nanoarrow-")')
+          case "${{ matrix.dependency }}" in
+            duckdb) latest=$(gh release view --repo duckdb/duckdb --json tagName --jq '.tagName | ltrimstr("v")') ;;
+            nanoarrow) latest=$(gh release view --repo apache/arrow-nanoarrow --json tagName --jq '.tagName | ltrimstr("apache-arrow-nanoarrow-")') ;;
+          esac
           echo "current=$(sed -n 's/^${{ matrix.dependency }}=//p' scripts/fetch-deps)" >> "$GITHUB_OUTPUT"
           echo "latest=$latest" >> "$GITHUB_OUTPUT"
 
@@ -39,8 +42,15 @@ jobs:
             exit 0
           fi
           sed -i "s/^$NAME=.*/$NAME=$LATEST/" scripts/fetch-deps
-          sum=$(curl -fsSL "https://github.com/apache/arrow-nanoarrow/archive/refs/tags/apache-arrow-nanoarrow-$LATEST.tar.gz" | sha256sum | cut -d' ' -f1)
-          sed -i "s/^nanoarrow_sha=.*/nanoarrow_sha=$sum/" scripts/fetch-deps
+          if [ "$NAME" = duckdb ]; then
+            for platform in linux-amd64 linux-arm64 osx-amd64 osx-arm64 windows-mingw; do
+              sum=$(curl -fsSL "https://github.com/duckdb/duckdb/releases/download/v$LATEST/duckdb-static-libs-$platform.tar.gz" | sha256sum | cut -d' ' -f1)
+              sed -i "s/platform=$platform sha=[0-9a-f]*/platform=$platform sha=$sum/" scripts/fetch-deps
+            done
+          else
+            sum=$(curl -fsSL "https://github.com/apache/arrow-nanoarrow/archive/refs/tags/apache-arrow-nanoarrow-$LATEST.tar.gz" | sha256sum | cut -d' ' -f1)
+            sed -i "s/^nanoarrow_sha=.*/nanoarrow_sha=$sum/" scripts/fetch-deps
+          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git switch -c "$branch"
@@ -81,3 +91,70 @@ jobs:
           git push -u origin "$branch"
           gh pr create --title "Update locked opam dependencies" \
             --body "$(git diff --unified=0 HEAD~1 -- '*.opam.locked' | grep '^[-+]  "' | sed 's/^/    /')"
+
+  blake3:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - name: Re-vendor BLAKE3 and open a pull request when a release is newer
+        run: |
+          latest=$(gh release view --repo BLAKE3-team/BLAKE3 --json tagName --jq .tagName)
+          current=$(cat vendor/blake3/VERSION)
+          if [ "$latest" = "$current" ]; then
+            echo "BLAKE3 $current is current"
+            exit 0
+          fi
+          branch="blake3-$latest"
+          if git ls-remote --exit-code --heads origin "$branch" > /dev/null; then
+            echo "$branch already proposed"
+            exit 0
+          fi
+          work=$(mktemp -d)
+          git clone --quiet --depth 1 --branch "$latest" https://github.com/BLAKE3-team/BLAKE3.git "$work/blake3"
+          for f in blake3.c blake3.h blake3_impl.h blake3_dispatch.c blake3_portable.c \
+            blake3_sse2.c blake3_sse41.c blake3_avx2.c blake3_avx512.c blake3_neon.c; do
+            cp "$work/blake3/c/$f" vendor/blake3/
+          done
+          cp "$work/blake3/LICENSE_A2" "$work/blake3/LICENSE_CC0" vendor/blake3/
+          echo "$latest" > vendor/blake3/VERSION
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$branch"
+          git commit -am "Update BLAKE3 to $latest"
+          git push -u origin "$branch"
+          gh pr create --title "Update BLAKE3 to $latest" \
+            --body "Re-vendors the BLAKE3 $latest C sources and SIMD kernels. CI must pass on every platform before merging."
+
+  talon:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - name: Report upstream changes to the forked Talon and lz sources
+        run: |
+          pinned=$(cat vendor/talon/UPSTREAM)
+          latest=$(gh api repos/raven-ml/raven/commits/main --jq .sha)
+          if [ "$latest" = "$pinned" ]; then
+            echo "Raven $pinned is current"
+            exit 0
+          fi
+          files=$(gh api "repos/raven-ml/raven/compare/$pinned...$latest" --jq '.files[].filename' \
+            | grep -E '^packages/(talon/lib/(arrow/ipc|arrow/types|csv/scan|parquet/(thrift|meta))\.mli?|lz/lib/)' || true)
+          branch="talon-upstream-${latest:0:12}"
+          if [ -z "$files" ] || git ls-remote --exit-code --heads origin "$branch" > /dev/null; then
+            echo "Nothing new to review"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$branch"
+          echo "$latest" > vendor/talon/UPSTREAM
+          git commit -am "Review Raven upstream changes to the forked readers"
+          git push -u origin "$branch"
+          gh pr create --title "Review Raven changes to the forked Talon readers" \
+            --body "$(printf 'Raven %s...%s changed files this fork vendors:\n\n%s\n\nPort the relevant changes into vendor/talon and vendor/lz before merging.' "$pinned" "$latest" "$files")"

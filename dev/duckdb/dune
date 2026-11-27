@@ -1,0 +1,9 @@
+(library
+ (name duckdb_oracle)
+ (flags
+  (:standard -open Rupam))
+ (libraries rupam duckdb_static)
+ (foreign_stubs
+  (language c)
+  (names duckdb_stubs)
+  (include_dirs ../../vendor/duckdb)))

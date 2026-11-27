@@ -38,7 +38,7 @@
  (modules parquet_differential)
  (flags
   (:standard -open Rupam))
- (libraries rupam rupam_native yojson))
+ (libraries rupam rupam_native duckdb_oracle))
 
 (rule
  (alias integration)
@@ -47,3 +47,8 @@
   (progn
    (run python parquet_fixtures.py parquet)
    (run %{exe:parquet_differential.exe} parquet))))
+
+(executable
+ (name hash_bench)
+ (modules hash_bench)
+ (libraries unix blake3))

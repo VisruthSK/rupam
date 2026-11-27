@@ -1,0 +1,45 @@
+(library
+ (name duckdb_static)
+ (no_dynlink)
+ (foreign_stubs
+  (language c)
+  (names ucrt))
+ (foreign_archives
+  duckdb_static
+  parquet_extension
+  json_extension
+  core_functions_extension)
+ (c_library_flags
+  (:include link_flags.sexp)))
+
+(rule
+ (target link_flags.sexp)
+ (enabled_if
+  (= %{system} macosx))
+ (action
+  (with-stdout-to
+   %{target}
+   (echo "(-lc++)"))))
+
+(rule
+ (target link_flags.sexp)
+ (enabled_if
+  (or
+   (= %{system} mingw64)
+   (= %{system} mingw)))
+ (action
+  (with-stdout-to
+   %{target}
+   (echo "(-l:libstdc++.a -l:libwinpthread.a -lws2_32 -lrstrtmgr -lbcrypt)"))))
+
+(rule
+ (target link_flags.sexp)
+ (enabled_if
+  (and
+   (<> %{system} macosx)
+   (<> %{system} mingw64)
+   (<> %{system} mingw)))
+ (action
+  (with-stdout-to
+   %{target}
+   (echo "(-lstdc++ -lpthread -lm)"))))

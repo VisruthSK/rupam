@@ -546,11 +546,32 @@ and table env (t : C.table) : frame =
   List.fold_left (fun frame (s : C.stage) -> stage env frame s.step) frame t.stages
 
 and read (file : C.file) =
-  let names, rows =
-    match file.format with
-    | Parquet -> invalid_arg "the reference evaluator reads CSV and TSV inputs"
-    | Csv | Tsv -> delimited file
+  match file.format with
+  | Parquet -> parquet file
+  | Csv | Tsv -> text file
+
+and parquet (file : C.file) =
+  let decoded = Rupam_native.Parquet_source.rows file.path in
+  let cell : Rupam_native.Parquet_source.cell -> value = function
+    | Missing -> Missing
+    | Bool b -> Bool b
+    | Int n -> Int n
+    | Float f -> if Float.is_nan f then Missing else Float f
+    | Text s -> Text s
+    | Date d -> Date d
   in
+  let columns =
+    List.map (fun (n, _) -> n, Array.map cell (List.assoc n decoded)) file.columns
+  in
+  { rows =
+      (match decoded with
+       | (_, cells) :: _ -> Array.length cells
+       | [] -> 0)
+  ; columns
+  }
+
+and text (file : C.file) =
+  let names, rows = delimited file in
   let parse typ = function
     | None -> Missing
     | Some s ->

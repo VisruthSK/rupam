@@ -114,7 +114,7 @@ let compile target strict path output = function
       | Some output ->
         Artifact.write
           ~entry
-          ~program_sha256:(Data_file.digest path)
+          ~program_blake3:(Data_file.digest path)
           ~locations
           ~output
           ~code

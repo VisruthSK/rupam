@@ -17,7 +17,6 @@ depends: [
   "sexplib0"
   "astring"
   "re"
-  "digestif"
   "ptime"
   "uucp"
   "toml"

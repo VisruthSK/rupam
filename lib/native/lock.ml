@@ -5,7 +5,7 @@ let file_name = "rupam.lock"
 
 type input =
   { path : string
-  ; sha256 : string
+  ; blake3 : string
   }
 [@@deriving yojson]
 
@@ -117,7 +117,7 @@ let analysis ~(project : Project.t) ~source items =
     ; inputs =
         List.map
           (fun path : input ->
-             { path = relative root path; sha256 = Data_file.digest path })
+             { path = relative root path; blake3 = Data_file.digest path })
           (unique TransformIR.sources)
     ; schemas
     }
@@ -148,7 +148,7 @@ let differences locked current =
   @ List.filter_map
       (fun (i : input) ->
          match List.find_opt (fun (l : input) -> l.path = i.path) locked.inputs with
-         | Some l when l.sha256 = i.sha256 -> None
+         | Some l when l.blake3 = i.blake3 -> None
          | Some _ -> Some i.path
          | None -> Some (i.path ^ " (new)"))
       current.inputs

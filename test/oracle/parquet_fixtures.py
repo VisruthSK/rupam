@@ -1,14 +1,12 @@
 import datetime
 import decimal
 import itertools
-import json
 import os
 import random
 import sys
 
 import polars as pl
 import pyarrow as pa
-import pyarrow.compute as pc
 import pyarrow.parquet as pq
 
 out = sys.argv[1]
@@ -67,16 +65,3 @@ pl.from_arrow(table.select(["id", "count", "clean", "nan", "null", "ok", "word",
 pq.write_table(pa.table({"nested": pa.array([{"a": 1}] * 10), "after": pa.array(range(10), pa.int64())}),
                os.path.join(out, "nested.parquet"))
 
-kinds = {pa.int64(): "Int", pa.int32(): "Int", pa.float64(): "Float", pa.bool_(): "Bool",
-         pa.string(): "String", pa.large_string(): "String", pa.date32(): "Date"}
-for name in sorted(os.listdir(out)):
-    if name.endswith(".parquet"):
-        table = pq.read_table(os.path.join(out, name))
-        expected = []
-        for field, column in zip(table.schema, table.columns):
-            kind = kinds.get(field.type)
-            nan = kind == "Float" and bool(pc.any(pc.is_nan(column)).as_py())
-            expected.append({"name": field.name, "type": kind,
-                             "nullable": bool(column.null_count > 0 or nan) if kind else None})
-        with open(os.path.join(out, name[: -len(".parquet")] + ".json"), "w", encoding="utf-8") as f:
-            json.dump(expected, f)
