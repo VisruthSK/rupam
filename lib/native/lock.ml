@@ -108,6 +108,7 @@ let analysis ~(project : Project.t) ~source items =
       ; columns =
           List.map (fun (name, t) -> { name; type_ = Types.display t }) file.columns
       })
+    |> List.sort (fun (a : schema) b -> String.compare a.path b.path)
   in
   let entry =
     { source = relative root source
@@ -115,10 +116,10 @@ let analysis ~(project : Project.t) ~source items =
     ; compiler
     ; strict = project.strict.value
     ; inputs =
-        List.map
-          (fun path : input ->
-             { path = relative root path; blake3 = Data_file.digest path })
-          (unique TransformIR.sources)
+        unique TransformIR.sources
+        |> List.map (fun path -> relative root path, path)
+        |> List.sort_uniq (fun (a, _) (b, _) -> String.compare a b)
+        |> List.map (fun (path, file) : input -> { path; blake3 = Data_file.digest file })
     ; schemas
     }
   in

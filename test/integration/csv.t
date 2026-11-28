@@ -65,7 +65,7 @@ text column it is text.
   $ printf 'x,label\n1.5,a\ninf,Inf\n' > inf.csv
   $ printf 'let t = read_csv("inf.csv")\n:quit\n' | rupam repl --target python-polars
   1:9  unreadable-input
-    ./inf.csv:3: column x holds an infinite value
+    inf.csv:3: column x holds an infinite value
   $ printf 'label\nInf\nword\n' > word.csv
   $ printf 'let t = read_csv("word.csv")\n:schema t\n:quit\n' | rupam repl --target python-polars
   2 rows × 1 column
@@ -81,13 +81,13 @@ Malformed files are errors that name the line.
   $ printf 'a,b\n1,ok\n2,caf\351\n' > latin1.csv
   $ for f in duplicate ragged quote latin1; do printf 'let t = read_csv("%s.csv")\n:quit\n' $f | rupam repl --target python-polars; done
   1:9  unreadable-input
-    ./duplicate.csv:1: the column name a appears twice
+    duplicate.csv:1: the column name a appears twice
   1:9  unreadable-input
-    ./ragged.csv:3: expected 2 fields, found 3
+    ragged.csv:3: expected 2 fields, found 3
   1:9  unreadable-input
-    ./quote.csv:2: column 4: a quote in a field that does not start with one
+    quote.csv:2: column 4: a quote in a field that does not start with one
   1:9  unreadable-input
-    ./latin1.csv:3: field 2 is not valid UTF-8
+    latin1.csv:3: field 2 is not valid UTF-8
 
 `missing_tokens` replaces the default missing tokens, so real "NA" text can
 be kept; both targets apply the same tokens.

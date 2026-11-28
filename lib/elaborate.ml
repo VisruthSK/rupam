@@ -1207,10 +1207,7 @@ and table ctx (x : Syntax.expr) : C.table =
   | _ -> fail x.span Not_a_table ("Expected a table, found " ^ T.display e.typ)
 
 and source ctx span (f : Syntax.expr) args : C.table =
-  let directory = ctx.env.directory in
-  let plain path =
-    if Filename.is_relative path then Filename.concat directory path else path
-  in
+  let plain = resolve ctx.env in
   match f.form, args with
   | ( Name (_, (("read_csv" | "read_tsv" | "read_parquet") as reader))
     , (None, { form = Literal (Text path); _ }) :: options ) ->
@@ -1606,9 +1603,7 @@ let declaration env (d : Syntax.declaration) =
     bind env alias (Module "polars"), []
   | Import (n, _) -> Diagnostic.fail Unknown_module ("Unknown module " ^ n)
   | Contract (path, n) ->
-    let path =
-      if Filename.is_relative path then Filename.concat env.directory path else path
-    in
+    let path = resolve env path in
     bind env n (Contract (env.inputs.contract path)), []
   | Setting (name, value) ->
     let policy =

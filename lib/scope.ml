@@ -73,6 +73,12 @@ let empty ?(inputs = offline) ~directory ~strict () =
   }
 ;;
 
+let resolve env path =
+  if Filename.is_relative path && env.directory <> Filename.current_dir_name
+  then Filename.concat env.directory path
+  else path
+;;
+
 let fresh_id env name =
   incr env.supply;
   { C.name; stamp = !(env.supply) }
