@@ -2,12 +2,14 @@ open Rupam
 
 let inputs : Scope.inputs =
   { Scope.offline with
-    columns =
+    read =
       (fun ~missing:_ _ ->
-        [ { Input.name = "species"; typ = Supported String; nullable = false }
-        ; { name = "mass"; typ = Supported Int; nullable = true }
-        ])
-  ; digest = (fun _ -> "descriptor")
+        { digest = "descriptor"
+        ; columns =
+            [ { Input.name = "species"; typ = Supported String; nullable = false }
+            ; { name = "mass"; typ = Supported Int; nullable = true }
+            ]
+        })
   }
 ;;
 

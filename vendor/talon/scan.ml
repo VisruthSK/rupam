@@ -41,6 +41,7 @@ type t =
   ; chunk : int
   ; sep : char
   ; quote : char
+  ; on_read : Bytes.t -> int -> int -> unit
   ; mutable buf : Bytes.t
   ; mutable len : int
   ; mutable eod : bool
@@ -54,12 +55,20 @@ type t =
   ; mutable pending : exn option
   }
 
-let make ?(batch = batch_bytes) ?(chunk = chunk) ~sep ~quote channel =
+let make
+      ?(batch = batch_bytes)
+      ?(chunk = chunk)
+      ?(on_read = fun _ _ _ -> ())
+      ~sep
+      ~quote
+      channel
+  =
   { channel
   ; batch
   ; chunk
   ; sep
   ; quote
+  ; on_read
   ; buf = Bytes.create (max chunk 16)
   ; len = 0
   ; eod = false
@@ -84,7 +93,9 @@ let refill s =
     s.buf <- buf);
   match In_channel.input s.channel s.buf s.len s.chunk with
   | 0 -> s.eod <- true
-  | n -> s.len <- s.len + n
+  | n ->
+    s.on_read s.buf s.len n;
+    s.len <- s.len + n
 ;;
 
 let detach s =

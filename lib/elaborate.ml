@@ -1239,6 +1239,7 @@ and source ctx span (f : Syntax.expr) args : C.table =
     in
     if format <> expected
     then fail span Unreadable_input (reader ^ " cannot read " ^ Filename.basename path);
+    let snapshot = Diagnostic.locate span (fun () -> ctx.env.inputs.read ~missing path) in
     let columns =
       List.map
         (fun (c : Input.column) ->
@@ -1249,10 +1250,9 @@ and source ctx span (f : Syntax.expr) args : C.table =
                span
                Unsupported_column_type
                (Printf.sprintf "Column %s has unsupported type %s" c.name other))
-        (Diagnostic.locate span (fun () -> ctx.env.inputs.columns ~missing path))
+        snapshot.columns
     in
-    { source =
-        Read { path; digest = ctx.env.inputs.digest path; format; columns; missing }
+    { source = Read { path; digest = snapshot.digest; format; columns; missing }
     ; stages = []
     ; schema = columns
     ; rest = None
@@ -1277,11 +1277,8 @@ and source ctx span (f : Syntax.expr) args : C.table =
       | None ->
         fail span Wrong_arguments ("Contracted table " ^ n ^ " has no Parquet source")
     in
-    let physical =
-      List.map
-        (fun (c : Input.column) -> c.name, c.typ)
-        (ctx.env.inputs.columns ~missing:Input.default_missing path)
-    in
+    let snapshot = ctx.env.inputs.read ~missing:Input.default_missing path in
+    let physical = List.map (fun (c : Input.column) -> c.name, c.typ) snapshot.columns in
     let columns =
       List.map
         (fun (c : Contract.column) ->
@@ -1314,7 +1311,7 @@ and source ctx span (f : Syntax.expr) args : C.table =
           ; table
           ; file =
               { path
-              ; digest = ctx.env.inputs.digest path
+              ; digest = snapshot.digest
               ; format = Parquet
               ; columns
               ; missing = Input.default_missing

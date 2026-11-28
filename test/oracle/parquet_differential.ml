@@ -62,7 +62,8 @@ let () =
   List.iter
     (fun f ->
        let path = Filename.concat dir f in
-       let ours = Rupam_native.Data_file.columns ~missing:Input.default_missing path
+       let ours =
+         (Rupam_native.Data_file.read ~missing:Input.default_missing path).columns
        and theirs = Duckdb_oracle.parquet_columns path in
        if List.length ours <> List.length theirs || not (List.for_all2 agree ours theirs)
        then (

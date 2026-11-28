@@ -23,7 +23,7 @@ let () =
   Printf.printf "  %d fields\n" fields;
   ignore
     (time "full inference" (fun () ->
-       Rupam_native.Data_file.columns ~missing:Input.default_missing path));
+       (Rupam_native.Data_file.read ~missing:Input.default_missing path).columns));
   let describe () =
     Duckdb_oracle.query
       ("DESCRIBE SELECT * FROM read_csv('" ^ path ^ "', sample_size = -1)")

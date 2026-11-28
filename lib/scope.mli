@@ -39,8 +39,7 @@ and env =
   }
 
 and inputs =
-  { columns : missing:string list -> string -> Input.column list
-  ; digest : string -> string
+  { read : missing:string list -> string -> Input.snapshot
   ; contract : string -> Contract.t
   }
 

@@ -65,7 +65,7 @@ let load root =
 ;;
 
 let save root entries =
-  Out_channel.with_open_text (Filename.concat root file_name) (fun channel ->
+  Out_channel.with_open_bin (Filename.concat root file_name) (fun channel ->
     output_string
       channel
       (Yojson.Safe.pretty_to_string (yojson_of_file { version; entries }) ^ "\n"))
@@ -116,10 +116,16 @@ let analysis ~(project : Project.t) ~source items =
     ; compiler
     ; strict = project.strict.value
     ; inputs =
-        unique TransformIR.sources
-        |> List.map (fun path -> relative root path, path)
-        |> List.sort_uniq (fun (a, _) (b, _) -> String.compare a b)
-        |> List.map (fun (path, file) : input -> { path; blake3 = Data_file.digest file })
+        (let read = unique TransformIR.data in
+         let digest path =
+           match List.find_opt (fun (f : TransformIR.file) -> f.path = path) read with
+           | Some f -> f.digest
+           | None -> Data_file.digest path
+         in
+         unique TransformIR.sources
+         |> List.map (fun path -> relative root path, path)
+         |> List.sort_uniq (fun (a, _) (b, _) -> String.compare a b)
+         |> List.map (fun (path, file) : input -> { path; blake3 = digest file }))
     ; schemas
     }
   in

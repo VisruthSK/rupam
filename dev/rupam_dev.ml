@@ -355,7 +355,7 @@ let show path keys =
   print_endline
     (String.concat
        ", "
-       (List.map typed (Data_file.columns ~missing:Input.default_missing path)));
+       (List.map typed (Data_file.read ~missing:Input.default_missing path).columns));
   let _, rows = Duckdb_oracle.rows ~keys path in
   Array.iter
     (fun row ->

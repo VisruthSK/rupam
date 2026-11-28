@@ -6,6 +6,16 @@ external update : buffer -> buffer -> int -> unit = "rupam_blake3_update"
 external subtree : buffer -> int -> int -> buffer -> int -> unit = "rupam_blake3_subtree"
 external push : buffer -> buffer -> int -> int -> unit = "rupam_blake3_push"
 external finish : buffer -> string = "rupam_blake3_finish"
+
+external update_bytes
+  :  buffer
+  -> Bytes.t
+  -> int
+  -> int
+  -> unit
+  = "rupam_blake3_update_bytes"
+[@@noalloc]
+
 external read_at : string -> int -> buffer -> int -> bool -> unit = "rupam_blake3_read"
 external misalignment : buffer -> int = "rupam_blake3_misalignment"
 
@@ -55,12 +65,24 @@ let file ?(parallel = sequential) path =
   hex (finish state)
 ;;
 
-let string text =
+type hasher = buffer
+
+let hasher () =
   let state = create (state_size ()) in
   init state;
-  let n = String.length text in
-  let data = create (max 1 n) in
-  String.iteri (fun i c -> data.{i} <- Char.code c) text;
-  update state data n;
-  hex (finish state)
+  state
+;;
+
+let feed hasher bytes offset length =
+  if offset < 0 || length < 0 || offset > Bytes.length bytes - length
+  then invalid_arg "Blake3.feed";
+  update_bytes hasher bytes offset length
+;;
+
+let digest hasher = hex (finish hasher)
+
+let string text =
+  let h = hasher () in
+  feed h (Bytes.unsafe_of_string text) 0 (String.length text);
+  digest h
 ;;

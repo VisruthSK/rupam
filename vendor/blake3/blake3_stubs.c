@@ -162,6 +162,12 @@ CAMLprim value rupam_blake3_push(value state, value pairs, value slot, value chu
   return Val_unit;
 }
 
+CAMLprim value rupam_blake3_update_bytes(value state, value data, value offset, value length) {
+  blake3_hasher_update(Caml_ba_data_val(state), Bytes_val(data) + Long_val(offset),
+                       Long_val(length));
+  return Val_unit;
+}
+
 CAMLprim value rupam_blake3_finish(value state) {
   CAMLparam1(state);
   CAMLlocal1(out);

@@ -29,10 +29,11 @@ Windows. What remains:
   alignment and missing-policy requirements through higher-order calls
   (C101, C62), replacing the ordinary-then-contextual retry in `function_`;
   `center` inferring `(Number) -> Float?`.
-- Fused ingestion: one read per locked input computing its BLAKE3 digest,
-  schema and the evidence its obligations demand, recorded in the lock as
-  discharged obligations ([Projects](spec/projects.md#locks)), at the
-  storage's throughput.
+- Lock evidence from the single read. Checking already reads each input once
+  for its BLAKE3 digest and schema, and locking reuses both. What remains is
+  the evidence its obligations demand, recorded in the lock as discharged
+  obligations with presence and NaN counts and bounds
+  ([Projects](spec/projects.md#locks)), at the storage's throughput.
 - Presence from evidence: `mean(x, missing = skip)` is `Float?` because a
   group can be empty or all missing; a locked snapshot proving every group
   has a present value refines it to `Float`, and `x ?? mean(x, …)` with it.

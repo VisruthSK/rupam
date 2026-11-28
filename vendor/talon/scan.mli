@@ -12,7 +12,14 @@ exception
 
 type t
 
-val make : ?batch:int -> ?chunk:int -> sep:char -> quote:char -> In_channel.t -> t
+val make
+  :  ?batch:int
+  -> ?chunk:int
+  -> ?on_read:(Bytes.t -> int -> int -> unit)
+  -> sep:char
+  -> quote:char
+  -> In_channel.t
+  -> t
 
 type batch
 

@@ -14,6 +14,11 @@ type column =
   ; nullable : bool
   }
 
+type snapshot =
+  { digest : string
+  ; columns : column list
+  }
+
 val format : string -> format
 val format_name : format -> string
 val default_missing : string list

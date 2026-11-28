@@ -19,8 +19,8 @@ let () =
          Printf.printf "%s (%.2f GB)\n" (Filename.basename path) (float_of_int size /. 1e9);
          ignore (time "digest" size (fun () -> Rupam_native.Data_file.digest path));
          let columns =
-           time "inference + evidence" size (fun () ->
-             Rupam_native.Data_file.columns ~missing:Input.default_missing path)
+           time "read: digest + schema" size (fun () ->
+             (Rupam_native.Data_file.read ~missing:Input.default_missing path).columns)
          in
          List.iter
            (fun (c : Input.column) ->

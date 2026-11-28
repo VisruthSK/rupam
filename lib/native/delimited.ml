@@ -283,7 +283,7 @@ let header batch ~fail =
   given
 ;;
 
-let columns ~missing ~path format : Input.column list =
+let columns ~on_read ~missing ~path format : Input.column list =
   let longest = List.fold_left (fun m t -> max m (String.length t)) 0 missing in
   let sep =
     match (format : Input.format) with
@@ -294,7 +294,7 @@ let columns ~missing ~path format : Input.column list =
     Diagnostic.fail Unreadable_input (Printf.sprintf "%s:%d: %s" path line message)
   in
   In_channel.with_open_bin path (fun channel ->
-    let s = Talon.Scan.make ~sep ~quote:'"' channel in
+    let s = Talon.Scan.make ~on_read ~sep ~quote:'"' channel in
     let names = ref None
     and state = ref [||] in
     let next () =

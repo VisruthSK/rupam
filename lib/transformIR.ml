@@ -314,6 +314,13 @@ let rec files table =
   | Join { left; right; _ } -> files left @ files right
 ;;
 
+let rec data table =
+  match table.source with
+  | Read file | Load { file; _ } -> [ file ]
+  | Bound _ -> []
+  | Join { left; right; _ } -> data left @ data right
+;;
+
 let rec loaded_by table =
   match table.source with
   | Load { contract; _ } -> [ contract ]

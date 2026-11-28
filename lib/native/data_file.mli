@@ -1,2 +1,2 @@
 val digest : string -> string
-val columns : missing:string list -> string -> Input.column list
+val read : missing:string list -> string -> Input.snapshot
