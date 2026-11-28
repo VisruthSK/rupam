@@ -29,6 +29,10 @@ Windows. What remains:
   alignment and missing-policy requirements through higher-order calls
   (C101, C62), replacing the ordinary-then-contextual retry in `function_`;
   `center` inferring `(Number) -> Float?`.
+- Parallel one-pass ingestion ([brief](briefs/parallel-ingestion.md)):
+  windowed direct reads, exact quote state per slice, a SIMD structural index
+  and mergeable per-slice inference, at least 1 GB/s per core and 5–10 GB/s
+  in memory.
 - Lock evidence from the single read. Checking already reads each input once
   for its BLAKE3 digest and schema, and locking reuses both. What remains is
   the evidence its obligations demand, recorded in the lock as discharged
