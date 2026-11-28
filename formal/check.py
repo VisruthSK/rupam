@@ -18,14 +18,22 @@ def main() -> None:
     )
     if run.returncode:
         raise SystemExit(run.stdout + run.stderr)
-    cases = [json.loads(line) for line in run.stdout.splitlines()]
-    if sorted(case for case, _ in cases) != ["C119", "C123", "C124", "C52", "C56"]:
+    cases: dict[str, dict[str, str]] = {}
+    for line in run.stdout.splitlines():
+        case, field, value = json.loads(line)
+        observed = cases.setdefault(case, {})
+        if field in observed:
+            raise SystemExit(f"{case}: duplicate outcome field {field}")
+        observed[field] = value
+    if set(cases) != {
+        "C110", "C119", "C123", "C124", "C138", "C139", "C165", "C37", "C52", "C53", "C55", "C56"
+    }:
         raise SystemExit(f"Unexpected Lean fixtures: {cases}")
-    for case, value in cases:
+    for case, observed in cases.items():
         with (fixtures / f"{case}.toml").open("rb") as file:
-            expected = tomllib.load(file)["expect"]["value"]
-        if value != expected:
-            raise SystemExit(f"{case}: expected {expected!r}, got {value!r}")
+            expected = tomllib.load(file)["expect"]
+        if observed != expected:
+            raise SystemExit(f"{case}: expected {expected!r}, got {observed!r}")
     print(f"Lean conformance: {len(cases)} fixtures passed")
 
 

@@ -58,6 +58,12 @@ def collect : (rows : List scope.Member) →
 def toList (values : ValuesAt rows α) : List α :=
   rows.attach.map fun row => values row.val row.property
 
+theorem toList_cons {first : scope.Member} {rest : List scope.Member}
+    (values : ValuesAt (first :: rest) α) :
+    values.toList = values first List.mem_cons_self ::
+      (toList fun row member => values row (List.mem_cons_of_mem first member)) := by
+  simp [toList, List.map_map, Function.comp_def]
+
 def select (values : ValuesAt rows α) (test : α → Bool) : List scope.Member :=
   rows.filter fun row =>
     if member : row ∈ rows then test (values row member) else false
@@ -94,6 +100,33 @@ theorem guard_cannot_cover_whole (values : ValuesAt rows α) (test : α → Bool
     ¬ scope.members ⊆ values.select test := by
   intro coversWhole
   exact notSelected (coversWhole inScope)
+
+theorem guard_covers_whole_iff (values : ValuesAt scope.members α) (test : α → Bool) :
+    scope.members ⊆ values.select test ↔
+      ∀ position member, test (values position member) = true := by
+  constructor
+  · intro covers position member
+    obtain ⟨inScope, passed⟩ := (values.mem_select_iff test position).mp (covers member)
+    exact passed
+  · intro allPass position member
+    exact values.mem_select test member (allPass position member)
+
+theorem nested_selection (values : ValuesAt rows α) (outer inner : α → Bool)
+    (position : scope.Member) :
+    let outerRows := values.select outer
+    let selected := values.restrict outerRows
+      (fun {_} member => (List.mem_filter.mp member).1)
+    position ∈ selected.select inner ↔
+      ∃ member : position ∈ rows,
+        outer (values position member) = true ∧ inner (values position member) = true := by
+  dsimp
+  rw [mem_select_iff]
+  constructor
+  · intro ⟨outerMember, passedInner⟩
+    obtain ⟨member, passedOuter⟩ := (values.mem_select_iff outer position).mp outerMember
+    exact ⟨member, passedOuter, passedInner⟩
+  · intro ⟨member, passedOuter, passedInner⟩
+    exact ⟨values.mem_select outer member passedOuter, passedInner⟩
 
 theorem select_empty_iff (values : ValuesAt rows α) (test : α → Bool) :
     values.select test = [] ↔ ∀ row member, test (values row member) = false := by
@@ -154,6 +187,29 @@ theorem collect_succeeds (rows : List scope.Member)
     rw [readTail]
     exact ⟨_, rfl⟩
 
+theorem collect_toList (rows : List scope.Member) (read : scope.Member → Outcome α) :
+    (ValuesAt.toList <$> collect rows (fun row _ => read row)) = rows.mapM read := by
+  induction rows with
+  | nil => rfl
+  | cons first rest tailCorrect =>
+    rw [collect, List.mapM_cons, ← tailCorrect]
+    cases headRead : read first with
+    | error failure => rfl
+    | ok value =>
+      cases tailRead : collect rest (fun row _ => read row) with
+      | error failure => rfl
+      | ok values =>
+        simp only [bind, Except.bind, pure, Except.pure, Functor.map, Except.map,
+          toList_cons]
+        congr 2
+        apply congrArg (fun entries : ValuesAt rest α => entries.toList)
+        funext row member
+        split
+        · rename_i here
+          subst row
+          exact Except.ok.inj (headRead.symm.trans (collect_at tailRead first member))
+        · rfl
+
 end ValuesAt
 
 -- The collection scope is fixed through composition. A branch changes only the active positions.
@@ -183,6 +239,12 @@ theorem branch_inactive (branch : ScopedCalculation scope β) (values : ValuesAt
 
 def pointwise (read : scope.Index → Outcome α) : ScopedCalculation scope α :=
   ⟨fun first rest => ValuesAt.collect (first :: rest) fun row _ => read row.val⟩
+
+theorem pointwise_toList (read : scope.Index → Outcome α) (rows : List scope.Member) :
+    (ValuesAt.toList <$> (pointwise read).run rows) = rows.mapM (fun row => read row.val) := by
+  cases rows with
+  | nil => rfl
+  | cons first rest => exact ValuesAt.collect_toList (first :: rest) (fun row => read row.val)
 
 theorem pointwise_at (read : scope.Index → Outcome α) (rows : List scope.Member)
     {output : ValuesAt rows α}

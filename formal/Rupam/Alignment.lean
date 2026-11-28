@@ -47,6 +47,15 @@ inductive ArgumentShape : List Shape → Shape → Type where
   | first : ArgumentShape (shape :: rest) shape
   | next : ArgumentShape rest shape → ArgumentShape (other :: rest) shape
 
+theorem ArgumentShape.of_mem (member : input ∈ inputs) : Nonempty (ArgumentShape inputs input) := by
+  induction inputs with
+  | nil => cases member
+  | cons head tail tailShape =>
+    rcases List.mem_cons.mp member with rfl | inTail
+    · exact ⟨.first⟩
+    · let ⟨position⟩ := tailShape inTail
+      exact ⟨.next position⟩
+
 def AlignArguments.position (alignment : AlignArguments inputs result)
     (position : Position result) : ArgumentShape inputs input → Position input :=
   match alignment with
@@ -115,5 +124,80 @@ theorem AlignArguments.no_column_vector (alignment : AlignArguments inputs resul
   have impossible := (alignment.column_forces_shape column).symm.trans
     (alignment.vector_forces_shape vector)
   cases impossible
+
+theorem AlignArguments.vector_alignment_iff
+    (scalarOrVector : ∀ shape ∈ inputs, shape = .scalar ∨ ∃ n, shape = .vector n) :
+    Nonempty (Σ result, AlignArguments inputs result) ↔
+      ∃ size, ∀ shape ∈ inputs, shape = .scalar ∨ shape = .vector size := by
+  constructor
+  · intro ⟨⟨result, alignment⟩⟩
+    let size := match result with
+      | .vector n => n
+      | .scalar | .column _ => 0
+    refine ⟨size, ?_⟩
+    intro shape member
+    rcases scalarOrVector shape member with scalar | ⟨n, rfl⟩
+    · exact Or.inl scalar
+    · obtain ⟨argument⟩ := ArgumentShape.of_mem member
+      have same := alignment.vector_forces_shape argument
+      exact Or.inr (by simp [size, same])
+  · intro ⟨size, compatible⟩
+    suffices ∃ result, (result = .scalar ∨ result = .vector size) ∧
+        Nonempty (AlignArguments inputs result) by
+      obtain ⟨result, _, ⟨alignment⟩⟩ := this
+      exact ⟨⟨result, alignment⟩⟩
+    clear scalarOrVector
+    induction inputs with
+    | nil => exact ⟨.scalar, Or.inl rfl, ⟨.nil⟩⟩
+    | cons input rest tailAligned =>
+      obtain ⟨result, tailShape, ⟨tail⟩⟩ := tailAligned
+        (fun shape member => compatible shape (List.mem_cons_of_mem _ member))
+      rcases compatible input List.mem_cons_self with rfl | rfl <;>
+        rcases tailShape with rfl | rfl
+      · exact ⟨.scalar, Or.inl rfl, ⟨.cons .scalar tail⟩⟩
+      · exact ⟨.vector size, Or.inr rfl, ⟨.cons .vectorLeft tail⟩⟩
+      · exact ⟨.vector size, Or.inr rfl, ⟨.cons .vectorRight tail⟩⟩
+      · exact ⟨.vector size, Or.inr rfl, ⟨.cons .vectorSame tail⟩⟩
+
+inductive Broadcasts : Shape → Shape → Type where
+  | same : Broadcasts shape shape
+  | vector : Broadcasts .scalar (.vector n)
+  | column : Broadcasts .scalar (.column d)
+
+def Broadcasts.core : Broadcasts source target → Expr source t → Expr target t
+  | .same, expression => expression
+  | .vector, expression => .broadcastVector expression
+  | .column, expression => .broadcast expression
+
+def Broadcasts.trans : Broadcasts a b → Broadcasts b c → Broadcasts a c
+  | .same, later => later
+  | .vector, .same => .vector
+  | .column, .same => .column
+
+def Align.leftBroadcast (alignment : Align a b result) : Broadcasts a result := by
+  cases alignment <;> first | exact .same | exact .vector | exact .column
+
+def Align.rightBroadcast (alignment : Align a b result) : Broadcasts b result := by
+  cases alignment <;> first | exact .same | exact .vector | exact .column
+
+theorem Align.eval_leftBroadcast (alignment : Align a b result) (expression : Expr a t)
+    (position : Position result) :
+    (alignment.leftBroadcast.core expression).eval position =
+      expression.eval (alignment.positions position).1 := by
+  cases alignment <;> first | rfl | cases position; rfl
+
+theorem Align.eval_rightBroadcast (alignment : Align a b result) (expression : Expr b t)
+    (position : Position result) :
+    (alignment.rightBroadcast.core expression).eval position =
+      expression.eval (alignment.positions position).2 := by
+  cases alignment <;> first | rfl | cases position; rfl
+
+def AlignArguments.broadcasts (alignment : AlignArguments inputs result) :
+    ArgumentShape inputs input → Broadcasts input result :=
+  match alignment with
+  | .nil => fun argument => nomatch argument
+  | .cons head tail => fun
+    | .first => head.leftBroadcast
+    | .next argument => (tail.broadcasts argument).trans head.rightBroadcast
 
 end Rupam

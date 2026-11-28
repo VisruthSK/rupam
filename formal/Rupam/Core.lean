@@ -104,6 +104,7 @@ theorem Align.infer_rejects_iff (left right : Shape) :
 inductive Failure where
   | arithmeticOverflow
   | missingValue
+  | vectorLengthMismatch
   deriving DecidableEq, Repr
 
 abbrev Outcome := Except Failure
@@ -124,6 +125,8 @@ theorem checkedInt_overflow (n : Int) (h : ¬ Portable n) :
     checkedInt n = .error .arithmeticOverflow := by simp [checkedInt, h]
 
 def addInt (x y : RInt) : Outcome RInt := checkedInt (x.val + y.val)
+
+def multiplyInt (x y : RInt) : Outcome RInt := checkedInt (x.val * y.val)
 
 def lift₂ (f : α → β → Outcome γ) (a : Option α) (b : Option β) :
     Outcome (Option γ) :=
@@ -185,11 +188,23 @@ abbrev Base.denote : Base → Type
 inductive Ty where
   | required (base : Base)
   | optional (base : Base)
+  | vector (size : Nat) (element : Ty)
+  | column (domain : Domain) (element : Ty)
+  | function (input output : Ty)
   deriving DecidableEq
 
 abbrev Ty.denote : Ty → Type
   | .required base => base.denote
   | .optional base => Option base.denote
+  | .vector size element => Vector element.denote size
+  | .column domain element => Row domain → element.denote
+  | .function input output => input.denote → Outcome output.denote
+
+def Shape.valueType (shape : Shape) (cell : Ty) : Ty :=
+  match shape with
+  | .scalar => cell
+  | .vector n => .vector n cell
+  | .column d => .column d cell
 
 -- A fragment of checked Core. Inputs and scalar broadcasts are already resolved.
 inductive Expr : Shape → Ty → Type where
@@ -201,8 +216,13 @@ inductive Expr : Shape → Ty → Type where
   | optional : Expr s (.required base) → Expr s (.optional base)
   | add : Align a b c → Expr a (.required .int) → Expr b (.required .int) →
       Expr c (.required .int)
+  | multiply : Align a b c → Expr a (.required .int) → Expr b (.required .int) →
+      Expr c (.required .int)
   | addOptional : Align a b c → Expr a (.optional .int) → Expr b (.optional .int) →
       Expr c (.optional .int)
+  | multiplyOptional : Align a b c → Expr a (.optional .int) → Expr b (.optional .int) →
+      Expr c (.optional .int)
+  | apply : Expr s (.function input output) → Expr s input → Expr s output
   | ifThenElse : Expr s (.required .bool) → Expr s t → Expr s t → Expr s t
   | coalesce : Expr s (.optional base) → Expr s (.required base) → Expr s (.required base)
   | coalesceOptional : Expr s (.optional base) → Expr s (.optional base) →
@@ -221,9 +241,18 @@ def Expr.eval : Expr s t → Position s → Outcome t.denote
   | .add align left right, pos => do
     let (l, r) := align.positions pos
     addInt (← left.eval l) (← right.eval r)
+  | .multiply align left right, pos => do
+    let (l, r) := align.positions pos
+    multiplyInt (← left.eval l) (← right.eval r)
   | .addOptional align left right, pos => do
     let (l, r) := align.positions pos
     lift₂ addInt (← left.eval l) (← right.eval r)
+  | .multiplyOptional align left right, pos => do
+    let (l, r) := align.positions pos
+    lift₂ multiplyInt (← left.eval l) (← right.eval r)
+  | .apply function argument, pos => do
+    let invoke ← function.eval pos
+    invoke (← argument.eval pos)
   | .ifThenElse condition yes no, pos => do
     choose (← condition.eval pos) (fun _ => yes.eval pos) (fun _ => no.eval pos)
   | .coalesce left right, pos => Rupam.coalesce (left.eval pos) (fun _ => right.eval pos)
@@ -262,6 +291,18 @@ inductive MissingPolicy where
   | skip
   | keep
   | error
+  deriving DecidableEq
+
+def firstWithPolicy (policy : MissingPolicy) (cells : List (Option α)) : Outcome (Option α) :=
+  match policy with
+  | .skip => .ok (cells.findSome? id)
+  | .keep => .ok cells.head?.join
+  | .error =>
+    if cells.any Option.isNone then .error .missingValue
+    else .ok cells.head?.join
+
+def lastWithPolicy (policy : MissingPolicy) (cells : List (Option α)) : Outcome (Option α) :=
+  firstWithPolicy policy cells.reverse
 
 def sumInt (policy : MissingPolicy) (cells : List (Option RInt)) :
     Outcome (Option RInt) := do

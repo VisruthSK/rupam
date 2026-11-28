@@ -20,11 +20,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           for workflow in CI Format; do
+            filter='[.[] | select(.conclusion == "success")] | length'
+            if [ "$workflow" = CI ]; then
+              filter='[.[] | select(.conclusion == "success" and (.event == "push" or .event == "workflow_dispatch"))] | length'
+            fi
             passed=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow "$workflow" \
-              --commit "$GITHUB_SHA" --json conclusion \
-              --jq '[.[] | select(.conclusion == "success")] | length')
+              --commit "$GITHUB_SHA" --json conclusion,event --jq "$filter")
             if [ "$passed" = 0 ]; then
-              echo "$workflow has not passed on $GITHUB_SHA; push to main and wait for green before tagging" >&2
+              echo "$workflow has not passed on $GITHUB_SHA. Run CI manually on main if path filters skipped it." >&2
               exit 1
             fi
           done

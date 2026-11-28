@@ -5,6 +5,7 @@ namespace Rupam
 inductive PolicyDemand where
   | fixed (policy : MissingPolicy)
   | unresolved
+  deriving DecidableEq
 
 -- A policy supplied at one consumption site stays fixed when passed onward.
 def PolicyDemand.supply (demand : PolicyDemand) (available : Option MissingPolicy) :

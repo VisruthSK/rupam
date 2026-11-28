@@ -4,11 +4,15 @@
 | --- | --- | --- |
 | Type preservation | evaluation preserves types, shapes and domains | checked pointwise terms carry their result type and shape in Lean. General preservation remains a conjecture |
 | Domain safety | incompatible observations cannot combine implicitly | proved for column alignment, equal-length vector alignment, and the separation of vectors and columns |
-| Lifting | a lifted pointwise helper agrees with its scalar body at each aligned position | proved for the checked Bool and Int fragment. Whole-vector and grouped evaluation scope are modeled separately |
+| Lifting | a lifted pointwise helper agrees with its scalar body at each aligned position and receives exact-type arguments whole | proved for checked calls and connected to inference for resolved, unannotated first-order helpers with integer arithmetic and Boolean guards. Grouped calls are modeled separately |
+| Principality | every sound scheme is an instance of the inferred scheme under the same lexical environment | proved for residual schemes in the shared qualified fragment with unary pointwise and contextual application and let-bound values. Normalization and the full source judgment remain open |
 | Context safety | requirements are discharged at consumption sites | proved for checked contextual terms with explicit scope and policy requirements. Source inference remains open |
+| Source elaboration | accepted source has a checked elaboration and a coherent meaning | proved for the modeled scalar and column expressions and the ordinary lambda fragment |
+| Deferred argument linking | resolving deferred columns at each consuming stage preserves execution | proved for finite checked pipelines in the contextual source fragment |
 | Extraction equivalence | extracting an expression into a helper preserves meaning | proved for inlining arguments with no immediate requirements in checked contextual terms. General extraction remains open |
 | Grouping stability | mutation cannot invalidate an established grouping witness | conjecture |
 | Guard safety | inactive computations cannot fail | proved for the modeled branch-selection rules, guarded reduction and grouped coalescing. General safety remains a conjecture |
+| Pattern matching | the first applicable arm sees its selected positions | proved for the modeled patterns, pointwise guards, and scoped arm bodies |
 | Refinement soundness | inferred predicates hold for evaluated values | conjecture |
 | Evidence locality | snapshot evidence cannot escape its scope | conjecture |
 | Backend preservation | compiled programs preserve the specified observable semantics | evaluated by conformance and differential tests. General preservation remains a conjecture |
@@ -49,10 +53,40 @@ evaluate in order, with the scope of each argument preserved. The helper
 receives their values at each position. An argument can fail even when
 the body ignores it. The checked higher-order calculus carries each
 callee's latent requirements through application. The substitution proof
-preserves those requirements and lexical bindings. Deferred columns recheck
+preserves those requirements and lexical bindings. [Pointwise source inference](../../formal/Rupam/PointwiseSource.lean)
+infers parameter types from the resolved helper body and source arguments,
+then proves that the resulting call preserves the source body evaluation at
+each demanded position. Deferred columns recheck
 their named fields against the consuming stage, while captured lexical
 values retain their identity. Source argument evaluation and inference of
 these roles and requirements remain outside the checked calculus.
+
+[Elaboration](../../formal/Rupam/Elaboration.lean) proves coherence for the
+modeled pointwise source expressions. [Ordinary inference](../../formal/Rupam/OrdinaryInference.lean)
+checks generated type equations and returns a typed term that erases to the
+resolved source. Its [operational semantics](../../formal/Rupam/OrdinarySemantics.lean)
+proves that the typed term and resolved source produce the same observation.
+Generalising a solved definition and checking an instance preserve its
+ordinary lexical context and erased source.
+
+The contextual [source semantics](../../formal/Rupam/SourceSemantics.lean)
+interprets the source typing rules directly. [Selective linking](../../formal/Rupam/SelectiveLinking.lean)
+checks the schemas required by each stage's statically used arguments. The
+usage analysis includes both arms of a guard. The proof shows that unused
+bindings cannot affect evaluation or require fields at that stage.
+[Pipeline preservation](../../formal/Rupam/AnalyticalPipeline.lean) extends
+the equality to finite checked pipelines whose later stages can depend on
+earlier results. It preserves the active rows, values, missingness, and
+failures of the modeled source calculus.
+
+[Match selection](../../formal/Rupam/MatchSelection.lean) proves that a
+successful arm suppresses all later tests.
+[Match execution](../../formal/Rupam/MatchExecution.lean) proves that each
+arm reads only its selected positions and an unselected arm cannot fail.
+The [pattern rules](../../formal/Rupam/Patterns.lean) cover literal,
+optional, and product patterns. The [integer range theorem](../../formal/Rupam/IntegerPatterns.lean)
+equates overlap detection with the existence of a portable integer in both
+ranges.
 
 | Lean theorem | Spec rule |
 | --- | --- |
@@ -66,11 +100,11 @@ these roles and requirements remain outside the checked calculus.
 | `Group.completeCoalesce_when_present`, `Group.completeCoalesce_when_missing`, `Group.coalesce_preserves_rows` | A grouped coalesce demands its fallback only where needed, with the full group available to a demanded reduction. Grouped mutation preserves alignment. [Types](../spec/types.md#shapes-and-lifting) · [Tables](../spec/tables.md#verbs) |
 
 Run `lake build` in `formal/` to check the proofs. From the repository root,
-`python formal/check.py` (Python 3.11+) also runs the Lean versions of C52,
-C56, C119 and C123 against the same TOML expectations used by the OCaml reference runner.
+`python formal/check.py` (Python 3.11+) runs C37, C52, C53, C55, C56, C110,
+C119, C123, C124, C138, C139 and C165 against the same TOML expectations used by the OCaml reference runner.
+C124 passes in Lean and remains pending in the OCaml reference suite.
 The Lean cases translate the fixture inputs by hand. The check also compiles
-Lean examples for the pending C110 and C111 cases. These examples leave
-their Rupam conformance status pending.
+a Lean example for C111, which remains pending in the OCaml reference suite.
 
 The Lean workflow runs on changes under `formal/` or to the workflow file.
 The local and CI checks use the pinned toolchain, treat warnings as errors,
