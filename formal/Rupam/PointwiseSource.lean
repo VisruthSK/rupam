@@ -353,6 +353,33 @@ theorem InferredPointwiseCall.run_preserves_source
         inferred.derivation.eval (call.passing.valuesAt call.alignment values position)) := by
   simp only [run, CheckedCall.run_eq, PointwiseElaborates.body_correct]
 
+def InferredPointwiseCall.inScope {scope : EvaluationScope}
+    (inferred : InferredPointwiseCall context helper arguments)
+    (compatible : inferred.shape = scope.shape) : ScopedCalculation scope inferred.type.denote :=
+  let call : CheckedCall inferred.actuals inferred.parameters scope.shape := compatible ▸ inferred.call
+  call.scopedCall inferred.derivation.body inferred.inputs.sources
+
+theorem InferredPointwiseCall.scoped_preserves_source {scope : EvaluationScope}
+    (inferred : InferredPointwiseCall context helper arguments)
+    (compatible : inferred.shape = scope.shape) (demanded : List scope.Member) :
+    (ValuesAt.toList <$> (inferred.inScope compatible).run demanded) =
+      (match demanded with
+      | [] => .ok []
+      | _ :: _ => do
+        let values ← ArgumentSources.evaluate inferred.inputs.sources
+        demanded.mapM fun row =>
+          let position := cast (congrArg Position compatible.symm) row.val
+          inferred.derivation.eval
+            (inferred.call.passing.valuesAt inferred.call.alignment values position)) := by
+  unfold inScope
+  rw [inferred.call.scopedCall_transport compatible]
+  cases demanded with
+  | nil => rfl
+  | cons first rest =>
+    change inferred.run ((first :: rest).map _) = _
+    rw [inferred.run_preserves_source]
+    simp only [List.mapM_map]
+    rfl
 theorem CheckedVectorCall.run_preserves_source (checked : CheckedVectorCall plan)
     (body : PointwiseElaborates parameters source t) (sources : VectorCallSources parameters plan)
     (demanded : (shape : Shape) → List (Position shape)) :

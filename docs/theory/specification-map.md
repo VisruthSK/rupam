@@ -181,12 +181,23 @@ succeeds, while evaluating the whole result before selection reports
 overflow. `CheckedCall.runScoped_eq` establishes equivalence for a placement
 that carries the lifted result as a scoped computation and forwards the
 consumer's demand. It compares the complete outcomes for any ordered demand
-list, including repeated positions and empty demand. Choosing or translating
-the lifting placement for arbitrary source closures remains open.
+list, including repeated positions and empty demand.
+`QualifiedApplies.forward_pointwise_preserves_demand` applies this result to
+the two checked execution routes for a supplied unary pointwise closure.
+The forwarded route returns a scoped calculation, so the overflow example
+also succeeds when the caller requests only the first cell on that route.
+Selecting this representation during elaboration of arbitrary source
+closures remains open.
 `CheckedCall.scopedCall_toList` handles a call inside an enclosing guard.
 An empty mask skips the call and its ordinary arguments. A nonempty mask
 runs the ordinary arguments eagerly, then observes the lifted body in
 the demanded order.
+`InferredPointwiseCall.scoped_preserves_source` extends this guarantee to
+every accepted resolved pointwise source call whose inferred shape is the
+enclosing scope's shape.
+`CheckedCall.transform_lifted` proves that a demanded transform consumes
+the lifted result in the order of the full enclosing scope, then returns
+the transformed values at the demanded rows.
 
 The proofs start after name resolution and take contextual primitive types
 and their role information from checked terms. Contextual role inference,

@@ -714,10 +714,17 @@ example :
         (.data (.vector 2) cell) [] true := .pointwise checked
     let square := fun value => multiplyInt value value
     let input := #v[integer 1, integer intMax]
+    let context : ConsumptionContext := { scope := vectorScope }
+    let body : ScalarBody [cell] cell := .apply (.literal (t := .function cell cell) square) (.arg .first)
+    let forwarded := QualifiedApplies.contextual
+      (input := .data (.vector 2) cell) (output := .calculation cell) (latent := [])
     call.run acceptedContext square input .nil [0] = .ok [integer 1] ∧
       (List.take 1 <$> call.run acceptedContext square input .nil [0, 1]) =
-        .error .arithmeticOverflow :=
-  ⟨rfl, rfl⟩
+        .error .arithmeticOverflow ∧
+      forwarded.run context (fun _ values =>
+        checked.asCalculation body (ArgumentValues.cons values ArgumentValues.nil))
+        input .nil (vectorScope.members.take 1) = .ok [integer 1] :=
+  ⟨rfl, rfl, rfl⟩
 
 def main : IO Unit := do
   unless liftedHigherOrder == some [1, 4, 9] do

@@ -172,10 +172,9 @@ from observation order. Vectors have an intrinsic position order.
   when combined with a column. Nested reductions evaluate inner results first;
   they do not introduce another grouping level. Reducing a scalar is an error
   unless it is a one-value-per-row broadcast expression in a table context.
-- Single values broadcast. Arithmetic operators reject vector operands. Use
-  `map` to apply scalar arithmetic to vector elements. Operations that
-  combine vectors positionally require equal lengths. A materialised vector
-  is not implicitly aligned with table rows.
+- Single values broadcast. Operations that combine vectors positionally
+  require equal lengths. A materialised vector is not implicitly aligned
+  with table rows.
 - Columns from different table stages cannot be combined as materialised
   values. Table-expression parameters instead use the substitution semantics
   in [Tables](tables.md#column-names).

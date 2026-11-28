@@ -176,6 +176,22 @@ theorem QualifiedApplies.run_contextual (context : ConsumptionContext)
     QualifiedApplies.contextual.run context function argument supplies positions =
       output.observe context (function supplies argument) positions := rfl
 
+-- A forwarded closure can return the lifted calculation to its caller.
+-- The result's scope and demand then stay identical to lifting at the call.
+theorem QualifiedApplies.forward_pointwise_preserves_demand {shape : Shape} {cell input output : Ty}
+    (context : ConsumptionContext)
+    (call : CheckedCall [shape.valueType cell] [input] context.scope.shape)
+    (function : input.denote → Outcome output.denote) (argument : (shape.valueType cell).denote)
+    (demanded : List context.scope.Member) :
+    (QualifiedApplies.contextual (input := .data shape cell) (output := .calculation output)).run
+        context (fun _ value =>
+          call.asCalculation (pointwiseBody function) (ArgumentValues.cons value ArgumentValues.nil))
+        argument .nil demanded =
+      (QualifiedApplies.pointwise call).run context function argument .nil
+        (demanded.map Subtype.val) := by
+  exact call.asCalculation_toList (pointwiseBody function)
+    (ArgumentValues.cons argument ArgumentValues.nil) demanded
+
 theorem QualifiedApplies.run_contextual_inactive {input : QualifiedType} {output : Ty}
     (context : ConsumptionContext)
     (function : (QualifiedType.contextual latent input (.calculation output)).denote context)

@@ -340,6 +340,31 @@ theorem CheckedCall.runValues_eq (call : CheckedCall actuals parameters result)
   funext position
   exact call.lower_eq body values position
 
+theorem CheckedCall.asCalculation_toList (call : CheckedCall actuals parameters scope.shape)
+    (body : ScalarBody parameters t) (values : ArgumentValues actuals)
+    (demanded : List scope.Member) :
+    (ValuesAt.toList <$> (call.asCalculation body values).run demanded) =
+      call.runValues body values (demanded.map Subtype.val) := by
+  simp only [asCalculation, ScopedCalculation.ofCore, runValues,
+    ScopedCalculation.pointwise_toList, List.mapM_map]
+  rfl
+
+theorem CheckedCall.transform_lifted (call : CheckedCall actuals parameters scope.shape)
+    (body : ScalarBody parameters t) (values : ArgumentValues actuals)
+    (operation : List t.denote → Outcome (scope.Member → α))
+    (first : scope.Member) (rest : List scope.Member) :
+    ((call.asCalculation body values).transform (fun input => operation input.toList)).run (first :: rest) =
+      (do
+        let input ← call.runValues body values (scope.members.map Subtype.val)
+        let output ← operation input
+        pure (fun row _ => output row)) := by
+  rw [← call.asCalculation_toList body values scope.members]
+  change (do
+    let input ← (call.asCalculation body values).run scope.members
+    let output ← operation input.toList
+    pure (fun row _ => output row)) = _
+  cases (call.asCalculation body values).run scope.members <;> rfl
+
 def CheckedCall.run (call : CheckedCall actuals parameters result) (body : ScalarBody parameters t)
     (sources : ArgumentSources actuals) (demanded : List (Position result)) :
     Outcome (List t.denote) := do
@@ -356,9 +381,7 @@ theorem CheckedCall.runScoped_eq (call : CheckedCall actuals parameters scope.sh
     (body : ScalarBody parameters t) (sources : ArgumentSources actuals)
     (demanded : List scope.Member) :
     call.runScoped body sources demanded = call.run body sources (demanded.map Subtype.val) := by
-  unfold runScoped run asCalculation ScopedCalculation.ofCore runValues
-  simp only [ScopedCalculation.pointwise_toList, List.mapM_map]
-  rfl
+  simp only [runScoped, run, asCalculation_toList]
 
 -- The enclosing guard can skip the entire call. Once demanded, ordinary
 -- arguments materialize before any position of the lifted body runs.
@@ -382,6 +405,18 @@ theorem CheckedCall.scopedCall_toList (call : CheckedCall actuals parameters sco
     rw [← call.runScoped_eq]
     cases evaluated : sources.evaluate <;>
       simp [ScopedCalculation.run, scopedCall, runScoped, evaluated, bind, Except.bind] <;> rfl
+
+theorem CheckedCall.scopedCall_transport (call : CheckedCall actuals parameters result)
+    (compatible : result = scope.shape) (body : ScalarBody parameters t)
+    (sources : ArgumentSources actuals) (demanded : List scope.Member) :
+    let alignedCall : CheckedCall actuals parameters scope.shape := compatible ▸ call
+    (ValuesAt.toList <$> (alignedCall.scopedCall body sources).run demanded) =
+      match demanded with
+      | [] => .ok []
+      | _ :: _ => call.run body sources
+        (demanded.map fun row => cast (congrArg Position compatible.symm) row.val) := by
+  subst result
+  exact call.scopedCall_toList body sources demanded
 
 -- Both executions materialise arguments in source order, even with no demand.
 -- The scalar reference reads whole values or aligned elements at each demanded position.
