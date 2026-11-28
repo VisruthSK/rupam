@@ -31,6 +31,20 @@ let () =
                  | Supported t -> Types.display t
                  | Unsupported raw -> raw)
                 (if c.nullable then "?" else ""))
-           columns))
+           columns;
+         if Filename.check_suffix path ".parquet"
+         then
+           ignore
+             (time "DuckDB null counts" size (fun () ->
+                Duckdb_oracle.query
+                  (Printf.sprintf
+                     "SELECT %s FROM read_parquet('%s')"
+                     (String.concat
+                        ", "
+                        (List.map
+                           (fun (c : Input.column) ->
+                              Printf.sprintf "count(*) - count(\"%s\")" c.name)
+                           columns))
+                     path)))))
     Sys.argv
 ;;

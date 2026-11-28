@@ -49,7 +49,7 @@
  (modules evidence_bench)
  (flags
   (:standard -open Rupam))
- (libraries unix rupam rupam_native))
+ (libraries unix rupam rupam_native duckdb_oracle))
 
 (executable
  (name csv_bench)

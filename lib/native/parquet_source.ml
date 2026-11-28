@@ -233,7 +233,16 @@ let scan_chunk channel ~path (m : Meta.column_meta) ~optional ~nulls ~nan =
   page 0 0
 ;;
 
-let nullable channel ~path (file : Meta.file) ~leaf (e : Meta.element) typ =
+type evidence =
+  | Settled of bool
+  | Scan of
+      { metas : Meta.column_meta array
+      ; optional : bool
+      ; nulls : bool
+      ; nan : bool
+      }
+
+let evidence ~path (file : Meta.file) ~leaf (e : Meta.element) typ =
   let metas =
     Array.map
       (fun (g : Meta.row_group) ->
@@ -257,37 +266,63 @@ let nullable channel ~path (file : Meta.file) ~leaf (e : Meta.element) typ =
   in
   let nulls (s : Meta.stats) = s.nulls
   and nans (s : Meta.stats) = s.nans in
-  (optional && some_positive nulls)
-  || (floating && some_positive nans)
-  ||
-  let need_nulls = optional && not (all_known nulls) in
-  let need_nan = floating && not (all_known nans) in
-  (need_nulls || need_nan)
-  && Array.exists
-       (fun m -> scan_chunk channel ~path m ~optional ~nulls:need_nulls ~nan:need_nan)
-       metas
+  if (optional && some_positive nulls) || (floating && some_positive nans)
+  then Settled true
+  else (
+    let nulls = optional && not (all_known nulls)
+    and nan = floating && not (all_known nans) in
+    if nulls || nan then Scan { metas; optional; nulls; nan } else Settled false)
 ;;
 
 let columns path : Input.column list =
-  In_channel.with_open_bin path (fun channel ->
-    let file = footer channel ~path in
-    let schema = file.schema in
-    if Array.length schema = 0 then fail path "the file has no schema";
-    let rec go i k leaf acc =
-      if k = schema.(0).children
-      then List.rev acc
-      else (
-        let e = schema.(i) in
-        let count, next = leaves schema i in
-        let typ = typ e in
-        let nullable =
-          match typ with
-          | Supported _ -> nullable channel ~path file ~leaf e typ
-          | Unsupported _ -> false
-        in
-        go next (k + 1) (leaf + count) ({ Input.name = e.name; typ; nullable } :: acc))
-    in
-    go 1 0 0 [])
+  let file, size =
+    In_channel.with_open_bin path (fun channel ->
+      footer channel ~path, In_channel.length channel)
+  in
+  let schema = file.schema in
+  if Array.length schema = 0 then fail path "the file has no schema";
+  let rec go i k leaf acc =
+    if k = schema.(0).children
+    then List.rev acc
+    else (
+      let e = schema.(i) in
+      let count, next = leaves schema i in
+      let typ = typ e in
+      let evidence =
+        match typ with
+        | Supported _ -> evidence ~path file ~leaf e typ
+        | Unsupported _ -> Settled false
+      in
+      go next (k + 1) (leaf + count) ((e.Meta.name, typ, evidence) :: acc))
+  in
+  let columns = Array.of_list (go 1 0 0 []) in
+  let found =
+    Array.map (fun (_, _, evidence) -> Atomic.make (evidence = Settled true)) columns
+  in
+  let chunks =
+    Array.concat
+      (Array.to_list
+         (Array.mapi
+            (fun c (_, _, evidence) ->
+               match evidence with
+               | Settled _ -> [||]
+               | Scan { metas; optional; nulls; nan } ->
+                 Array.map (fun m -> c, m, optional, nulls, nan) metas)
+            columns))
+  in
+  Parallel.run ~size (fun parallel ->
+    Parallel.each parallel (Array.length chunks) (fun k ->
+      let c, m, optional, nulls, nan = chunks.(k) in
+      if not (Atomic.get found.(c))
+      then
+        if
+          In_channel.with_open_bin path (fun channel ->
+            scan_chunk channel ~path m ~optional ~nulls ~nan)
+        then Atomic.set found.(c) true));
+  Array.to_list
+    (Array.mapi
+       (fun c (name, typ, _) -> { Input.name; typ; nullable = Atomic.get found.(c) })
+       columns)
 ;;
 
 type cell =
