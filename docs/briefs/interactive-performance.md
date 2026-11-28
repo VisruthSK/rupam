@@ -27,6 +27,47 @@ Read first: `docs/spec/performance.md`, `docs/spec/session.md`
 3. Each commit states its before and after numbers. Never report a number
    that was not measured on that commit.
 
+## Input-to-display latency
+
+The metric that matters in the REPL and viewer is the time from a keypress to
+its result on screen. An Arrow viewport read (about 0.1 ms) is one component
+of it. Measure every stage of each interaction:
+
+| Stage | Interval |
+|---|---|
+| T0 key pressed, T1 event read by Rupam | input delivery, T1 − T0 |
+| T2 state updated (scroll, selection, draft) | event processing, T2 − T1 |
+| T3 data retrieved (Arrow viewport, completion) | data retrieval, T3 − T2 |
+| T4 frame built (formatting, layout, diff) | frame construction, T4 − T3 |
+| T5 escape sequences written | terminal output, T5 − T4 |
+| T6 pixels shown | perceived latency, T6 − T0 |
+
+Application latency is T5 − T1; report it and each stage separately.
+
+- **Internal timing.** Take T1 to T5 from a monotonic clock (add the
+  maintained `mtime` library, not wall time). Record them into a
+  preallocated ring buffer and report percentiles after the run; logging per
+  frame distorts what it measures. Build the instrumentation so it costs
+  nothing when off.
+- **External harness.** Drive the real console in Mosaic's emulated terminal
+  (`Matrix_test`, already used by `test/terminal`), not a physical display:
+  load a fixed Arrow result, send a keystroke with a timestamp, and stop the
+  clock when the expected screen state appears. Repeat each operation at
+  least 1,000 times and report p50, p95, p99 and the maximum. This covers
+  application latency and terminal output processing; it cannot measure pixel
+  presentation, so state that T6 is not measured.
+- **Operations:** a keystroke in the editor, completion opening, a one-row
+  scroll, a page scroll, a jump to the end of 10M rows, a column move, a
+  sort request (time to first sorted page), `:hist`, and a resize.
+- **Budget:** application latency inside one frame at the display's refresh
+  (16.7 ms at 60 Hz, 3.6 ms at 280 Hz, per `session.md`) for every
+  operation that needs no new computation, at p99. Work that needs
+  computation shows its first frame within the same budget and fills in
+  progressively.
+- **Update throughput:** under held-down keys and fast scrolling, measure
+  frames produced per second and dropped or coalesced input. Rupam must never
+  queue frames behind input, and never repaint when idle.
+
 ## Scenarios
 
 - Cold `rupam repl` to first prompt, with and without a configured target.
