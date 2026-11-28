@@ -149,10 +149,10 @@ PY
       du -h demo.mp4 demo.gif
     )
     ;;
-  fmt-check) dune build @fmt ;;
+  fmt-check) dune build --root "$root" @fmt ;;
   watch) dune build --watch @default @runtest ;;
   promote) dune promote ;;
-  fmt) dune fmt || true ;;
+  fmt) dune fmt --root "$root" || true ;;
   conformance)
     dune build test/conformance.exe
     (cd test && "$build/default/test/conformance.exe" --pending)

@@ -130,6 +130,8 @@ materialized data through checked lifting, maps it over a scoped calculation
 at demanded positions, or invokes a contextual closure with its full checked
 argument and latent requirements. `QualifiedApplies.coherent` proves
 uniqueness of application evidence at fixed concrete operand types.
+`QualifiedApplies.run_coherent` gives the corresponding equality of
+observations at the same result interface, inputs, context, and demand.
 `QualifiedApplies.infer_rejects_iff` characterizes rejection by the absence
 of a qualified application derivation at those types.
 `QualifiedApplication.run_requires_exactly` checks all and only the selected
@@ -162,6 +164,8 @@ execution under the shared call rule. `QualifiedApplies.run_lifted_reduction`
 proves that a demanded reduction reads the lifted inputs across the full
 enclosing scope and broadcasts to the demanded positions, preserving
 failures. `run_contextual_inactive` covers empty demand for a scoped result.
+`run_calculation_argument_failure` preserves a failing scoped argument at
+nonempty demand before applying the pointwise function.
 `ContextElaborates.linked_qualified_lifting`
 preserves observations after selective linking of a scoped argument under
 the existing schema-readiness premise.

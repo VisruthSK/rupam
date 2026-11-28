@@ -146,6 +146,29 @@ theorem QualifiedApplies.run_calculation {input output : Ty} (context : Consumpt
     QualifiedApplies.calculation.run context function argument .nil demand =
       (ValuesAt.toList <$> (argument.map function).run demand) := rfl
 
+theorem QualifiedApplies.run_calculation_argument_failure {input output : Ty}
+    (context : ConsumptionContext) (function : input.denote → Outcome output.denote)
+    (argument : ScopedCalculation context.scope input.denote)
+    (first : context.scope.Member) (rest : List context.scope.Member) {failure : Failure}
+    (failed : argument.run (first :: rest) = .error failure) :
+    QualifiedApplies.calculation.run context function argument .nil (first :: rest) =
+      .error failure := by
+  change (ValuesAt.toList <$> (do
+    let values ← argument.run (first :: rest)
+    ValuesAt.collect (first :: rest) fun position member => function (values position member))) = _
+  rw [failed]
+  rfl
+
+theorem QualifiedApplies.run_coherent
+    (first second : QualifiedApplies function argument result latent scalar)
+    (context : ConsumptionContext) (fn : function.denote context) (value : argument.denote context)
+    (supplies : Supplies context latent) (demand : result.Demand context) :
+    first.run context fn value supplies demand = second.run context fn value supplies demand := by
+  have same : first = second := by
+    have checked := first.coherent second
+    injection checked
+  rw [same]
+
 theorem QualifiedApplies.run_contextual (context : ConsumptionContext)
     (function : (QualifiedType.contextual latent input output).denote context)
     (argument : input.denote context) (supplies : Supplies context latent)
