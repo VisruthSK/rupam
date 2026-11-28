@@ -1,119 +1,108 @@
 # Roadmap
 
 An analyst opens a dataset, explores it at the prompt and in the viewer, and
-keeps the useful steps as a readable `.rp` program that compiles to R/dplyr
-or Python/Polars. The [specification](spec/README.md) defines semantics and
-[conformance](spec/conformance.md) pins them; this page lists only what is
-not yet built.
+keeps the useful steps as a readable `.rp` program that compiles to R/dplyr,
+Python/Polars or DuckDB SQL. The [specification](spec/README.md) defines
+semantics and [conformance](spec/conformance.md) pins them; this page lists
+only what is not yet built, in the order it is built.
 
-Rupam is complete when every conformance case is active and passes on both
-targets, sections 1 to 5 are built, and the public MVP ships. Today 77 of 156
-cases are active; sections 2 and 3 unlock most of the rest.
-
-## 1. Self-contained readers
+Each milestone ships when everything in it is done, every suite is green on
+Linux, macOS and Windows, and CI passes at the tagged commit. `0.1.0` is
+complete Rupam: every conformance case active and passing on every target,
+except the cases of features listed after `0.1.0` (conversions, date-times,
+the agent protocol), which stay pending. Today 77 of 156 cases are active.
 
 `0.0.0-alpha.1` shipped for Linux (x86-64, arm64), macOS (arm64, x86-64) and
-Windows. What remains:
+Windows.
 
-- Merge the Talon readers (pull request 5): CSV, Parquet and Arrow IPC read
-  in OCaml and C, BLAKE3 hashing at 85% of the drive's ceiling, and DuckDB
-  kept only as a development oracle.
-- The demo recorded again at 1080p30 with the current error rendering.
+## 0.0.0-alpha.2: fast, self-contained, helpers that work
 
-## 2. Semantic foundations
+1. **Talon readers** (pull request 5): CSV, Parquet and Arrow IPC read in
+   OCaml and C, one read per input for digest and schema, BLAKE3 at 85% of
+   the drive's ceiling, DuckDB only as a development oracle.
+2. **REPL input is never rewritten**: pasted and externally edited input is
+   kept exactly as typed; formatting happens only on `:save` and in exports.
+3. **Helpers infer once, correctly**: one inference scheme for helpers
+   carrying parameter roles, scope, alignment and missing-policy requirements
+   through higher-order calls (C62, C101), replacing the ordinary-then-
+   contextual retry in `function_`; `center` infers `(Number) -> Float?`, so
+   `pearson(x, y)` built from `center`, `sum` and `sqrt` works in `summarize`
+   with and without `by`. With it: numeric promotion through captured
+   bindings and `Number` annotations (C160, C161), column-shaped signatures
+   (C162), and vector lifting with a length check and no recycling (C165,
+   C37).
+4. **Interactive performance** ([brief](briefs/interactive-performance.md)):
+   input-to-display latency measured per stage, REPL start-up and first
+   result, the online viewer sort that publishes the visible top-k first,
+   progressive summaries, and an antipattern audit. Inspection of finished
+   results never waits on the worker
+   ([results brief](briefs/result-architecture.md), part 1).
+5. **Parallel one-pass ingestion**
+   ([brief](briefs/parallel-ingestion.md)): at least 1 GB/s per core and
+   5 GB/s for a full in-memory read, bounded memory on files larger than RAM,
+   and the native Windows reader at parity with Linux.
+6. The demo recorded again at 1080p30.
 
-- Share one canonical input snapshot across preview, proof checking and
-  export. Rupam verifies it during development. Standalone scripts consume
-  the supplied inputs without lock or snapshot verification (C22, C90, C96).
-- One inference scheme for helpers carrying parameter roles, scope,
-  alignment and missing-policy requirements through higher-order calls
-  (C101, C62), replacing the ordinary-then-contextual retry in `function_`;
-  `center` inferring `(Number) -> Float?`.
-- Parallel one-pass ingestion ([brief](briefs/parallel-ingestion.md)):
-  windowed direct reads, exact quote state per slice, a SIMD structural index
-  and mergeable per-slice inference, at least 1 GB/s per core and 5 GB/s for
-  a full read in memory.
-- Lock evidence from the single read. Checking already reads each input once
-  for its BLAKE3 digest and schema, and locking reuses both. What remains is
-  the evidence its obligations demand, recorded in the lock as discharged
-  obligations with presence and NaN counts and bounds
-  ([Projects](spec/projects.md#locks)), at the storage's throughput.
-- Presence from evidence: `mean(x, missing = skip)` is `Float?` because a
-  group can be empty or all missing; a locked snapshot proving every group
-  has a present value refines it to `Float`, and `x ?? mean(x, …)` with it.
-- Guarded evaluation in Core: represent both the active rows and the
-  enclosing group, so a guarded reduction runs once over the whole group when
-  any row selects it and not at all otherwise, together with the row-domain
-  and order witnesses that survive projection or replacement. Driven by
-  C110, C119, C121 and C123; fixes the dplyr `if_else` length failure in C11.
-- A `sql-duckdb` target, early: Rupam compiles to DuckDB SQL as a third
-  language beside R/dplyr and Python/Polars, executed through a DuckDB host
-  process like the other workers, so `rupam.exe` still links no C++. It
-  passes the same conformance and differential suites, with exact integers,
-  missingness and order as specified, and is the engine for the browser.
-- Platform separation, remaining steps of the
-  [brief](briefs/compiler-platform-separation.md): execution and result
-  services behind interfaces, snapshot and evidence identities shared by
-  preview, lock and export, bounded host materialisation, then the WASM
-  compiler and a browser worker running the `sql-duckdb` dialect on
-  duckdb-wasm.
-- Generate differential programs from typed TransformIR rather than source
-  text, and shrink each failure into a pending fixture.
-- Numeric promotion through captured bindings (`let f(x) = x * m` is
-  `(Number) -> Number`) and `Number` as an annotation (C160, C161).
-- Range patterns: reject overlapping arms and name each uncovered interval in
-  `nonexhaustive-match` (C158, C159).
-- Displayed signatures show column-shaped parameters and results (C162).
-- Lift functions, operators and scalar builtins over vectors as over columns,
-  with a length check and no recycling (C165, C37).
+## 0.1.0: complete Rupam
 
-## 3. Analytical core
+In implementation order; each step unlocks the conformance cases named.
 
-In order of conformance cases unlocked:
-
-1. Contract validation: required, range, NaN and infinity in sources, keys
+1. **One snapshot, evidence from the single read.** One canonical input
+   snapshot across preview, proof checking and export (C22, C90, C96). The
+   read that digests and infers also collects the evidence obligations
+   demand: presence and NaN counts, bounds, and distinct values when a column
+   has few, recorded in the lock as discharged obligations
+   ([Projects](spec/projects.md#locks)).
+2. **Evidence and locking**: incremental `:lock`, `:unlock`, `:refresh`,
+   schema discovery accepted by lock, and obligations discharged by locked
+   evidence (about 13 cases). Presence from evidence (`mean(x, missing =
+   skip)` refined to `Float` when every group has a present value).
+3. **Exhaustiveness from evidence**: a `match` or `match?` over values
+   (strings as well as ranges) whose arms cover the locked snapshot's domain
+   is accepted, carrying the uncovered domain as a latent requirement; a new
+   value in the data makes the lock stale and the relock fails with
+   `nonexhaustive-match` naming it, before anything runs. Range patterns
+   reject overlaps and name uncovered intervals (C158, C159).
+4. **Contract validation**: required, range, NaN and infinity in sources, keys
    and foreign keys, malformed fields (about 9 cases).
-2. Evidence and locking: incremental `:lock`, `:unlock`, `:refresh`, schema
-   discovery accepted by lock, and obligations discharged by locked evidence
-   (about 13 cases).
-3. Reshaping: `bind_rows`, `complete`, `expand`, pivot duplicates and
-   `values_fn` (about 7 cases).
-4. `across` and the remaining column transforms (C77, C106).
-5. Ordered windows: `lag`, `lead`, `slice_min` with total-order obligations
-   (5 cases).
-6. Strict mode and effect sets (5 cases); restricted columns (3 cases).
+5. **Guarded evaluation in Core**: active rows and the enclosing group
+   represented together, so a guarded reduction runs once over the group when
+   any row selects it (C110, C119, C121, C123; fixes C11 on dplyr).
+6. **DuckDB SQL target** (`sql-duckdb`): a third language run through a
+   DuckDB host process, so `rupam.exe` links no C++; the same conformance and
+   differential suites, with adapters where SQL semantics differ (integer
+   overflow, NULL ordering).
+7. **Analytical core**: reshaping (`bind_rows`, `complete`, `expand`, pivot
+   duplicates, `values_fn`, about 7 cases); `across` and the remaining column
+   transforms (C77, C106); ordered windows (`lag`, `lead`, `slice_min` with
+   total-order obligations, 5 cases); strict mode and effect sets (5 cases);
+   restricted columns (3 cases).
+8. **Session**: an explicit state machine (base revision, pinned inputs,
+   pending work, publication outcome; cancellation or worker loss after an
+   effect but before publication); demand-driven materialisation and index
+   views ([results brief](briefs/result-architecture.md), parts 2 and 3);
+   detached sessions ([brief](briefs/detached-session.md)); save and export
+   by backward slicing (C164); `:probe`, `??term` search and
+   comment-preserving `:save`.
+9. **Platform separation** ([brief](briefs/compiler-platform-separation.md)):
+   execution and result services behind interfaces, bounded host
+   materialisation, differential programs generated from typed TransformIR
+   with failures shrunk into pending fixtures.
+10. **Editors**: a TextMate grammar; LSP completion and hover from the shared
+    checker.
+11. **Release**: documentation, `rupam env` environment setup, realistic
+    end-to-end examples on every target, and a whole-codebase audit: every
+    algorithm log-linear at worst with small constants, accidental complexity
+    and spec deviations removed, hand-written infrastructure moved to
+    maintained dependencies where one fits.
 
-## 4. Interactive experience
+## After 0.1.0
 
-- An explicit session state machine: base revision, pinned inputs, pending
-  work and publication outcome. Specify cancellation or worker loss after a
-  write or random draw but before publication, keeping the accepted
-  revision, the external effect and worker recovery as separate facts.
-- `:probe`, `??term` search, comment-preserving `:save`.
-- A TextMate grammar; LSP completion and hover from the shared checker.
-- Interactive performance ([brief](briefs/interactive-performance.md)):
-  REPL start-up and first result, online viewer sort that publishes the
-  visible top-k first, progressive summaries, and an antipattern audit, each
-  measured before and after.
-- Detached sessions ([brief](briefs/detached-session.md)): check, complete
-  and inspect types with no execution engine installed, then attach a target
-  without losing checked facts.
-- Save and export by backward slicing: `:save result` and `:export result`
-  keep only the chosen bindings and their dependencies (C164).
-
-## 5. Public MVP
-
-Documentation; `rupam env` environment setup; realistic end-to-end examples
-on both targets.
-
-The last step before release is a whole-codebase audit: every algorithm is
-log-linear at worst with small constants, accidental complexity and spec
-deviations are removed, systems are simplified, hand-written infrastructure
-moves to maintained dependencies where one fits, and tests stay native OCaml,
-with R and Python only as reference backends.
-
-## 6. After the MVP
-
+- The browser: the WASM compiler and a worker running `sql-duckdb` on
+  duckdb-wasm ([brief](briefs/compiler-platform-separation.md)).
+- Results across sessions, incremental compiler queries, evidence retained as
+  indexes, and incrementally maintained results, each once a profile shows
+  the need ([results brief](briefs/result-architecture.md), part 4).
 - Explicit conversions `Int()`, `Float()` and `String()` from the
   [conversion table](spec/types.md#conversions), with wholeness established
   by `floor`, `ceiling`, `trunc` and `round` (C40, C49, C64).
@@ -121,27 +110,21 @@ with R and Python only as reference backends.
 - `DateTime`, `Time` and zones; nominal types and units (C33, C34, C95).
 - Idiomatic R and Python formatting of generated code beyond line breaking,
   if a light dependency or printer pass suffices.
-- Replace `scripts/dev` with a `justfile` (or an equally small runner) as a
-  development dependency, so build, test, bench and format commands are short
-  and reusable; formatting runs ocamlformat, air and jarl for R, and ruff for
-  Python.
-- Move dependency management to dune package management (`dune pkg` with a
-  `dune.lock`, cached through `setup-dune`) once its Windows support is
-  stable, replacing the opam switch, `scripts/lock-deps` and the `_opam`
-  cache in CI.
+- Replace `scripts/dev` with a `justfile` (or an equally small runner);
+  formatting runs ocamlformat, air and jarl for R, and ruff for Python.
+- Dune package management (`dune pkg`, `dune.lock`, `setup-dune`) once its
+  Windows support is stable, replacing the opam switch, `scripts/lock-deps`
+  and the `_opam` cache in CI.
 - Splitting each backend into a `HOST` and a `DIALECT` once a language has a
   second table library.
 - Modules, package export, test blocks, `repeat`, and the relational
   extensions in [Future](spec/future.md).
 - Optional OxCaml release builds for Linux and macOS (Flambda 2, unboxed
-  types), skipped cleanly on Windows until OxCaml supports it
-  ([brief](briefs/compiler-platform-separation.md)).
+  types), skipped on Windows until OxCaml supports it.
 - Test coverage with `bisect_ppx` once it supports current `cmdliner` and
   `ppxlib` ([Future](spec/future.md#test-coverage)).
 - Lean 4 proofs of the [metatheory](theory/metatheory.md) in `formal/`,
   checked against the reference evaluator on shared fixtures.
-- The agent session protocol and its fixture runner: `define`, `remove`,
-  `evaluate`, `page`, `fork`, `discard`, `context`, `status`, `cancel`,
-  holes and decisions on diagnostics (about 11 cases).
-- The analyst MCP on MCP 2026-07-28 ([Agents](spec/agent-interface.md)) and
-  the [notebook](spec/notebook.md) over the same session.
+- The agent session protocol and its fixture runner (about 11 cases), the
+  analyst MCP on MCP 2026-07-28 ([Agents](spec/agent-interface.md)) and the
+  [notebook](spec/notebook.md) over the same session.
