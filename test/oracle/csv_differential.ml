@@ -2,11 +2,12 @@ let fields ?chunk path =
   In_channel.with_open_bin path (fun channel ->
     let s = Talon.Scan.make ~batch:4096 ?chunk ~sep:',' ~quote:'"' channel in
     let rows = ref [] in
-    while Talon.Scan.next s do
-      for r = 0 to Talon.Scan.rows s - 1 do
-        rows := Array.init (Talon.Scan.fields s r) (Talon.Scan.text s r) :: !rows
-      done
-    done;
+    Seq.iter
+      (fun b ->
+         for r = 0 to Talon.Scan.rows b - 1 do
+           rows := Array.init (Talon.Scan.fields b r) (Talon.Scan.text b r) :: !rows
+         done)
+      (Seq.of_dispenser (fun () -> Talon.Scan.next s));
     Array.of_list (List.rev !rows))
 ;;
 

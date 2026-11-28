@@ -13,14 +13,17 @@ exception
 type t
 
 val make : ?batch:int -> ?chunk:int -> sep:char -> quote:char -> In_channel.t -> t
-val next : t -> bool
-val rows : t -> int
-val fields : t -> int -> int
-val bytes : t -> Bytes.t
-val start : t -> int -> int -> int
-val stop : t -> int -> int -> int
-val quoted : t -> int -> int -> bool
-val pos : t -> int -> int -> int
-val len : t -> int -> int -> int
-val text : t -> int -> int -> string
-val line : t -> int -> int
+
+type batch
+
+val next : t -> batch option
+val rows : batch -> int
+val fields : batch -> int -> int
+val bytes : batch -> Bytes.t
+val start : batch -> int -> int -> int
+val stop : batch -> int -> int -> int
+val quoted : batch -> int -> int -> bool
+val pos : batch -> int -> int -> int
+val len : batch -> int -> int -> int
+val text : batch -> int -> int -> string
+val line : batch -> int -> int

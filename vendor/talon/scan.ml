@@ -21,6 +21,17 @@ let[@inline] holds word pattern =
   Int64.logand (Int64.logand (Int64.sub x ones) (Int64.lognot x)) highs <> 0L
 ;;
 
+let offsets n = Bytes.create (4 * n)
+let[@inline] capacity a = Bytes.length a / 4
+let[@inline] offset a i = Int32.to_int (Bytes.get_int32_ne a (4 * i))
+let[@inline] set_offset a i v = Bytes.set_int32_ne a (4 * i) (Int32.of_int v)
+
+let grown a n ~keep =
+  let b = offsets n in
+  Bytes.blit a 0 b 0 (4 * keep);
+  b
+;;
+
 let batch_bytes = 1 lsl 20
 let chunk = 1 lsl 16
 
@@ -37,8 +48,8 @@ type t =
   ; mutable stop : int
   ; mutable line : int
   ; mutable lines : int
-  ; mutable bounds : int array
-  ; mutable records : int array
+  ; mutable bounds : Bytes.t
+  ; mutable records : Bytes.t
   ; mutable rows : int
   ; mutable pending : exn option
   }
@@ -56,14 +67,16 @@ let make ?(batch = batch_bytes) ?(chunk = chunk) ~sep ~quote channel =
   ; stop = 0
   ; line = 0
   ; lines = 0
-  ; bounds = Array.make 64 0
-  ; records = [||]
+  ; bounds = offsets 64
+  ; records = offsets 1024
   ; rows = 0
   ; pending = None
   }
 ;;
 
 let refill s =
+  if s.len + s.chunk > Int32.to_int Int32.max_int
+  then raise (Error { line = s.line; column = 1; msg = "a record is longer than 2 GiB" });
   if s.len + s.chunk > Bytes.length s.buf
   then (
     let buf = Bytes.create (max (s.len + s.chunk) (2 * Bytes.length s.buf)) in
@@ -74,13 +87,15 @@ let refill s =
   | n -> s.len <- s.len + n
 ;;
 
-let compact s =
-  let k = s.start in
-  if k > 0
-  then (
-    Bytes.blit s.buf k s.buf 0 (s.len - k);
-    s.len <- s.len - k;
-    s.start <- 0)
+let detach s =
+  let tail = s.len - s.stop in
+  let buf = Bytes.create (max (Bytes.length s.buf) (tail + s.chunk)) in
+  Bytes.blit s.buf s.stop buf 0 tail;
+  s.buf <- buf;
+  s.len <- tail;
+  s.start <- 0;
+  s.bounds <- offsets (capacity s.bounds);
+  s.records <- offsets (capacity s.records)
 ;;
 
 let skip_bom s =
@@ -105,26 +120,17 @@ let locate s i =
 exception Syntax of int * string
 exception Short
 
-let grow_bounds s n ~keep =
-  let a = Array.make n 0 in
-  Array.blit s.bounds 0 a 0 keep;
-  s.bounds <- a
-;;
-
 let[@inline] push_field s nf first stop =
-  if (2 * nf) + 2 > Array.length s.bounds
-  then grow_bounds s (2 * Array.length s.bounds) ~keep:(2 * nf);
-  Array.unsafe_set s.bounds (2 * nf) first;
-  Array.unsafe_set s.bounds ((2 * nf) + 1) stop
+  if (2 * nf) + 2 > capacity s.bounds
+  then s.bounds <- grown s.bounds (2 * capacity s.bounds) ~keep:(2 * nf);
+  set_offset s.bounds (2 * nf) first;
+  set_offset s.bounds ((2 * nf) + 1) stop
 ;;
 
 let end_record s rows nf =
-  if rows + 2 > Array.length s.records
-  then (
-    let a = Array.make (2 * (rows + 2)) 0 in
-    Array.blit s.records 0 a 0 (rows + 1);
-    s.records <- a);
-  s.records.(rows + 1) <- nf
+  if rows + 2 > capacity s.records
+  then s.records <- grown s.records (2 * (rows + 2)) ~keep:(rows + 1);
+  set_offset s.records (rows + 1) nf
 ;;
 
 let split s =
@@ -138,8 +144,7 @@ let split s =
   let nf = ref 0
   and rows = ref 0
   and i = ref s.start in
-  if Array.length s.records < 2 then s.records <- Array.make 1024 0;
-  s.records.(0) <- 0;
+  set_offset s.records 0 0;
   s.lines <- 0;
   let more () = if not s.eod then raise Short in
   let record () =
@@ -261,6 +266,16 @@ let split s =
   s.rows <- !rows
 ;;
 
+type batch =
+  { data : Bytes.t
+  ; quote : char
+  ; first : int
+  ; line : int
+  ; bounds : Bytes.t
+  ; records : Bytes.t
+  ; rows : int
+  }
+
 let next s =
   Option.iter raise s.pending;
   if s.line = 0
@@ -269,50 +284,64 @@ let next s =
     skip_bom s)
   else (
     s.line <- s.line + s.lines;
-    s.start <- s.stop;
-    compact s);
+    detach s);
   split s;
   if s.rows > 0
-  then true
+  then
+    Some
+      { data = s.buf
+      ; quote = s.quote
+      ; first = s.start
+      ; line = s.line
+      ; bounds = s.bounds
+      ; records = s.records
+      ; rows = s.rows
+      }
   else (
     match s.pending with
     | Some e -> raise e
-    | None -> false)
+    | None -> None)
 ;;
 
-let[@inline] rows s = s.rows
-let[@inline] fields s r = s.records.(r + 1) - s.records.(r)
-let[@inline] bytes s = s.buf
-let[@inline] start s r j = s.bounds.(2 * (s.records.(r) + j))
-let[@inline] stop s r j = s.bounds.((2 * (s.records.(r) + j)) + 1)
+let[@inline] rows b = b.rows
+let[@inline] fields b r = offset b.records (r + 1) - offset b.records r
+let[@inline] bytes b = b.data
+let[@inline] start b r j = offset b.bounds (2 * (offset b.records r + j))
+let[@inline] stop b r j = offset b.bounds ((2 * (offset b.records r + j)) + 1)
 
-let[@inline] quoted s r j =
-  let k = 2 * (s.records.(r) + j) in
-  let first = Array.unsafe_get s.bounds k in
-  Array.unsafe_get s.bounds (k + 1) > first && Bytes.unsafe_get s.buf first = s.quote
+let[@inline] quoted b r j =
+  let k = 2 * (offset b.records r + j) in
+  let first = offset b.bounds k in
+  offset b.bounds (k + 1) > first && Bytes.unsafe_get b.data first = b.quote
 ;;
 
-let[@inline] pos s r j = if quoted s r j then start s r j + 1 else start s r j
+let[@inline] pos b r j = if quoted b r j then start b r j + 1 else start b r j
 
-let[@inline] len s r j =
-  let n = stop s r j - start s r j in
-  if quoted s r j then n - 2 else n
+let[@inline] len b r j =
+  let n = stop b r j - start b r j in
+  if quoted b r j then n - 2 else n
 ;;
 
-let text s r j =
-  let first = pos s r j
-  and n = len s r j in
-  if not (quoted s r j)
-  then Bytes.sub_string s.buf first n
+let text b r j =
+  let first = pos b r j
+  and n = len b r j in
+  if not (quoted b r j)
+  then Bytes.sub_string b.data first n
   else (
-    let b = Buffer.create n in
+    let buffer = Buffer.create n in
     let i = ref first in
     while !i < first + n do
-      let c = Bytes.unsafe_get s.buf !i in
-      Buffer.add_char b c;
-      i := if c = s.quote then !i + 2 else !i + 1
+      let c = Bytes.unsafe_get b.data !i in
+      Buffer.add_char buffer c;
+      i := if c = b.quote then !i + 2 else !i + 1
     done;
-    Buffer.contents b)
+    Buffer.contents buffer)
 ;;
 
-let line s r = fst (locate s (start s r 0))
+let line b r =
+  let line = ref b.line in
+  for k = b.first to start b r 0 - 1 do
+    if Bytes.unsafe_get b.data k = '\n' then incr line
+  done;
+  !line
+;;

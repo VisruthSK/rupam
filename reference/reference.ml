@@ -599,17 +599,20 @@ and delimited (file : C.file) =
     let s = Talon.Scan.make ~sep ~quote:'"' channel in
     let header = ref None
     and rows = ref [] in
-    while Talon.Scan.next s do
-      for r = 0 to Talon.Scan.rows s - 1 do
-        let fields = Array.init (Talon.Scan.fields s r) (Talon.Scan.text s r) in
-        match !header with
-        | None -> header := Some fields
-        | Some _ ->
-          rows
-          := Array.map (fun v -> if List.mem v file.missing then None else Some v) fields
-             :: !rows
-      done
-    done;
+    Seq.iter
+      (fun b ->
+         for r = 0 to Talon.Scan.rows b - 1 do
+           let fields = Array.init (Talon.Scan.fields b r) (Talon.Scan.text b r) in
+           match !header with
+           | None -> header := Some fields
+           | Some _ ->
+             rows
+             := Array.map
+                  (fun v -> if List.mem v file.missing then None else Some v)
+                  fields
+                :: !rows
+         done)
+      (Seq.of_dispenser (fun () -> Talon.Scan.next s));
     Option.value !header ~default:[||], Array.of_list (List.rev !rows))
 
 and join env (j : C.join) =

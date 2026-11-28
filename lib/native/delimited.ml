@@ -209,6 +209,80 @@ let observe c b p n ~missing ~longest ~scan ~row =
         if m land date_bit = 0 then c.date <- false)))
 ;;
 
+let merge c d =
+  c.int <- c.int && d.int;
+  c.float <- c.float && d.float;
+  c.bool <- c.bool && d.bool;
+  c.date <- c.date && d.date;
+  c.present <- c.present || d.present;
+  c.missing <- c.missing || d.missing;
+  c.nan <- c.nan || d.nan;
+  if c.infinite = None then c.infinite <- d.infinite
+;;
+
+let observe_rows batch ~missing ~longest ~width ~fail first =
+  let state = Array.init width (fun _ -> fresh ()) in
+  let rows = Talon.Scan.rows batch in
+  if first < rows
+  then (
+    let b = Talon.Scan.bytes batch in
+    let from = Talon.Scan.start batch first 0 in
+    let upto =
+      Talon.Scan.stop batch (rows - 1) (Talon.Scan.fields batch (rows - 1) - 1)
+    in
+    let utf_8 = valid_utf_8 b from (upto - from) in
+    for r = first to rows - 1 do
+      let fields = Talon.Scan.fields batch r in
+      if fields <> width
+      then
+        fail
+          (Talon.Scan.line batch r)
+          (Printf.sprintf "expected %d fields, found %d" width fields);
+      if not utf_8
+      then
+        for j = 0 to fields - 1 do
+          if not (valid_utf_8 b (Talon.Scan.pos batch r j) (Talon.Scan.len batch r j))
+          then
+            fail
+              (Talon.Scan.line batch r)
+              (Printf.sprintf "field %d is not valid UTF-8" (j + 1))
+        done;
+      for j = 0 to fields - 1 do
+        let c = state.(j) in
+        if c.int || c.float || c.bool || c.date || not (c.present && c.missing)
+        then (
+          let first = Talon.Scan.start batch r j
+          and last = Talon.Scan.stop batch r j in
+          if Talon.Scan.quoted batch r j
+          then
+            observe
+              c
+              ~missing
+              ~longest
+              b
+              (first + 1)
+              (last - first - 2)
+              ~scan:batch
+              ~row:r
+          else observe c ~missing ~longest b first (last - first) ~scan:batch ~row:r)
+      done
+    done);
+  state
+;;
+
+let header batch ~fail =
+  let given = Array.init (Talon.Scan.fields batch 0) (Talon.Scan.text batch 0) in
+  Array.iteri
+    (fun j name ->
+       if name = "" then fail 1 (Printf.sprintf "column %d has an empty name" (j + 1));
+       for k = 0 to j - 1 do
+         if String.equal given.(k) name
+         then fail 1 (Printf.sprintf "the column name %s appears twice" name)
+       done)
+    given;
+  given
+;;
+
 let columns ~missing ~path format : Input.column list =
   let longest = List.fold_left (fun m t -> max m (String.length t)) 0 missing in
   let sep =
@@ -221,77 +295,36 @@ let columns ~missing ~path format : Input.column list =
   in
   In_channel.with_open_bin path (fun channel ->
     let s = Talon.Scan.make ~sep ~quote:'"' channel in
-    let names = ref [||]
-    and state = ref [||]
-    and header = ref true in
+    let names = ref None
+    and state = ref [||] in
+    let next () =
+      Option.map
+        (fun batch ->
+           match !names with
+           | Some names -> batch, Array.length names, 0
+           | None ->
+             let given = header batch ~fail in
+             names := Some given;
+             state := Array.map (fun _ -> fresh ()) given;
+             batch, Array.length given, 1)
+        (Talon.Scan.next s)
+    in
     (try
-       while Talon.Scan.next s do
-         let b = Talon.Scan.bytes s in
-         let rows = Talon.Scan.rows s in
-         let first = Talon.Scan.start s 0 0
-         and last = Talon.Scan.stop s (rows - 1) (Talon.Scan.fields s (rows - 1) - 1) in
-         if not (valid_utf_8 b first (last - first))
-         then
-           for r = 0 to rows - 1 do
-             for j = 0 to Talon.Scan.fields s r - 1 do
-               if not (valid_utf_8 b (Talon.Scan.pos s r j) (Talon.Scan.len s r j))
-               then
-                 fail
-                   (Talon.Scan.line s r)
-                   (Printf.sprintf "field %d is not valid UTF-8" (j + 1))
-             done
-           done;
-         for r = 0 to rows - 1 do
-           let fields = Talon.Scan.fields s r in
-           if !header
-           then (
-             header := false;
-             let given = Array.init fields (Talon.Scan.text s r) in
-             Array.iteri
-               (fun j name ->
-                  if name = ""
-                  then fail 1 (Printf.sprintf "column %d has an empty name" (j + 1));
-                  for k = 0 to j - 1 do
-                    if String.equal given.(k) name
-                    then fail 1 (Printf.sprintf "the column name %s appears twice" name)
-                  done)
-               given;
-             names := given;
-             state := Array.init fields (fun _ -> fresh ()))
-           else (
-             if fields <> Array.length !names
-             then
-               fail
-                 (Talon.Scan.line s r)
-                 (Printf.sprintf
-                    "expected %d fields, found %d"
-                    (Array.length !names)
-                    fields);
-             for j = 0 to fields - 1 do
-               let c = !state.(j) in
-               if c.int || c.float || c.bool || c.date || not (c.present && c.missing)
-               then (
-                 let first = Talon.Scan.start s r j
-                 and last = Talon.Scan.stop s r j in
-                 if Talon.Scan.quoted s r j
-                 then
-                   observe
-                     c
-                     ~missing
-                     ~longest
-                     b
-                     (first + 1)
-                     (last - first - 2)
-                     ~scan:s
-                     ~row:r
-                 else observe c ~missing ~longest b first (last - first) ~scan:s ~row:r)
-             done)
-         done
-       done
+       Parallel.run ~workers:3 ~size:(In_channel.length channel) (fun parallel ->
+         Parallel.ordered
+           parallel
+           ~next
+           ~work:(fun (batch, width, first) ->
+             observe_rows batch ~missing ~longest ~width ~fail first)
+           (fun part -> Array.iter2 merge !state part))
      with
      | Talon.Scan.Error { line; column; msg } ->
        fail line (Printf.sprintf "column %d: %s" column msg));
-    if !header then fail 1 "the file has no header";
+    let names =
+      match !names with
+      | Some names -> names
+      | None -> fail 1 "the file has no header"
+    in
     Array.to_list
       (Array.mapi
          (fun j name ->
@@ -316,5 +349,5 @@ let columns ~missing ~path format : Input.column list =
             in
             let nullable = c.missing || (typ = Float && c.nan) in
             ({ name; typ = Supported typ; nullable } : Input.column))
-         !names))
+         names))
 ;;

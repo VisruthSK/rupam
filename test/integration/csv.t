@@ -89,6 +89,33 @@ Malformed files are errors that name the line.
   1:9  unreadable-input
     latin1.csv:3: field 2 is not valid UTF-8
 
+Files large enough to be classified in parallel infer the same types and
+report the first error in file order.
+
+  $ rows() { awk -v n=$1 'BEGIN { print "id,x,flag,day,word"; for (i = 1; i <= n; i++) print i "," i ".5,TRUE,2024-01-01,w" i }'; }
+  $ { rows 600000; printf '1.5,NA,maybe,2024-13-01,\n'; } > late.csv
+  $ printf 'let t = read_csv("late.csv")\n:schema t\n:quit\n' | rupam repl --target python-polars
+  600001 rows × 5 columns
+    id    Float
+    x     Float?
+    flag  String
+    day   String
+    word  String?
+  600001 rows × 5 columns
+    id    Float
+    x     Float?
+    flag  String
+    day   String
+    word  String?
+  $ rows 600000 | awk 'NR == 300001 { print $0 ",extra"; next } NR == 500001 { printf "1,2,TRUE,2024-01-01,caf\351\n"; next } { print }' > errors.csv
+  $ printf 'let t = read_csv("errors.csv")\n:quit\n' | rupam repl --target python-polars
+  1:9  unreadable-input
+    errors.csv:300001: expected 5 fields, found 6
+  $ rows 600000 | awk 'NR == 550001 { print "1,inf,TRUE,2024-01-01,w"; next } { print }' > infinite.csv
+  $ printf 'let t = read_csv("infinite.csv")\n:quit\n' | rupam repl --target python-polars
+  1:9  unreadable-input
+    infinite.csv:550001: column x holds an infinite value
+
 `missing_tokens` replaces the default missing tokens, so real "NA" text can
 be kept; both targets apply the same tokens.
 
