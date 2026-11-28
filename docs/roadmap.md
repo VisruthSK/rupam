@@ -8,9 +8,10 @@ only what is not yet built, in the order it is built.
 
 Each milestone ships when everything in it is done, every suite is green on
 Linux, macOS and Windows, and CI passes at the tagged commit. `0.1.0` is
-complete Rupam: every conformance case active and passing on every target,
-except the cases of features listed after `0.1.0` (conversions, date-times,
-the agent protocol), which stay pending. Today 77 of 156 cases are active.
+complete Rupam for serious analysis: every conformance case active and passing
+on every target, except the agent protocol's, which stay pending; and the
+acceptance analyses at the end of the milestone run end to end. Today 77 of
+156 cases are active.
 
 `0.0.0-alpha.1` shipped for Linux (x86-64, arm64), macOS (arm64, x86-64) and
 Windows.
@@ -72,29 +73,55 @@ In implementation order; each step unlocks the conformance cases named.
    DuckDB host process, so `rupam.exe` links no C++; the same conformance and
    differential suites, with adapters where SQL semantics differ (integer
    overflow, NULL ordering).
-7. **Analytical core**: reshaping (`bind_rows`, `complete`, `expand`, pivot
+7. **The data analysts actually have**: `DateTime` and `Time` with zones,
+   parsing and arithmetic (C33, C34, C95); explicit conversions `Int()`,
+   `Float()` and `String()` with wholeness established by `floor`,
+   `ceiling`, `trunc` and `round` (C40, C49, C64); categorical columns as
+   data-discovered enums with `as_enum`, ordered levels recorded in the lock
+   ([Future](spec/future.md)).
+8. **Analytical core**: reshaping (`bind_rows`, `complete`, `expand`, pivot
    duplicates, `values_fn`, about 7 cases); `across` and the remaining column
    transforms (C77, C106); ordered windows (`lag`, `lead`, `slice_min` with
    total-order obligations, 5 cases); strict mode and effect sets (5 cases);
    restricted columns (3 cases).
-8. **Session**: an explicit state machine (base revision, pinned inputs,
+9. **Session**: an explicit state machine (base revision, pinned inputs,
    pending work, publication outcome; cancellation or worker loss after an
    effect but before publication); demand-driven materialisation and index
    views ([results brief](briefs/result-architecture.md), parts 2 and 3);
    detached sessions ([brief](briefs/detached-session.md)); save and export
    by backward slicing (C164); `:probe`, `??term` search and
    comment-preserving `:save`.
-9. **Platform separation** ([brief](briefs/compiler-platform-separation.md)):
+10. **Platform separation** ([brief](briefs/compiler-platform-separation.md)):
    execution and result services behind interfaces, bounded host
    materialisation, differential programs generated from typed TransformIR
    with failures shrunk into pending fixtures.
-10. **Editors**: a TextMate grammar; LSP completion and hover from the shared
+11. **Editors**: a TextMate grammar; LSP completion and hover from the shared
     checker.
-11. **Release**: documentation, `rupam env` environment setup, realistic
+12. **Release**: documentation, `rupam env` environment setup, realistic
     end-to-end examples on every target, and a whole-codebase audit: every
     algorithm log-linear at worst with small constants, accidental complexity
     and spec deviations removed, hand-written infrastructure moved to
     maintained dependencies where one fits.
+
+**Acceptance analyses.** `0.1.0` ships when each of these runs from raw files
+to a locked, compiled program with identical results on every target, in
+`examples/` and the integration suite:
+
+- Clean a messy CSV: types, missing tokens, strings and regex, timestamps in
+  several zones, conversions, and a contract that rejects bad rows.
+- Join several tables on contracted keys, with coverage and cardinality
+  checked, then reshape wide to long and back.
+- Grouped summaries and helpers written in Rupam (a correlation, a robust
+  standardisation) with missing values handled explicitly.
+- A time series: ordered windows (`lag`, `lead`, cumulative sums), date
+  flooring and gaps filled with `complete`.
+- Categorical recoding with `match` whose exhaustiveness is proved from the
+  locked data, failing on relock when a new category appears.
+- A 10 GB input checked, locked and previewed at the throughput the ingestion
+  brief targets.
+
+Out of scope for `0.1.0`: statistical modelling and plotting; results are
+exported to R or Python for those.
 
 ## After 0.1.0
 
@@ -103,11 +130,6 @@ In implementation order; each step unlocks the conformance cases named.
 - Results across sessions, incremental compiler queries, evidence retained as
   indexes, and incrementally maintained results, each once a profile shows
   the need ([results brief](briefs/result-architecture.md), part 4).
-- Explicit conversions `Int()`, `Float()` and `String()` from the
-  [conversion table](spec/types.md#conversions), with wholeness established
-  by `floor`, `ceiling`, `trunc` and `round` (C40, C49, C64).
-- Data-discovered enums and `as_enum` ([Future](spec/future.md)).
-- `DateTime`, `Time` and zones; nominal types and units (C33, C34, C95).
 - Idiomatic R and Python formatting of generated code beyond line breaking,
   if a light dependency or printer pass suffices.
 - Replace `scripts/dev` with a `justfile` (or an equally small runner);
@@ -117,6 +139,7 @@ In implementation order; each step unlocks the conformance cases named.
   and the `_opam` cache in CI.
 - Splitting each backend into a `HOST` and a `DIALECT` once a language has a
   second table library.
+- Nominal types and units.
 - Modules, package export, test blocks, `repeat`, and the relational
   extensions in [Future](spec/future.md).
 - Optional OxCaml release builds for Linux and macOS (Flambda 2, unboxed
