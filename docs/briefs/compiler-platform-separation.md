@@ -8,8 +8,9 @@ The `rupam` compiler library builds without DuckDB, nanoarrow, processes or a
 terminal, and receives input facts through `Scope.inputs`. What remains is
 the rest of the platform boundary: execution and results behind interfaces,
 one snapshot identity shared by preview, lock and export, bounded host
-materialisation, and the browser build. R/dplyr and Python/Polars remain the
-production engines. Language guarantees (exact integers, evaluation scope,
+materialisation, and the browser build. R/dplyr, Python/Polars and, once
+built, DuckDB SQL are the production engines; the browser runs DuckDB SQL on
+duckdb-wasm. Language guarantees (exact integers, evaluation scope,
 missingness, order, effects, target-specific evidence) are unchanged.
 
 ## Execution and result services
@@ -85,17 +86,19 @@ missingness, order, effects, target-specific evidence) are unchanged.
 ## Browser build
 
 - Build the compiler with wasm_of_ocaml against the pure libraries.
-- Run a persistent Pyodide worker with a tested Polars 1.33.x capability
-  profile; audit Int128 arithmetic, strict narrowing, pivots, joins, dates,
-  missingness and IPC publication against the actual wheel.
-- Resolve logical inputs through uploads or a virtual project directory
-  without copying whole datasets between JavaScript, OCaml and Pyodide to
-  discover schemas.
+- Run a persistent duckdb-wasm worker executing the `sql-duckdb` dialect,
+  with a tested capability profile for the pinned duckdb-wasm release; audit
+  integer overflow, strict narrowing, pivots, joins, dates, missingness and
+  Arrow IPC publication against it, since duckdb-wasm can lag native DuckDB
+  in extensions and behaviour.
+- Resolve logical inputs through uploads or a virtual project directory,
+  registered with duckdb-wasm as files, without copying whole datasets
+  between JavaScript, OCaml and the worker to discover schemas.
 - Keep results in the worker or transfer columnar IPC once; paging addresses
   completed results and never re-runs the query. Preserve Int64 exactly with
   typed buffers or BigInt.
-- Generate strict R and Python exports without launching R. Defer webR, MCP
-  and data-dict execution in the browser.
+- Generate strict R, Python and SQL exports without launching R or Python.
+  Defer Pyodide (Polars), webR, MCP and data-dict execution in the browser.
 
 ## Order
 
@@ -119,5 +122,6 @@ missingness, order, effects, target-specific evidence) are unchanged.
 - Result publication has bounded memory for the streaming subset, with
   documented behaviour otherwise; cleanup is tested under cancellation,
   eviction and multiple consumers.
-- The browser compiler and worker run representative Polars analyses,
-  preserve exact integers, page completed results and export both languages.
+- The browser compiler and duckdb-wasm worker run representative analyses,
+  preserve exact integers, page completed results and export all three
+  languages.

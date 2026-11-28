@@ -46,11 +46,17 @@ Windows. What remains:
   any row selects it and not at all otherwise, together with the row-domain
   and order witnesses that survive projection or replacement. Driven by
   C110, C119, C121 and C123; fixes the dplyr `if_else` length failure in C11.
+- A `sql-duckdb` target, early: Rupam compiles to DuckDB SQL as a third
+  language beside R/dplyr and Python/Polars, executed through a DuckDB host
+  process like the other workers, so `rupam.exe` still links no C++. It
+  passes the same conformance and differential suites, with exact integers,
+  missingness and order as specified, and is the engine for the browser.
 - Platform separation, remaining steps of the
   [brief](briefs/compiler-platform-separation.md): execution and result
   services behind interfaces, snapshot and evidence identities shared by
   preview, lock and export, bounded host materialisation, then the WASM
-  compiler and browser worker.
+  compiler and a browser worker running the `sql-duckdb` dialect on
+  duckdb-wasm.
 - Generate differential programs from typed TransformIR rather than source
   text, and shrink each failure into a pending fixture.
 - Numeric promotion through captured bindings (`let f(x) = x * m` is
