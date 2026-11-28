@@ -57,8 +57,24 @@ let fits b first =
   !i = 19 || byte b (first + !i) < String.unsafe_get largest !i
 ;;
 
-let rec digits_end b i stop =
-  if i < stop && is_digit (byte b i) then digits_end b (i + 1) stop else i
+let nibbles = 0xF0F0F0F0F0F0F0F0L
+let zeros = 0x3030303030303030L
+let sixes = 0x0606060606060606L
+
+let[@inline] eight_digits w =
+  Int64.equal (Int64.logand w nibbles) zeros
+  && Int64.equal (Int64.logand (Int64.add w sixes) nibbles) zeros
+;;
+
+let digits_end b i stop =
+  let i = ref i in
+  while !i + 8 <= stop && eight_digits (get64 b !i) do
+    i := !i + 8
+  done;
+  while !i < stop && is_digit (byte b !i) do
+    incr i
+  done;
+  !i
 ;;
 
 let fraction_end b i stop =
