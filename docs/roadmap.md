@@ -16,88 +16,84 @@ acceptance analyses at the end of the milestone run end to end. Today 77 of
 `0.0.0-alpha.1` shipped for Linux (x86-64, arm64), macOS (arm64, x86-64) and
 Windows.
 
-## 0.0.0-alpha.2: fast, self-contained, helpers that work
+## 0.0.0-alpha.2: helpers that work, a prompt that keeps up
 
-1. **Talon readers** (pull request 5): CSV, Parquet and Arrow IPC read in
-   OCaml and C, one read per input for digest and schema, BLAKE3 at 85% of
-   the drive's ceiling, DuckDB only as a development oracle.
-2. **REPL input is never rewritten**: pasted and externally edited input is
-   kept exactly as typed; formatting happens only on `:save` and in exports.
-3. **Helpers infer once, correctly**: one inference scheme for helpers
+1. **Helpers infer once, correctly**: one inference scheme for helpers
    carrying parameter roles, scope, alignment and missing-policy requirements
    through higher-order calls (C62, C101), replacing the ordinary-then-
-   contextual retry in `function_`; `center` infers `(Number) -> Float?`, so
-   `pearson(x, y)` built from `center`, `sum` and `sqrt` works in `summarize`
-   with and without `by`. With it: numeric promotion through captured
-   bindings and `Number` annotations (C160, C161), column-shaped signatures
-   (C162), and vector lifting with a length check and no recycling (C165,
-   C37).
-4. **Interactive performance** ([brief](briefs/interactive-performance.md)):
+   contextual retry in `function_`; `center` infers `(Number) -> Float?`, and
+   a missing-policy diagnostic points at the helper's call rather than into
+   its body. With it: numeric promotion through captured bindings and
+   `Number` annotations (C160, C161), column-shaped signatures (C162), and
+   vector lifting with a length check and no recycling (C165, C37).
+2. **Interactive performance** ([brief](briefs/interactive-performance.md)):
    input-to-display latency measured per stage, REPL start-up and first
    result, the online viewer sort that publishes the visible top-k first,
    progressive summaries, and an antipattern audit. Inspection of finished
    results never waits on the worker
    ([results brief](briefs/result-architecture.md), part 1).
-5. **Parallel one-pass ingestion**
-   ([brief](briefs/parallel-ingestion.md)): at least 1 GB/s per core and
-   5 GB/s for a full in-memory read, bounded memory on files larger than RAM,
-   and the native Windows reader at parity with Linux.
-6. The demo recorded again at 1080p30.
+3. The demo recorded again at 1080p30.
 
 ## 0.1.0: complete Rupam
 
 In implementation order; each step unlocks the conformance cases named.
 
-1. **One snapshot, evidence from the single read.** One canonical input
+1. **Self-contained readers**: the Talon readers (pull request 5) for CSV,
+   Parquet and Arrow IPC in OCaml and C, one read per input for digest and
+   schema, DuckDB only as a development oracle; then parallel one-pass
+   ingestion ([brief](briefs/parallel-ingestion.md)) at least 1 GB/s per core
+   and 5 GB/s for a full in-memory read, in bounded memory, with the native
+   Windows reader at parity with Linux.
+2. **One snapshot, evidence from the single read.** One canonical input
    snapshot across preview, proof checking and export (C22, C90, C96). The
    read that digests and infers also collects the evidence obligations
    demand: presence and NaN counts, bounds, and distinct values when a column
    has few, recorded in the lock as discharged obligations
    ([Projects](spec/projects.md#locks)).
-2. **Evidence and locking**: incremental `:lock`, `:unlock`, `:refresh`,
+3. **Evidence and locking**: incremental `:lock`, `:unlock`, `:refresh`,
    schema discovery accepted by lock, and obligations discharged by locked
    evidence (about 13 cases). Presence from evidence (`mean(x, missing =
    skip)` refined to `Float` when every group has a present value).
-3. **Exhaustiveness from evidence**: a `match` or `match?` over values
+4. **Exhaustiveness from evidence**: a `match` or `match?` over values
    (strings as well as ranges) whose arms cover the locked snapshot's domain
    is accepted, carrying the uncovered domain as a latent requirement; a new
    value in the data makes the lock stale and the relock fails with
    `nonexhaustive-match` naming it, before anything runs. Range patterns
    reject overlaps and name uncovered intervals (C158, C159).
-4. **Contract validation**: required, range, NaN and infinity in sources, keys
+5. **Contract validation**: required, range, NaN and infinity in sources, keys
    and foreign keys, malformed fields (about 9 cases).
-5. **Guarded evaluation in Core**: active rows and the enclosing group
+6. **Guarded evaluation in Core**: active rows and the enclosing group
    represented together, so a guarded reduction runs once over the group when
    any row selects it (C110, C119, C121, C123; fixes C11 on dplyr).
-6. **DuckDB SQL target** (`sql-duckdb`): a third language run through a
+7. **DuckDB SQL target** (`sql-duckdb`): a third language run through a
    DuckDB host process, so `rupam.exe` links no C++; the same conformance and
    differential suites, with adapters where SQL semantics differ (integer
    overflow, NULL ordering).
-7. **The data analysts actually have**: `DateTime` and `Time` with zones,
+8. **The data analysts actually have**: `DateTime` and `Time` with zones,
    parsing and arithmetic (C33, C34, C95); explicit conversions `Int()`,
    `Float()` and `String()` with wholeness established by `floor`,
    `ceiling`, `trunc` and `round` (C40, C49, C64); categorical columns as
    data-discovered enums with `as_enum`, ordered levels recorded in the lock
    ([Future](spec/future.md)).
-8. **Analytical core**: reshaping (`bind_rows`, `complete`, `expand`, pivot
+9. **Analytical core**: reshaping (`bind_rows`, `complete`, `expand`, pivot
    duplicates, `values_fn`, about 7 cases); `across` and the remaining column
    transforms (C77, C106); ordered windows (`lag`, `lead`, `slice_min` with
    total-order obligations, 5 cases); strict mode and effect sets (5 cases);
    restricted columns (3 cases).
-9. **Session**: an explicit state machine (base revision, pinned inputs,
+10. **Session**: an explicit state machine (base revision, pinned inputs,
    pending work, publication outcome; cancellation or worker loss after an
    effect but before publication); demand-driven materialisation and index
    views ([results brief](briefs/result-architecture.md), parts 2 and 3);
    detached sessions ([brief](briefs/detached-session.md)); save and export
    by backward slicing (C164); `:probe`, `??term` search and
    comment-preserving `:save`.
-10. **Platform separation** ([brief](briefs/compiler-platform-separation.md)):
+11. **Platform separation** ([brief](briefs/compiler-platform-separation.md)):
    execution and result services behind interfaces, bounded host
    materialisation, differential programs generated from typed TransformIR
    with failures shrunk into pending fixtures.
-11. **Editors**: a TextMate grammar; LSP completion and hover from the shared
+12. **Editors**: a TextMate grammar; LSP completion and hover from the shared
     checker.
-12. **Release**: documentation, `rupam env` environment setup, realistic
+13. **Release**: documentation, `rupam env` environment setup, realistic
     end-to-end examples on every target, and a whole-codebase audit: every
     algorithm log-linear at worst with small constants, accidental complexity
     and spec deviations removed, hand-written infrastructure moved to

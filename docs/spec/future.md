@@ -77,7 +77,7 @@ A reactive notebook (`rupam notebook`) in the spirit of marimo, specified in
 The parser, checker, formatter and lowering as a library free of OS-specific
 ingestion and workers, compilable to JavaScript or Wasm with supplied schemas
 and evidence. A browser-hosted notebook additionally needs a conformant
-browser execution backend: the `sql-duckdb` dialect on duckdb-wasm.
+browser execution backend.
 
 ## Optimiser validation
 
