@@ -152,7 +152,7 @@ switch and in the Windows release build.
 | `ppx_deriving_jsonschema` | JSON Schema for session and MCP tool inputs |
 | `jsonrpc` | JSON-RPC message types for the session protocol and MCP server |
 | `linol` | language server framing and dispatch when editor work resumes |
-| `digestif` | streaming SHA-256 of locked inputs and manifests |
+| `domainslib` | the bounded task pool for hashing, CSV classification and Parquet scans |
 | Menhir incremental API and `.messages` | prefix checking, completion at a cursor, syntax error messages |
 | `sedlex` | Unicode lexing and code-point positions |
 | `ppx_expect`, `ppx_sexp_conv` | expect tests and stage dumps |

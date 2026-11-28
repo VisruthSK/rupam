@@ -49,8 +49,10 @@ Previews, `run`, conformance and validation use the same target environment.
 ## Locks
 
 An analysis is compiled for particular inputs, not for arbitrary future
-replacement data. `rupam.lock` records a content-addressed analysis entry
-per source and target, including:
+replacement data. Locks, manifests, source maps, generated programs and saved
+sources are written with LF line endings, so the same analysis produces the
+same bytes on every operating system. `rupam.lock` records a content-addressed
+analysis entry per source and target, including:
 
 - resolved contract and definition files, every input data file and schema,
   and explicit external parameters (BLAKE3 of exact bytes or canonical

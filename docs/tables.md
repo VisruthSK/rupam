@@ -42,7 +42,7 @@ Type checking needs only the contract and the Parquet footer. Columns marked
 
 An analysis is compiled for particular data. `rupam lock shop.rp` validates
 every contract with `data-dict validate-data`, so a bad row fails even if a
-later `filter` would have dropped it, and records the SHA-256 of every input
+later `filter` would have dropped it, and records the BLAKE3 digest of every input
 in `rupam.lock`, together with the dialect, the settings and the schemas rupam
 inferred for files without a contract. Editing the program needs no relock
 unless it starts reading a new file. `compile` and `run` need a current lock. They

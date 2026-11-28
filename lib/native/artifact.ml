@@ -41,7 +41,7 @@ let dependencies (target : Target.t) ~tabular =
 ;;
 
 let write_json path json =
-  Out_channel.with_open_text path (fun channel ->
+  Out_channel.with_open_bin path (fun channel ->
     output_string channel (Yojson.Safe.pretty_to_string json ^ "\n"))
 ;;
 
@@ -72,7 +72,7 @@ let write ~(entry : Lock.entry) ~program_blake3 ~locations ~output ~code items =
     ; nonportable = Host.nonportable items
     }
   in
-  Out_channel.with_open_text output (fun channel -> output_string channel code);
+  Out_channel.with_open_bin output (fun channel -> output_string channel code);
   write_json (output ^ ".map.json") (yojson_of_source_map { mappings });
   write_json (output ^ ".manifest.json") (yojson_of_manifest manifest)
 ;;
