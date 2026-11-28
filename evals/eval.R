@@ -1,11 +1,13 @@
 library(vitals)
 library(ellmer)
-library(processx)
-library(jsonlite)
-library(tibble)
+library(tidyverse)
 use("here", "here")
 
-vitals::vitals_log_dir_set(here("evals", "logs"))
+results_dir <- here("evals", "results")
+logs_dir <- here("evals", "logs")
+dir.create(results_dir, recursive = TRUE, showWarnings = FALSE)
+dir.create(logs_dir, recursive = TRUE, showWarnings = FALSE)
+vitals_log_dir_set(logs_dir)
 
 questions <- tibble(
   input = c(
@@ -19,31 +21,25 @@ agy_solver <- function(language) {
   force(language)
 
   function(inputs, ...) {
-    chats <- lapply(inputs, function(input) {
+    samples <- map(inputs, function(input) {
       wd <- tempfile()
       dir.create(wd)
+
       if (language == "Rupam") {
-        dir.create(file.path(wd, "docs"))
+        docs <- file.path(wd, "docs")
+        dir.create(docs)
         stopifnot(file.copy(
-          here("docs", c("language.md", "tables.md", "repl.md")),
-          file.path(wd, "docs")
+          file.path(here("docs"), c("language.md", "tables.md", "repl.md")),
+          docs
         ))
-        stopifnot(file.copy(
-          here("docs", "spec", "agent-interface.md"),
-          file.path(wd, "docs")
-        ))
+        stopifnot(file.copy(here("docs", "spec", "agent-interface.md"), docs))
         stopifnot(file.copy(here("evals", "rupam.exe"), wd))
       }
 
-      writeLines(
-        c("id,x", "1,10", "2,", "3,30"),
-        file.path(wd, "data.csv")
-      )
+      write_lines(c("id,x", "1,10", "2,", "3,30"), file.path(wd, "data.csv"))
 
       prompt <- paste(
-        "Use only",
-        language,
-        "for the analysis.",
+        "Use only", language, "for the analysis.",
         "The dataset is data.csv.",
         if (language == "Rupam") {
           paste(
@@ -59,76 +55,85 @@ agy_solver <- function(language) {
             "Execute the requested analysis."
           )
         },
-        "Execute your code.",
-        input,
+        "Execute your code.", input,
         "Finish with ANSWER: followed by the number."
+      )
+
+      log_file <- tempfile(
+        pattern = paste0(str_replace_all(language, "/", "-"), "-"),
+        tmpdir = results_dir,
+        fileext = ".jsonl"
       )
 
       run <- processx::run(
         "agy",
-        c(
-          "-p",
-          prompt,
-          "--model",
-          "gemini-4-hydrogen-high",
-          "--output-format",
-          "stream-json",
-          "--sandbox"
-        ),
+        c("-p", prompt, "--model", "gemini-4-hydrogen-high",
+          "--output-format", "stream-json", "--sandbox"),
         wd = wd,
-        timeout = 60000,
+        timeout = as.difftime(180, units = "secs"),
         echo = TRUE,
         echo_cmd = TRUE,
         error_on_status = FALSE,
-        env = c(
-          "current",
-          PATH = paste(wd, Sys.getenv("PATH"), sep = .Platform$path.sep)
-        )
+        stdout_line_callback = function(line, process) {
+          write_lines(line, log_file, append = TRUE)
+        },
+        env = c("current", PATH = paste(wd, Sys.getenv("PATH"), sep = .Platform$path.sep))
       )
 
-      writeLines(
-        run$stdout,
-        tempfile(
-          pattern = paste0(gsub("/", "-", language), "-"),
-          tmpdir = here("evals", "results"),
-          fileext = ".json"
-        )
-      )
-      cat(run$stderr, file = stderr())
-      stopifnot(run$status == 0)
+      # Keep the full stream, including a partial stream if the agent times out.
+      write_lines(run$stdout, log_file)
+      if (isTRUE(run$timeout) || !isTRUE(run$status == 0L)) {
+        stop("Antigravity failed; see ", log_file, call. = FALSE)
+      }
 
-      events <- lapply(
-        strsplit(trimws(run$stdout), "\n")[[1]],
-        fromJSON,
-        simplifyVector = FALSE
-      )
-      out <- tail(
-        Filter(
-          function(x) identical(x$event, "result"),
-          events
-        ),
-        1
-      )[[1]]$result
-      stopifnot(out$status == "SUCCESS")
+      events <- read_lines(log_file, skip_empty_rows = TRUE) |>
+        str_trim() |>
+        discard(\(x) x == "") |>
+        map(possibly(\(x) jsonlite::fromJSON(x, simplifyVector = FALSE), NULL)) |>
+        keep(is.list)
 
-      # Offline transcript container; no API request.
-      ch <- chat_openai_compatible(
+      final <- keep(events, \(x) identical(x$event, "result"))
+      if (length(final) != 1L || !identical(final[[1]]$result$status, "SUCCESS")) {
+        stop("No successful final result in ", log_file, call. = FALSE)
+      }
+      out <- final[[1]]$result
+      stopifnot(is.character(out$response), length(out$response) == 1L)
+
+      # This chat stores the transcript only; it never makes a model API call.
+      chat <- chat_openai_compatible(
         base_url = "http://127.0.0.1:1",
-        model = "gemini-4-hydrogen",
+        model = "gemini-4-hydrogen-high",
         credentials = function() "offline"
       )
-
-      ch$set_turns(list(
+      chat$set_turns(list(
         UserTurn(contents = list(ContentText(prompt))),
         AssistantTurn(contents = list(ContentText(out$response)))
       ))
 
-      ch
+      list(
+        result = out$response,
+        chat = chat,
+        metadata = list(
+          conversation_id = out$conversation_id,
+          log_file = log_file,
+          seconds = out$duration_seconds %||% NA_real_,
+          input_tokens = out$usage$input_tokens %||% NA_real_,
+          output_tokens = out$usage$output_tokens %||% NA_real_,
+          thinking_tokens = out$usage$thinking_tokens %||% NA_real_,
+          cached_tokens = out$usage$cache_read_tokens %||% NA_real_,
+          total_tokens = out$usage$total_tokens %||% NA_real_,
+          tool_calls = sum(map_lgl(events, \(e) {
+            identical(e$step_update$step_type, "tool") &&
+              identical(e$step_update$state, "DONE")
+          }))
+        )
+      )
     })
 
     list(
-      result = vapply(chats, function(x) x$last_turn()@text, ""),
-      solver_chat = chats
+      result = map_chr(samples, "result"),
+      solver_chat = map(samples, "chat"),
+      solver_metadata = map(samples, "metadata")
     )
   }
 }
@@ -150,12 +155,12 @@ rupam <- Task$new(
 )
 
 rupam$eval(view = FALSE)
-saveRDS(rupam, "results/rupam.rds")
+saveRDS(rupam, file.path(results_dir, "rupam.rds"))
 
 r$eval(view = FALSE)
-saveRDS(r, "results/r.rds")
+saveRDS(r, file.path(results_dir, "r.rds"))
 
 saveRDS(
   list(r = r$metrics, rupam = rupam$metrics),
-  "results/metrics.rds"
+  file.path(results_dir, "metrics.rds")
 )
