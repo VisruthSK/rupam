@@ -1,5 +1,5 @@
 let digest path =
-  let workers = min 7 (Domain.recommended_domain_count () - 1) in
+  let workers = min 15 (Domain.recommended_domain_count () - 1) in
   if
     workers < 1
     || In_channel.with_open_bin path In_channel.length < Int64.of_int (8 lsl 20)

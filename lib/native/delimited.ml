@@ -21,6 +21,8 @@ let fresh () =
   }
 ;;
 
+external get64 : Bytes.t -> int -> int64 = "%caml_bytes_get64u"
+
 let int_bit = 1
 let float_bit = 2
 let bool_bit = 4
@@ -55,45 +57,43 @@ let fits b first =
   !i = 19 || byte b (first + !i) < String.unsafe_get largest !i
 ;;
 
-let run_of_digits b i stop =
-  while !i < stop && is_digit (byte b !i) do
-    incr i
-  done
+let rec digits_end b i stop =
+  if i < stop && is_digit (byte b i) then digits_end b (i + 1) stop else i
+;;
+
+let fraction_end b i stop =
+  if i < stop && byte b i = '.'
+  then (
+    let j = digits_end b (i + 1) stop in
+    if j > i + 1 then j else -1)
+  else i
+;;
+
+let exponent_end b i stop =
+  if i >= 0 && i < stop && (byte b i = 'e' || byte b i = 'E')
+  then (
+    let s =
+      if i + 1 < stop && (byte b (i + 1) = '+' || byte b (i + 1) = '-')
+      then i + 2
+      else i + 1
+    in
+    let j = digits_end b s stop in
+    if j > s then j else -1)
+  else i
 ;;
 
 let number b p n =
   let stop = p + n in
-  let i = ref p in
-  if byte b p = '-' then incr i;
-  let first = !i in
-  run_of_digits b i stop;
-  let digits = !i - first in
+  let first = if byte b p = '-' then p + 1 else p in
+  let whole = digits_end b first stop in
+  let digits = whole - first in
   if digits = 0 || (digits > 1 && byte b first = '0')
   then 0
-  else if !i = stop
+  else if whole = stop
   then if digits < 19 || (digits = 19 && fits b first) then int_bit lor float_bit else 0
-  else (
-    let fraction =
-      byte b !i = '.'
-      &&
-      (incr i;
-       let start = !i in
-       run_of_digits b i stop;
-       !i > start)
-    in
-    let broken = (not fraction) && byte b (!i - 1) = '.' in
-    let exponent =
-      (not broken)
-      && !i < stop
-      && (byte b !i = 'e' || byte b !i = 'E')
-      &&
-      (incr i;
-       if !i < stop && (byte b !i = '+' || byte b !i = '-') then incr i;
-       let start = !i in
-       run_of_digits b i stop;
-       !i > start)
-    in
-    if (not broken) && !i = stop && (fraction || exponent) then float_bit else 0)
+  else if exponent_end b (fraction_end b whole stop) stop = stop
+  then float_bit
+  else 0
 ;;
 
 let two b p = ((Char.code (byte b p) - 48) * 10) + Char.code (byte b (p + 1)) - 48
@@ -149,9 +149,7 @@ let classify b p n =
 let valid_utf_8 b p n =
   let stop = p + n in
   let i = ref p in
-  while
-    !i + 8 <= stop && Int64.logand (Bytes.get_int64_le b !i) 0x8080808080808080L = 0L
-  do
+  while !i + 8 <= stop && Int64.logand (get64 b !i) 0x8080808080808080L = 0L do
     i := !i + 8
   done;
   let ok = ref true in

@@ -6,12 +6,19 @@ external update : buffer -> buffer -> int -> unit = "rupam_blake3_update"
 external subtree : buffer -> int -> int -> buffer -> int -> unit = "rupam_blake3_subtree"
 external push : buffer -> buffer -> int -> int -> unit = "rupam_blake3_push"
 external finish : buffer -> string = "rupam_blake3_finish"
-external read_at : string -> int -> buffer -> int -> unit = "rupam_blake3_read"
+external read_at : string -> int -> buffer -> int -> bool -> unit = "rupam_blake3_read"
+external misalignment : buffer -> int = "rupam_blake3_misalignment"
 
 let chunk = 1024
-let span = 1 lsl 22
+let span = 1 lsl 24
 let create n = Bigarray.Array1.create Bigarray.int8_unsigned Bigarray.c_layout n
-let scratch = Domain.DLS.new_key (fun () -> create span)
+
+let aligned n =
+  let raw = create (n + 4096) in
+  Bigarray.Array1.sub raw (misalignment raw) n
+;;
+
+let scratch = Domain.DLS.new_key (fun () -> aligned span)
 
 let hex digest =
   String.concat
@@ -32,7 +39,7 @@ let file ?(parallel = sequential) path =
   let pairs = create (max 1 (count * 64)) in
   parallel count (fun i ->
     let buffer = Domain.DLS.get scratch in
-    read_at path (i * span) buffer span;
+    read_at path (i * span) buffer span true;
     subtree buffer span (i * (span / chunk)) pairs i);
   let state = create (state_size ()) in
   init state;
@@ -43,7 +50,7 @@ let file ?(parallel = sequential) path =
   let buffer = Domain.DLS.get scratch in
   if rest > 0
   then (
-    read_at path (count * span) buffer rest;
+    read_at path (count * span) buffer rest false;
     update state buffer rest);
   hex (finish state)
 ;;
