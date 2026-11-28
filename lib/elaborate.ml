@@ -180,15 +180,18 @@ let rec expr ctx (x : Syntax.expr) : C.expr =
        expr { ctx with env = bind ctx.env n (Inline v) } body
      | None ->
        let v = expr { ctx with level = ctx.level + 1 } v in
-       let id = fresh_id ctx.env n in
-       let body =
-         expr
-           { ctx with
-             env = bind ctx.env n (Value { id; scheme = T.generalize ctx.level v.typ })
-           }
-           body
-       in
-       make body.shape body.typ (Let (id, v, body)))
+       if v.shape = Columnar
+       then expr { ctx with env = bind ctx.env n (Inline v) } body
+       else (
+         let id = fresh_id ctx.env n in
+         let body =
+           expr
+             { ctx with
+               env = bind ctx.env n (Value { id; scheme = T.generalize ctx.level v.typ })
+             }
+             body
+         in
+         make body.shape body.typ (Let (id, v, body))))
   | Lambda (params, body) ->
     lambda ctx span params body (List.map (fun _ -> T.fresh ctx.level) params)
   | Match (subject, arms) -> match_ ctx span (here subject) arms
@@ -1441,7 +1444,8 @@ let function_ env name params body =
           params
           types
       in
-      let result = expr { ctx with env = inner } body in
+      let missing = Some (Option.value ctx.missing ~default:C.Skip) in
+      let result = expr { ctx with env = inner; missing } body in
       let scheme = T.generalize 0 (T.Arrow (types, result.typ)) in
       bind env name (Function { id = None; scheme = Some scheme; template }), []
     in
