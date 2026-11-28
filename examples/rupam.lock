@@ -9,11 +9,11 @@
       "inputs": [
         {
           "path": "penguins.csv",
-          "sha256": "310b5783fe528ad4b7635bad2973b31ed0aafa02619492978bc14bab5c3d7f64"
+          "blake3": "4db6bd84ee7c7bd273e6e700a5289eff80a5e4557363e5a5fc8263f8525abbe5"
         },
         {
           "path": "species.csv",
-          "sha256": "35b6ba74c284e4974c10fa47a69581ed9e24c2ec46d020d6367a20f62a1a350a"
+          "blake3": "f106c979726960e2bb5a7fd763e34f0dbd9da6f5c6bbc315e694c2bdb1789263"
         }
       ],
       "schemas": [
@@ -48,11 +48,11 @@
       "inputs": [
         {
           "path": "penguins.csv",
-          "sha256": "310b5783fe528ad4b7635bad2973b31ed0aafa02619492978bc14bab5c3d7f64"
+          "blake3": "4db6bd84ee7c7bd273e6e700a5289eff80a5e4557363e5a5fc8263f8525abbe5"
         },
         {
           "path": "species.csv",
-          "sha256": "35b6ba74c284e4974c10fa47a69581ed9e24c2ec46d020d6367a20f62a1a350a"
+          "blake3": "f106c979726960e2bb5a7fd763e34f0dbd9da6f5c6bbc315e694c2bdb1789263"
         }
       ],
       "schemas": [
@@ -86,12 +86,12 @@
       "strict": true,
       "inputs": [
         {
-          "path": "data-dict.yaml",
-          "sha256": "d180b8b0f35664977c0f032f265e90893f022950b2c43cc27f22e46864458865"
+          "path": ".\\orders.parquet",
+          "blake3": "066118f5340ed4df040c448301718cbe79bfb1f7c4194d637d58e1a264e5c004"
         },
         {
-          "path": "orders.parquet",
-          "sha256": "c3f8288584fa59a8343ff8d16f01833b42dec6c8fc5a4bb88bfd2a4e60224c35"
+          "path": "data-dict.yaml",
+          "blake3": "f683742316d60dd706895416aa9ade4589fbcd37e1b722b760d8276dd2a37589"
         }
       ],
       "schemas": []
@@ -103,12 +103,12 @@
       "strict": true,
       "inputs": [
         {
-          "path": "data-dict.yaml",
-          "sha256": "d180b8b0f35664977c0f032f265e90893f022950b2c43cc27f22e46864458865"
+          "path": ".\\orders.parquet",
+          "blake3": "066118f5340ed4df040c448301718cbe79bfb1f7c4194d637d58e1a264e5c004"
         },
         {
-          "path": "orders.parquet",
-          "sha256": "c3f8288584fa59a8343ff8d16f01833b42dec6c8fc5a4bb88bfd2a4e60224c35"
+          "path": "data-dict.yaml",
+          "blake3": "f683742316d60dd706895416aa9ade4589fbcd37e1b722b760d8276dd2a37589"
         }
       ],
       "schemas": []

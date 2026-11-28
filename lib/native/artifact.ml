@@ -21,7 +21,7 @@ type manifest =
   { compiler : string
   ; target : Target.t
   ; source : string
-  ; program_sha256 : string
+  ; program_blake3 : string
   ; inputs : Lock.input list
   ; dependencies : string list
   ; nonportable : string list
@@ -41,11 +41,11 @@ let dependencies (target : Target.t) ~tabular =
 ;;
 
 let write_json path json =
-  Out_channel.with_open_text path (fun channel ->
+  Out_channel.with_open_bin path (fun channel ->
     output_string channel (Yojson.Safe.pretty_to_string json ^ "\n"))
 ;;
 
-let write ~(entry : Lock.entry) ~program_sha256 ~locations ~output ~code items =
+let write ~(entry : Lock.entry) ~program_blake3 ~locations ~output ~code items =
   let target = entry.target in
   let extension = Runtime.suffix target.language in
   if not (Filename.check_suffix output extension)
@@ -66,13 +66,13 @@ let write ~(entry : Lock.entry) ~program_sha256 ~locations ~output ~code items =
     { compiler = entry.compiler
     ; target = entry.target
     ; source = entry.source
-    ; program_sha256
+    ; program_blake3
     ; inputs = entry.inputs
     ; dependencies = dependencies target ~tabular:(TransformIR.tabular items)
     ; nonportable = Host.nonportable items
     }
   in
-  Out_channel.with_open_text output (fun channel -> output_string channel code);
+  Out_channel.with_open_bin output (fun channel -> output_string channel code);
   write_json (output ^ ".map.json") (yojson_of_source_map { mappings });
   write_json (output ^ ".manifest.json") (yojson_of_manifest manifest)
 ;;

@@ -14,8 +14,8 @@ let scores = read_parquet("scores.parquet")
 ```
 
 `read_csv`, `read_tsv` and `read_parquet` take a path relative to the
-program. While checking, rupam reads the whole file through its embedded
-DuckDB, so column names, types and optionality are known before anything
+program. While checking, rupam reads the whole file with its own readers,
+so column names, types and optionality are known before anything
 runs: a column is `T?` only if the file has missing values in it. The
 generated script checks that the file still matches before reading it, reads
 64-bit integers exactly in both dialects, and turns NaN into a missing
@@ -42,7 +42,7 @@ Type checking needs only the contract and the Parquet footer. Columns marked
 
 An analysis is compiled for particular data. `rupam lock shop.rp` validates
 every contract with `data-dict validate-data`, so a bad row fails even if a
-later `filter` would have dropped it, and records the SHA-256 of every input
+later `filter` would have dropped it, and records the BLAKE3 digest of every input
 in `rupam.lock`, together with the dialect, the settings and the schemas rupam
 inferred for files without a contract. Editing the program needs no relock
 unless it starts reading a new file. `compile` and `run` need a current lock. They

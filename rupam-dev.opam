@@ -9,6 +9,7 @@ bug-reports: "https://github.com/VisruthSK/rupam/issues"
 depends: [
   "dune" {>= "3.17"}
   "rupam"
+  "conf-mingw-w64-g++-x86_64" {os = "win32"}
   "odoc" {with-doc}
 ]
 build: [

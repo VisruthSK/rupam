@@ -39,13 +39,13 @@ and env =
   }
 
 and inputs =
-  { columns : string -> Input.column list
-  ; digest : string -> string
+  { read : missing:string list -> string -> Input.snapshot
   ; contract : string -> Contract.t
   }
 
 val offline : inputs
 val empty : ?inputs:inputs -> directory:string -> strict:bool -> unit -> env
+val resolve : env -> string -> string
 val fresh_id : env -> string -> TransformIR.id
 val fail : Diagnostic.span -> Diagnostic.code -> string -> 'a
 val bind : env -> string -> binding -> env

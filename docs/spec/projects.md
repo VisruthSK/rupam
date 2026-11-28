@@ -49,11 +49,13 @@ Previews, `run`, conformance and validation use the same target environment.
 ## Locks
 
 An analysis is compiled for particular inputs, not for arbitrary future
-replacement data. `rupam.lock` records a content-addressed analysis entry
-per source and target, including:
+replacement data. Locks, manifests, source maps, generated programs and saved
+sources are written with LF line endings, so the same analysis produces the
+same bytes on every operating system. `rupam.lock` records a content-addressed
+analysis entry per source and target, including:
 
 - resolved contract and definition files, every input data file and schema,
-  and explicit external parameters (SHA-256 of exact bytes or canonical
+  and explicit external parameters (BLAKE3 of exact bytes or canonical
   values);
 - rupam/compiler and specification versions, dialect, project settings,
   interpreter and actual dependency versions, dependency lockfiles and
@@ -75,10 +77,22 @@ raw strings in a locked source needs no second interpreter; discovery whose
 schema depends on native numeric results requires explicit levels or verification
 in both targets. A target-specific proof records the target that established it.
 
+Locking reads each input once. The same pass computes its digest, discovers
+its schema and establishes the evidence the program's obligations demand:
+presence and finiteness for every column it reads, and, only where the
+program needs them, bounds, nonzero and sign facts, and key uniqueness (from
+`assert_key` on a source or a contract key). The checker derives these
+demands from the TransformIR; readers take no option for them. The lock
+records each result as a discharged obligation, together with each column's
+presence and NaN counts and its minimum and maximum, so a later check
+verifies the digest and reuses the proofs and bounds without parsing.
+
 File paths are relative to the project where possible; content, not mtime,
-identifies an input. Lock records do not contain raw observations or secrets;
-committed schema names and public pivot levels are schema metadata. Restricted
-values must not be included in discovered names or lock reports.
+identifies an input. Lock records hold column summaries (counts and bounds) but no row-level
+observations or secrets; committed schema names and public pivot levels are
+schema metadata. Privacy is enforced where data leaves rupam: reports and the
+agent interface ([Agent interface](agent-interface.md)) never show restricted
+values or the bounds of restricted columns.
 Dynamic input paths must resolve to a finite set of declared locked inputs
 before strict export. Network or foreign dependencies must be captured as
 explicit immutable inputs for a reproducible lock. Output paths are not
@@ -149,7 +163,7 @@ their explicit seeds or configuration and runtime dependencies.
 ## Distribution
 
 Self-contained binaries for Linux and macOS (x86-64, ARM) and Windows
-(x86-64), with DuckDB linked statically. Generated scripts need their locked
+(x86-64), with no runtime libraries beyond the operating system. Generated scripts need their locked
 interpreter and packages.
 The data-dict CLI is needed for rupam validation/relocking, not for executing
 a script whose contract obligations were discharged against the lock.

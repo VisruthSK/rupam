@@ -42,8 +42,7 @@ and env =
   }
 
 and inputs =
-  { columns : string -> Input.column list
-  ; digest : string -> string
+  { read : missing:string list -> string -> Input.snapshot
   ; contract : string -> Contract.t
   }
 
@@ -53,7 +52,7 @@ let unresolved path =
     ("The compiler was given no way to read " ^ path ^ "; resolve inputs before checking")
 ;;
 
-let offline = { columns = unresolved; digest = unresolved; contract = unresolved }
+let offline = { read = (fun ~missing:_ path -> unresolved path); contract = unresolved }
 
 let empty ?(inputs = offline) ~directory ~strict () =
   { names = []
@@ -66,6 +65,12 @@ let empty ?(inputs = offline) ~directory ~strict () =
   ; strict
   ; supply = ref 0
   }
+;;
+
+let resolve env path =
+  if Filename.is_relative path && env.directory <> Filename.current_dir_name
+  then Filename.concat env.directory path
+  else path
 ;;
 
 let fresh_id env name =

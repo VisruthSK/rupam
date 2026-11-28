@@ -1,15 +1,7 @@
 (library
  (name rupam_native)
- (libraries rupam unix yojson toml astring digestif duckdb_static nanoarrow)
+ (libraries rupam unix yojson toml astring talon lz blake3 domainslib)
  (flags
   (:standard -open Rupam))
  (preprocess
-  (pps ppx_enumerate ppx_yojson_conv ppx_sexp_conv))
- (foreign_stubs
-  (language c)
-  (names duckdb_stubs)
-  (include_dirs ../../vendor/duckdb))
- (foreign_stubs
-  (language c)
-  (names arrow_stubs)
-  (include_dirs ../../vendor/nanoarrow/include)))
+  (pps ppx_enumerate ppx_yojson_conv ppx_sexp_conv)))

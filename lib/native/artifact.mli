@@ -1,6 +1,6 @@
 val write
   :  entry:Lock.entry
-  -> program_sha256:string
+  -> program_blake3:string
   -> locations:Document.location list
   -> output:string
   -> code:string

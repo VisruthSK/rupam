@@ -1,0 +1,107 @@
+(library
+ (name blake3)
+ (libraries)
+ (foreign_stubs
+  (language c)
+  (extra_deps blake3.c blake3_neon.c)
+  (names blake3_dispatch blake3_portable arm_neon blake3_stubs))
+ (foreign_stubs
+  (language c)
+  (flags
+   :standard
+   (:include sse2_flags.sexp))
+  (extra_deps blake3_sse2.c)
+  (names x86_sse2))
+ (foreign_stubs
+  (language c)
+  (flags
+   :standard
+   (:include sse41_flags.sexp))
+  (extra_deps blake3_sse41.c)
+  (names x86_sse41))
+ (foreign_stubs
+  (language c)
+  (flags
+   :standard
+   (:include avx2_flags.sexp))
+  (extra_deps blake3_avx2.c)
+  (names x86_avx2))
+ (foreign_stubs
+  (language c)
+  (flags
+   :standard
+   (:include avx512_flags.sexp))
+  (extra_deps blake3_avx512.c)
+  (names x86_avx512)))
+
+(rule
+ (target sse2_flags.sexp)
+ (enabled_if
+  (= %{architecture} amd64))
+ (action
+  (with-stdout-to
+   %{target}
+   (echo "(-msse2)"))))
+
+(rule
+ (target sse2_flags.sexp)
+ (enabled_if
+  (<> %{architecture} amd64))
+ (action
+  (with-stdout-to
+   %{target}
+   (echo "()"))))
+
+(rule
+ (target sse41_flags.sexp)
+ (enabled_if
+  (= %{architecture} amd64))
+ (action
+  (with-stdout-to
+   %{target}
+   (echo "(-msse4.1)"))))
+
+(rule
+ (target sse41_flags.sexp)
+ (enabled_if
+  (<> %{architecture} amd64))
+ (action
+  (with-stdout-to
+   %{target}
+   (echo "()"))))
+
+(rule
+ (target avx2_flags.sexp)
+ (enabled_if
+  (= %{architecture} amd64))
+ (action
+  (with-stdout-to
+   %{target}
+   (echo "(-mavx2)"))))
+
+(rule
+ (target avx2_flags.sexp)
+ (enabled_if
+  (<> %{architecture} amd64))
+ (action
+  (with-stdout-to
+   %{target}
+   (echo "()"))))
+
+(rule
+ (target avx512_flags.sexp)
+ (enabled_if
+  (= %{architecture} amd64))
+ (action
+  (with-stdout-to
+   %{target}
+   (echo "(-mavx512f -mavx512vl)"))))
+
+(rule
+ (target avx512_flags.sexp)
+ (enabled_if
+  (<> %{architecture} amd64))
+ (action
+  (with-stdout-to
+   %{target}
+   (echo "()"))))

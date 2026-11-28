@@ -640,7 +640,7 @@ let redo t =
 let source t = Format.program (List.map (fun a -> a.source) t.current.accepted)
 
 let save t path =
-  Out_channel.with_open_text path (fun ch -> output_string ch (source t ^ "\n"));
+  Out_channel.with_open_bin path (fun ch -> output_string ch (source t ^ "\n"));
   t.path <- Some path;
   t.saved <- Some t.current.number
 ;;

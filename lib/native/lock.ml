@@ -5,7 +5,7 @@ let file_name = "rupam.lock"
 
 type input =
   { path : string
-  ; sha256 : string
+  ; blake3 : string
   }
 [@@deriving yojson]
 
@@ -65,7 +65,7 @@ let load root =
 ;;
 
 let save root entries =
-  Out_channel.with_open_text (Filename.concat root file_name) (fun channel ->
+  Out_channel.with_open_bin (Filename.concat root file_name) (fun channel ->
     output_string
       channel
       (Yojson.Safe.pretty_to_string (yojson_of_file { version; entries }) ^ "\n"))
@@ -108,6 +108,7 @@ let analysis ~(project : Project.t) ~source items =
       ; columns =
           List.map (fun (name, t) -> { name; type_ = Types.display t }) file.columns
       })
+    |> List.sort (fun (a : schema) b -> String.compare a.path b.path)
   in
   let entry =
     { source = relative root source
@@ -115,10 +116,16 @@ let analysis ~(project : Project.t) ~source items =
     ; compiler
     ; strict = project.strict.value
     ; inputs =
-        List.map
-          (fun path : input ->
-             { path = relative root path; sha256 = Data_file.digest path })
-          (unique TransformIR.sources)
+        (let read = unique TransformIR.data in
+         let digest path =
+           match List.find_opt (fun (f : TransformIR.file) -> f.path = path) read with
+           | Some f -> f.digest
+           | None -> Data_file.digest path
+         in
+         unique TransformIR.sources
+         |> List.map (fun path -> relative root path, path)
+         |> List.sort_uniq (fun (a, _) (b, _) -> String.compare a b)
+         |> List.map (fun (path, file) : input -> { path; blake3 = digest file }))
     ; schemas
     }
   in
@@ -148,7 +155,7 @@ let differences locked current =
   @ List.filter_map
       (fun (i : input) ->
          match List.find_opt (fun (l : input) -> l.path = i.path) locked.inputs with
-         | Some l when l.sha256 = i.sha256 -> None
+         | Some l when l.blake3 = i.blake3 -> None
          | Some _ -> Some i.path
          | None -> Some (i.path ^ " (new)"))
       current.inputs

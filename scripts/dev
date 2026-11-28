@@ -31,7 +31,7 @@ dune() {
   mkdir -p "$build"
   (
     flock 9
-    unprivileged dune "$@" --build-dir "$build"
+    unprivileged dune "$@" --root "$root" --build-dir "$build"
   ) 9>"$build/.dev.lock"
 }
 
@@ -40,6 +40,7 @@ usage() {
 scripts/dev check               every suite: build, formatting, unit, cram, conformance, integration
 scripts/dev unit                build, formatting, unit, cram and reference conformance only
 scripts/dev integration         run the R and Python integration tests
+scripts/dev bench                 run the benchmarks in a release build
 scripts/dev eval 'SOURCE'       run SOURCE on the reference evaluator and every target; show disagreements
 scripts/dev triage              group pending conformance fixtures by why they fail
 scripts/dev activate ID         mark fixture ID active once it passes on every target
@@ -110,6 +111,7 @@ case "${1:-}" in
   check) check ;;
   unit) unit ;;
   integration) integration ;;
+  bench) RUPAM_REVISION='' PATH="$venv/bin:$PATH" dune build @bench --profile release --force ;;
   eval) shift; dev eval "$@" ;;
   activate) shift; dev activate "$@" ;;
   triage)

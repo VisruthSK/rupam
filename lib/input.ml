@@ -14,6 +14,11 @@ type column =
   ; nullable : bool
   }
 
+type snapshot =
+  { digest : string
+  ; columns : column list
+  }
+
 let format path =
   match String.lowercase_ascii (Filename.extension path) with
   | ".parquet" -> Parquet
@@ -28,3 +33,5 @@ let format_name = function
   | Csv -> "csv"
   | Tsv -> "tsv"
 ;;
+
+let default_missing = [ ""; "NA" ]

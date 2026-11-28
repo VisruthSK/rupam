@@ -55,6 +55,10 @@ value rupam_duckdb_query(value sql) {
         cell = Val_none;
       } else {
         char *text = duckdb_value_varchar(&result, c, r);
+        if (!text) {
+          duckdb_destroy_result(&result);
+          caml_failwith("DuckDB cannot render a value of this column as text");
+        }
         cell = caml_alloc_some(caml_copy_string(text));
         duckdb_free(text);
       }

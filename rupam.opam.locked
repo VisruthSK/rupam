@@ -8,20 +8,20 @@ license: "GPL-3.0-or-later"
 homepage: "https://github.com/VisruthSK/rupam"
 bug-reports: "https://github.com/VisruthSK/rupam/issues"
 depends: [
-  "conf-mingw-w64-g++-x86_64" {os = "win32"}
   "astring" {= "0.8.5"}
+  "backoff" {= "0.1.1"}
   "base" {= "v0.17.3"}
   "camlp-streams" {= "5.0.1" & with-dev-setup}
   "cmarkit" {= "0.4.0"}
   "cmdliner" {= "2.1.2"}
   "cppo" {= "1.8.0"}
   "csexp" {= "1.5.2"}
-  "digestif" {= "1.4.2"}
+  "domain-local-await" {= "1.0.1"}
+  "domainslib" {= "0.5.2"}
   "dune" {= "3.25.0"}
   "dune-build-info" {= "3.25.0" & with-dev-setup}
   "dune-configurator" {= "3.25.0"}
   "either" {= "1.0.0" & with-dev-setup}
-  "eqaf" {= "0.10"}
   "fix" {= "20250919" & with-dev-setup}
   "fpath" {= "0.7.3" & with-dev-setup}
   "ISO8601" {= "0.2.6"}
@@ -35,6 +35,7 @@ depends: [
   "menhirLib" {= "20260209"}
   "menhirSdk" {= "20260209"}
   "mosaic" {= "0.3.0"}
+  "multicore-magic" {= "2.3.2"}
   "ocaml-compiler-libs" {= "v0.17.0"}
   "ocaml-version" {= "4.1.6" & with-dev-setup}
   "ocaml_intrinsics_kernel" {= "v0.17.3"}
@@ -67,8 +68,10 @@ depends: [
   "ptime" {= "1.2.0"}
   "qcheck-core" {= "0.91" & with-test}
   "re" {= "1.14.0"}
+  "saturn" {= "1.0.0"}
   "sexplib0" {= "v0.17.0"}
   "stdio" {= "v0.17.0" & with-test}
+  "thread-table" {= "1.0.0"}
   "time_now" {= "v0.17.0" & with-test}
   "toffee" {= "0.3.0"}
   "toml" {= "7.1.0"}

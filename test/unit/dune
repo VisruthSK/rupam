@@ -1,6 +1,6 @@
 (library
  (name rupam_unit)
  (inline_tests)
- (libraries rupam rupam_native reference)
+ (libraries rupam rupam_native reference blake3)
  (preprocess
   (pps ppx_expect)))

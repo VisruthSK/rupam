@@ -2,8 +2,6 @@
 set -euo pipefail
 
 duckdb=2.0.1
-nanoarrow=0.9.0
-nanoarrow_sha=22c3edeaa5cb384c6da091f32a4e1c937779f2d62f84d646028de658b03d4385
 
 root=$(cd "$(dirname "$0")/.." && pwd)
 work=$(mktemp -d)
@@ -41,35 +39,4 @@ tar xzf "$work/duckdb.tar.gz" -C "$root/vendor/duckdb" \
 curl -fsSL --retry 5 --retry-all-errors --retry-delay 2 \
   -o "$root/vendor/duckdb/LICENSE" "https://raw.githubusercontent.com/duckdb/duckdb/v$duckdb/LICENSE"
 
-fetch "https://github.com/apache/arrow-nanoarrow/archive/refs/tags/apache-arrow-nanoarrow-$nanoarrow.tar.gz" \
-  "$work/nanoarrow.tar.gz" "$nanoarrow_sha"
-prefix="arrow-nanoarrow-apache-arrow-nanoarrow-$nanoarrow"
-tar xzf "$work/nanoarrow.tar.gz" -C "$work" \
-  "$prefix/LICENSE.txt" "$prefix/NOTICE.txt" "$prefix/src/nanoarrow" "$prefix/thirdparty/flatcc"
-source="$work/$prefix"
-src="$source/src/nanoarrow"
-flatcc="$source/thirdparty/flatcc"
-out="$root/vendor/nanoarrow"
-find "$out" -mindepth 1 -maxdepth 1 ! -name dune -exec rm -rf {} +
-mkdir -p "$out/include/nanoarrow/common" "$out/include/nanoarrow/ipc" "$out/flatcc"
-cp "$source/LICENSE.txt" "$source/NOTICE.txt" "$out/"
-cp "$src/nanoarrow.h" "$src/nanoarrow_ipc.h" "$out/include/nanoarrow/"
-cp "$src"/common/inline_*.h "$out/include/nanoarrow/common/"
-cp "$src/ipc/flatcc_generated.h" "$out/include/nanoarrow/ipc/"
-cp "$src"/common/{array,array_stream,schema,utils}.c "$src"/ipc/{decoder,reader,codecs,encoder,writer}.c "$out/"
-cp "$flatcc"/src/runtime/{builder,emitter,refmap,verifier}.c "$out/"
-cp -r "$flatcc/include" "$flatcc/LICENSE" "$out/flatcc/"
-IFS=. read -r major minor patch <<< "$nanoarrow"
-cat > "$out/include/nanoarrow/nanoarrow_config.h" <<EOF
-#ifndef NANOARROW_CONFIG_H_INCLUDED
-#define NANOARROW_CONFIG_H_INCLUDED
-#define NANOARROW_VERSION_MAJOR $major
-#define NANOARROW_VERSION_MINOR $minor
-#define NANOARROW_VERSION_PATCH $patch
-#define NANOARROW_VERSION "$nanoarrow"
-#define NANOARROW_VERSION_INT (NANOARROW_VERSION_MAJOR * 10000 + NANOARROW_VERSION_MINOR * 100 + NANOARROW_VERSION_PATCH)
-#define NANOARROW_NAMESPACE RupamNanoarrow
-#endif
-EOF
-
-echo "DuckDB $duckdb ($platform) and nanoarrow $nanoarrow in vendor/"
+echo "DuckDB $duckdb ($platform) in vendor/"

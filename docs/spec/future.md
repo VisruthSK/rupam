@@ -79,15 +79,6 @@ ingestion and workers, compilable to JavaScript or Wasm with supplied schemas
 and evidence. A browser-hosted notebook additionally needs a conformant
 browser execution backend.
 
-## Ingestion engine
-
-Talon (raven-ml) is evaluated as a replacement for DuckDB in ingestion, schema
-inspection, validation scans and Arrow access. It is adopted only if it
-matches on native Windows builds, full-file CSV/TSV inference, Parquet, Arrow
-IPC and memory mapping, exact 64-bit integers, finite floats, structured
-errors and buffer lifetimes, and wins on cold and warm ingestion, scans, peak
-memory and packaging. DuckDB stays until then.
-
 ## Optimiser validation
 
 Each TransformIR rewrite of the logical optimiser emits a certificate: rule,

@@ -135,6 +135,7 @@ and file =
   ; digest : string
   ; format : Input.format
   ; columns : (string * Types.t) list
+  ; missing : string list
   }
 
 and join =
@@ -311,6 +312,13 @@ let rec files table =
   | Read file -> [ file ]
   | Load _ | Bound _ -> []
   | Join { left; right; _ } -> files left @ files right
+;;
+
+let rec data table =
+  match table.source with
+  | Read file | Load { file; _ } -> [ file ]
+  | Bound _ -> []
+  | Join { left; right; _ } -> data left @ data right
 ;;
 
 let rec loaded_by table =

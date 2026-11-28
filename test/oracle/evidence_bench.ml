@@ -1,0 +1,50 @@
+let time label size f =
+  let start = Unix.gettimeofday () in
+  let result = f () in
+  let elapsed = Unix.gettimeofday () -. start in
+  Printf.printf
+    "  %-22s %8.3f s  %6.2f GB/s\n%!"
+    label
+    elapsed
+    (float_of_int size /. 1e9 /. elapsed);
+  result
+;;
+
+let () =
+  Array.iteri
+    (fun i path ->
+       if i > 0
+       then (
+         let size = (Unix.stat path).st_size in
+         Printf.printf "%s (%.2f GB)\n" (Filename.basename path) (float_of_int size /. 1e9);
+         ignore (time "digest" size (fun () -> Rupam_native.Data_file.digest path));
+         let columns =
+           time "read: digest + schema" size (fun () ->
+             (Rupam_native.Data_file.read ~missing:Input.default_missing path).columns)
+         in
+         List.iter
+           (fun (c : Input.column) ->
+              Printf.printf
+                "    %s %s%s\n"
+                c.name
+                (match c.typ with
+                 | Supported t -> Types.display t
+                 | Unsupported raw -> raw)
+                (if c.nullable then "?" else ""))
+           columns;
+         if Filename.check_suffix path ".parquet"
+         then
+           ignore
+             (time "DuckDB null counts" size (fun () ->
+                Duckdb_oracle.query
+                  (Printf.sprintf
+                     "SELECT %s FROM read_parquet('%s')"
+                     (String.concat
+                        ", "
+                        (List.map
+                           (fun (c : Input.column) ->
+                              Printf.sprintf "count(*) - count(\"%s\")" c.name)
+                           columns))
+                     path)))))
+    Sys.argv
+;;

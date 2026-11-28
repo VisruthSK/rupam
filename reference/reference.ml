@@ -1,5 +1,4 @@
 open Rupam
-open Rupam_native
 module C = TransformIR
 module T = Types
 
@@ -547,14 +546,32 @@ and table env (t : C.table) : frame =
   List.fold_left (fun frame (s : C.stage) -> stage env frame s.step) frame t.stages
 
 and read (file : C.file) =
-  let reader =
-    match file.format with
-    | Parquet -> "read_parquet"
-    | Csv | Tsv -> "read_csv"
+  match file.format with
+  | Parquet -> parquet file
+  | Csv | Tsv -> text file
+
+and parquet (file : C.file) =
+  let decoded = Rupam_native.Parquet_source.rows file.path in
+  let cell : Rupam_native.Parquet_source.cell -> value = function
+    | Missing -> Missing
+    | Bool b -> Bool b
+    | Int n -> Int n
+    | Float f -> if Float.is_nan f then Missing else Float f
+    | Text s -> Text s
+    | Date d -> Date d
   in
-  let names, rows =
-    Data_file.query ("SELECT * FROM " ^ reader ^ "(" ^ Data_file.literal file.path ^ ")")
+  let columns =
+    List.map (fun (n, _) -> n, Array.map cell (List.assoc n decoded)) file.columns
   in
+  { rows =
+      (match decoded with
+       | (_, cells) :: _ -> Array.length cells
+       | [] -> 0)
+  ; columns
+  }
+
+and text (file : C.file) =
+  let names, rows = delimited file in
   let parse typ = function
     | None -> Missing
     | Some s ->
@@ -575,6 +592,28 @@ and read (file : C.file) =
            n, Array.map (fun row -> parse typ row.(i)) rows)
         file.columns
   }
+
+and delimited (file : C.file) =
+  In_channel.with_open_bin file.path (fun channel ->
+    let sep = if file.format = Tsv then '\t' else ',' in
+    let s = Talon.Scan.make ~sep ~quote:'"' channel in
+    let header = ref None
+    and rows = ref [] in
+    Seq.iter
+      (fun b ->
+         for r = 0 to Talon.Scan.rows b - 1 do
+           let fields = Array.init (Talon.Scan.fields b r) (Talon.Scan.text b r) in
+           match !header with
+           | None -> header := Some fields
+           | Some _ ->
+             rows
+             := Array.map
+                  (fun v -> if List.mem v file.missing then None else Some v)
+                  fields
+                :: !rows
+         done)
+      (Seq.of_dispenser (fun () -> Talon.Scan.next s));
+    Option.value !header ~default:[||], Array.of_list (List.rev !rows))
 
 and join env (j : C.join) =
   let left = table env j.left

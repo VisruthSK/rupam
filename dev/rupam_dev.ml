@@ -344,16 +344,6 @@ let guarded f path =
 let file = Arg.(required & pos 0 (some file) None & info [] ~docv:"FILE")
 
 let show path keys =
-  let order =
-    match keys with
-    | [] -> ""
-    | keys ->
-      " ORDER BY "
-      ^ String.concat ", " (List.map (fun k -> Printf.sprintf "%S NULLS LAST" k) keys)
-  in
-  let names, rows =
-    Data_file.query ("SELECT * FROM read_parquet(" ^ Data_file.literal path ^ ")" ^ order)
-  in
   let typed (c : Input.column) =
     c.name
     ^ ": "
@@ -362,8 +352,11 @@ let show path keys =
     | Supported t -> Types.display (if c.nullable then Types.optional t else t)
     | Unsupported raw -> raw
   in
-  print_endline (String.concat ", " (List.map typed (Data_file.columns path)));
-  ignore names;
+  print_endline
+    (String.concat
+       ", "
+       (List.map typed (Data_file.read ~missing:Input.default_missing path).columns));
+  let _, rows = Duckdb_oracle.rows ~keys path in
   Array.iter
     (fun row ->
        print_endline

@@ -126,6 +126,7 @@ and file =
   ; digest : string
   ; format : Input.format
   ; columns : (string * Types.t) list
+  ; missing : string list
   }
 
 and join =
@@ -191,6 +192,7 @@ val columns : expr -> string list
 val reduces : expr -> bool
 val sources : table -> string list
 val files : table -> file list
+val data : table -> file list
 val contracts : table -> string list
 val loaded_by : table -> Contract.t list
 val loaded : item list -> Contract.t list

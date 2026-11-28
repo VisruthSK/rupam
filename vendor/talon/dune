@@ -1,0 +1,3 @@
+(library
+ (name talon)
+ (modules_without_implementation types))

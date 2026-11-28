@@ -1,0 +1,72 @@
+(executable
+ (name ipc_differential)
+ (modules ipc_differential)
+ (libraries yojson rupam_native))
+
+(rule
+ (alias integration)
+ (deps ipc_fixtures.py)
+ (action
+  (progn
+   (run python ipc_fixtures.py ipc)
+   (run %{exe:ipc_differential.exe} ipc))))
+
+(executable
+ (name ipc_bench)
+ (modules ipc_bench)
+ (libraries unix rupam_native))
+
+(rule
+ (alias bench)
+ (deps ipc_bench_data.py)
+ (action
+  (progn
+   (run python ipc_bench_data.py bench)
+   (run %{exe:ipc_bench.exe} bench))))
+
+(executable
+ (name parquet_differential)
+ (modules parquet_differential)
+ (flags
+  (:standard -open Rupam))
+ (libraries rupam rupam_native duckdb_oracle))
+
+(rule
+ (alias integration)
+ (deps parquet_fixtures.py)
+ (action
+  (progn
+   (run python parquet_fixtures.py parquet)
+   (run %{exe:parquet_differential.exe} parquet))))
+
+(executable
+ (name hash_bench)
+ (modules hash_bench)
+ (libraries unix rupam_native))
+
+(executable
+ (name evidence_bench)
+ (modules evidence_bench)
+ (flags
+  (:standard -open Rupam))
+ (libraries unix rupam rupam_native duckdb_oracle))
+
+(executable
+ (name csv_bench)
+ (modules csv_bench)
+ (flags
+  (:standard -open Rupam))
+ (libraries unix rupam rupam_native talon duckdb_oracle))
+
+(executable
+ (name csv_differential)
+ (modules csv_differential)
+ (libraries talon duckdb_oracle))
+
+(rule
+ (alias integration)
+ (deps csv_fixtures.py)
+ (action
+  (progn
+   (run python csv_fixtures.py csv)
+   (run %{exe:csv_differential.exe} csv))))

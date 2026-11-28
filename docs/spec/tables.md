@@ -319,14 +319,27 @@ write_csv(summary, "summary.csv")
   established schema. An explicit lock can commit a fully discovered source
   schema, with its parsing rules and exact snapshot; otherwise supply a schema
   or contract. `rupam schema` prints a reusable schema declaration.
-- CSV is UTF-8 with a header, comma separators and doubled quotes. Unquoted
-  empty fields are missing; quoted empty strings are present strings. No
-  implicit trimming or other missing tokens; `missing_tokens = [...]` may
-  explicitly add tokens. `TRUE` and `FALSE` parse as booleans, not `T` or `F`.
+- CSV is UTF-8 with a header, comma separators and doubled quotes. Empty
+  fields and `NA` are missing, quoted or not, as in readr's defaults; R's
+  Arrow reader cannot distinguish quoted values, so neither does Rupam. No
+  implicit trimming and no other missing tokens by default;
+  `missing_tokens = [...]` replaces the default tokens. `TRUE`, `true`, `True` and their `FALSE` forms parse as booleans, not `T`, `F`, `1` or `0`.
   Infer the narrowest common supported primitive type, preserving leading-zero
   identifier text as strings; ambiguous types default to String. Explicit
   schemas parse exactly, including nominal wrappers, and reject malformed
   values rather than making them missing. Read raw text to clean with parsers.
+- CSV inference recognises exactly these spellings, with no surrounding
+  whitespace. `Int` is `-?(0|[1-9][0-9]*)` within the `Int` range. `Float` is
+  an `Int`-shaped mantissa followed by a `.digits` fraction, an exponent
+  `[eE][+-]?digits`, or both, or the token `NaN`. `Bool` is `TRUE`,
+  `true`, `True`, `FALSE`, `false` or `False`, the spellings R and Python write. `Date` is `YYYY-MM-DD` naming a real calendar date. A column of
+  `Int` and `Float` values is `Float`; any other mixture, an out-of-range
+  integer or any other present value makes the column `String`, as does a
+  column with no present values. In a column that is otherwise `Float`, the
+  tokens `inf`, `-inf`, `Inf`, `-Inf`, `Infinity` and `-Infinity` are a read
+  error naming the file, row and column. A header with an empty or duplicate
+  name, a record with the wrong number of fields, a stray quote inside an
+  unquoted field and invalid UTF-8 are read errors with the same location.
 - Read integers exactly (no intermediate floating-point parsing). Reading
   converts NaN to `None` and rejects infinity; requiredness and refinements
   are checked after normalisation. Unrepresentable values fail.
