@@ -11,7 +11,7 @@ obligations demand, using every core.
 | Input | Target |
 |---|---|
 | Small files (KB to a few MB) | the cost of opening and reading the file: tens of microseconds, no domain or pool start-up on the path |
-| Files in the page cache | 5–10 GB/s on 16 cores, workload dependent; at least 1 GB/s on one core |
+| Files in the page cache | at least 5 GB/s for the full read (digest, schema and evidence) on 16 cores; at least 1 GB/s on one core |
 | Cold files | the storage's sequential throughput (3.48 GB/s on the reference NVMe) |
 | Files larger than memory | the same throughput, in bounded memory |
 
@@ -70,7 +70,9 @@ bounds) joins it.
 ### Per-core speed
 
 The parallel structure only multiplies per-core speed; each core must reach at
-least 1 GB/s.
+least 1 GB/s so that 16 cores clear 5 GB/s with room for imperfect scaling.
+5 GB/s on one core is not a target: the paper's tuned SIMD parser reaches
+1.8–2.1 GB/s single-threaded while only counting records.
 
 - **Structural index in C**, beside the BLAKE3 kernels and chosen at runtime
   the same way (AVX2, AVX-512, NEON, scalar fallback): 64-byte vectors,
