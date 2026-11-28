@@ -18,14 +18,15 @@ Windows.
 
 ## 0.0.0-alpha.2: helpers that work, a prompt that keeps up
 
-1. **Helpers infer once, correctly**: one inference scheme for helpers
-   carrying parameter roles, scope, alignment and missing-policy requirements
-   through higher-order calls (C62, C101), replacing the ordinary-then-
-   contextual retry in `function_`; `center` infers `(Number) -> Float?`, and
-   a missing-policy diagnostic points at the helper's call rather than into
-   its body. With it: numeric promotion through captured bindings and
-   `Number` annotations (C160, C161), column-shaped signatures (C162), and
-   vector lifting with a length check and no recycling (C165, C37).
+1. **Helpers infer once, correctly** ([brief](briefs/helper-inference.md)):
+   one elaboration per helper whose scheme carries parameter roles, scope,
+   alignment and missing-policy requirements through higher-order calls (C62,
+   C101), replacing the ordinary-then-contextual retry in `function_`;
+   `center` shows as `(Column<Float>) -> Column<Float?>` (C162), and a
+   missing-policy diagnostic points at the helper's call rather than into its
+   body. With it: numeric promotion through captured bindings and `Number`
+   annotations (C160, C161), and vector lifting with a length check and no
+   recycling (C165, C37).
 2. **Interactive performance** ([brief](briefs/interactive-performance.md)):
    input-to-display latency measured per stage, REPL start-up and first
    result, the online viewer sort that publishes the visible top-k first,
