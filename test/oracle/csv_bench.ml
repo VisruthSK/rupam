@@ -29,8 +29,9 @@ let () =
       ("DESCRIBE SELECT * FROM read_csv('" ^ path ^ "', sample_size = -1)")
   in
   ignore (time "DuckDB inference" describe);
+  ignore (Duckdb_oracle.query "SET memory_limit = '8GB'");
   ignore
-    (time "DuckDB parallel load" (fun () ->
+    (time "DuckDB parallel load, 8 GB" (fun () ->
        Duckdb_oracle.query
          ("CREATE OR REPLACE TEMP TABLE loaded AS SELECT * FROM read_csv('" ^ path ^ "')")));
   ignore (Duckdb_oracle.query "DROP TABLE loaded")
