@@ -150,8 +150,10 @@ colour.
 
 Keys follow Readline conventions: Tab/Shift+Tab completion, Ctrl+R, Up/Down,
 Ctrl+A/E/W/U/K/L, Ctrl+C cancel, Ctrl+D exit on empty input, Esc dismiss,
-multiline editing and bracketed paste. Terminal-reserved keys (Ctrl+Z, Ctrl+S)
-are not rebound. Analytical undo/redo has its own discoverable binding.
+multiline editing and bracketed paste. Pasted and externally edited input is
+kept exactly as written; Rupam formats source only when it writes it (`:save`,
+exports, `rupam fmt`). Terminal-reserved keys (Ctrl+Z, Ctrl+S) are not
+rebound. Analytical undo/redo has its own discoverable binding.
 
 ## Evidence and locking
 

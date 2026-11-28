@@ -437,7 +437,7 @@ let cancellation () =
        see c "344 rows")
 ;;
 
-let paste_formats () =
+let paste_keeps_input () =
   let dir = fresh [ "viewer-penguins.rp"; "penguins.csv" ] in
   session
     ~dir
@@ -448,11 +448,7 @@ let paste_formats () =
          term
          "penguins |> arrange($bill_len, desc($bill_dep)) |> filter(some(bill_dep) and \
           bill_dep > 17.9)";
-       until c (fun term ->
-         List.exists
-           (fun line ->
-              contains ~affix:"|> filter(" line && not (contains ~affix:"penguins" line))
-           (lines term)))
+       see c "penguins |> arrange($bill_len, desc($bill_dep)) |> filter(")
 ;;
 
 let target_menu () =
@@ -478,7 +474,7 @@ let target_menu () =
 
 let tests =
   [ ":target completes, chooses and runs like typed input", target_menu
-  ; "paste formats a complete pipeline", paste_formats
+  ; "paste keeps input as typed", paste_keeps_input
   ; "escape cancels a preview without killing the REPL worker", cancellation
   ; "completion menu filters while typing", completion
   ; "grid pipeline and saved source", grid_pipeline
