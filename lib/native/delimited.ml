@@ -211,15 +211,22 @@ let columns ~missing ~path format : Input.column list =
     (try
        while Talon.Scan.next s do
          let b = Talon.Scan.bytes s in
-         for r = 0 to Talon.Scan.rows s - 1 do
-           let fields = Talon.Scan.fields s r in
-           for j = 0 to fields - 1 do
-             if not (valid_utf_8 b (Talon.Scan.pos s r j) (Talon.Scan.len s r j))
-             then
-               fail
-                 (Talon.Scan.line s r)
-                 (Printf.sprintf "field %d is not valid UTF-8" (j + 1))
+         let rows = Talon.Scan.rows s in
+         let first = Talon.Scan.start s 0 0
+         and last = Talon.Scan.stop s (rows - 1) (Talon.Scan.fields s (rows - 1) - 1) in
+         if not (valid_utf_8 b first (last - first))
+         then
+           for r = 0 to rows - 1 do
+             for j = 0 to Talon.Scan.fields s r - 1 do
+               if not (valid_utf_8 b (Talon.Scan.pos s r j) (Talon.Scan.len s r j))
+               then
+                 fail
+                   (Talon.Scan.line s r)
+                   (Printf.sprintf "field %d is not valid UTF-8" (j + 1))
+             done
            done;
+         for r = 0 to rows - 1 do
+           let fields = Talon.Scan.fields s r in
            if !header
            then (
              header := false;
@@ -247,16 +254,21 @@ let columns ~missing ~path format : Input.column list =
              for j = 0 to fields - 1 do
                let c = !state.(j) in
                if c.int || c.float || c.bool || c.date || not (c.present && c.missing)
-               then
-                 observe
-                   c
-                   ~missing
-                   ~longest
-                   b
-                   (Talon.Scan.pos s r j)
-                   (Talon.Scan.len s r j)
-                   ~scan:s
-                   ~row:r
+               then (
+                 let first = Talon.Scan.start s r j
+                 and last = Talon.Scan.stop s r j in
+                 if Talon.Scan.quoted s r j
+                 then
+                   observe
+                     c
+                     ~missing
+                     ~longest
+                     b
+                     (first + 1)
+                     (last - first - 2)
+                     ~scan:s
+                     ~row:r
+                 else observe c ~missing ~longest b first (last - first) ~scan:s ~row:r)
              done)
          done
        done

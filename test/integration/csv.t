@@ -78,13 +78,16 @@ Malformed files are errors that name the line.
   $ printf 'a,a\n1,2\n' > duplicate.csv
   $ printf 'a,b\n1,2\n3,4,5\n' > ragged.csv
   $ printf 'a,b\n1,x"y\n' > quote.csv
-  $ for f in duplicate ragged quote; do printf 'let t = read_csv("%s.csv")\n:quit\n' $f | rupam repl --target python-polars; done
+  $ printf 'a,b\n1,ok\n2,caf\351\n' > latin1.csv
+  $ for f in duplicate ragged quote latin1; do printf 'let t = read_csv("%s.csv")\n:quit\n' $f | rupam repl --target python-polars; done
   1:9  unreadable-input
     ./duplicate.csv:1: the column name a appears twice
   1:9  unreadable-input
     ./ragged.csv:3: expected 2 fields, found 3
   1:9  unreadable-input
     ./quote.csv:2: column 4: a quote in a field that does not start with one
+  1:9  unreadable-input
+    ./latin1.csv:3: field 2 is not valid UTF-8
 
 `missing_tokens` replaces the default missing tokens, so real "NA" text can
 be kept; both targets apply the same tokens.

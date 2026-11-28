@@ -57,3 +57,16 @@
  (flags
   (:standard -open Rupam))
  (libraries unix rupam rupam_native talon))
+
+(executable
+ (name csv_differential)
+ (modules csv_differential)
+ (libraries talon duckdb_oracle))
+
+(rule
+ (alias integration)
+ (deps csv_fixtures.py)
+ (action
+  (progn
+   (run python csv_fixtures.py csv)
+   (run %{exe:csv_differential.exe} csv))))

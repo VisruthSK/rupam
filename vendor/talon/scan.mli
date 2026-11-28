@@ -17,6 +17,8 @@ val next : t -> bool
 val rows : t -> int
 val fields : t -> int -> int
 val bytes : t -> Bytes.t
+val start : t -> int -> int -> int
+val stop : t -> int -> int -> int
 val quoted : t -> int -> int -> bool
 val pos : t -> int -> int -> int
 val len : t -> int -> int -> int

@@ -10,6 +10,17 @@ exception
     ; msg : string
     }
 
+external get64 : Bytes.t -> int -> int64 = "%caml_bytes_get64u"
+
+let ones = 0x0101010101010101L
+let highs = 0x8080808080808080L
+let[@inline] spread c = Int64.mul ones (Int64.of_int (Char.code c))
+
+let[@inline] holds word pattern =
+  let x = Int64.logxor word pattern in
+  Int64.logand (Int64.logand (Int64.sub x ones) (Int64.lognot x)) highs <> 0L
+;;
+
 let batch_bytes = 1 lsl 20
 let chunk = 1 lsl 16
 
@@ -94,18 +105,27 @@ let rec batch_end s =
   let i = ref s.scanned
   and in_quotes = ref s.in_quotes
   and found = ref (-1) in
+  let quotes = spread q
+  and lines = spread '\n' in
   while !found < 0 && !i < s.len do
-    let c = Bytes.unsafe_get b !i in
-    if c = q
-    then in_quotes := not !in_quotes
-    else if c = '\n'
-    then (
-      s.lines <- s.lines + 1;
-      if not !in_quotes
+    if
+      !i + 8 <= s.len
+      &&
+      let w = get64 b !i in
+      not (holds w quotes || holds w lines)
+    then i := !i + 8
+    else (
+      let c = Bytes.unsafe_get b !i in
+      if c = q
+      then in_quotes := not !in_quotes
+      else if c = '\n'
       then (
-        s.ends <- s.ends + 1;
-        if !i >= last then found := !i + 1));
-    incr i
+        s.lines <- s.lines + 1;
+        if not !in_quotes
+        then (
+          s.ends <- s.ends + 1;
+          if !i >= last then found := !i + 1));
+      incr i)
   done;
   s.scanned <- !i;
   s.in_quotes <- !in_quotes;
@@ -138,7 +158,7 @@ let grow_bounds s n ~keep =
   s.bounds <- a
 ;;
 
-let push_field s nf first stop =
+let[@inline] push_field s nf first stop =
   if (2 * nf) + 2 > Array.length s.bounds
   then grow_bounds s (2 * Array.length s.bounds) ~keep:(2 * nf);
   Array.unsafe_set s.bounds (2 * nf) first;
@@ -154,6 +174,10 @@ let split s stop =
   let b = s.buf
   and sep = s.sep
   and q = s.quote in
+  let seps = spread sep
+  and lines = spread '\n'
+  and returns = spread '\r'
+  and quotes = spread q in
   let nf = ref 0
   and rows = ref 0
   and i = ref s.start in
@@ -191,6 +215,14 @@ let split s stop =
                  incr j)
              done)
            else (
+             while
+               !j + 8 <= stop
+               &&
+               let w = get64 b !j in
+               not (holds w seps || holds w lines || holds w returns || holds w quotes)
+             do
+               j := !j + 8
+             done;
              while
                !j < stop
                &&
@@ -266,21 +298,21 @@ let rec next s =
       | None -> next s))
 ;;
 
-let rows s = s.rows
-let fields s r = s.records.(r + 1) - s.records.(r)
-let bytes s = s.buf
-let start s r j = s.bounds.(2 * (s.records.(r) + j))
-let stop s r j = s.bounds.((2 * (s.records.(r) + j)) + 1)
+let[@inline] rows s = s.rows
+let[@inline] fields s r = s.records.(r + 1) - s.records.(r)
+let[@inline] bytes s = s.buf
+let[@inline] start s r j = s.bounds.(2 * (s.records.(r) + j))
+let[@inline] stop s r j = s.bounds.((2 * (s.records.(r) + j)) + 1)
 
-let quoted s r j =
+let[@inline] quoted s r j =
   let k = 2 * (s.records.(r) + j) in
   let first = Array.unsafe_get s.bounds k in
   Array.unsafe_get s.bounds (k + 1) > first && Bytes.unsafe_get s.buf first = s.quote
 ;;
 
-let pos s r j = if quoted s r j then start s r j + 1 else start s r j
+let[@inline] pos s r j = if quoted s r j then start s r j + 1 else start s r j
 
-let len s r j =
+let[@inline] len s r j =
   let n = stop s r j - start s r j in
   if quoted s r j then n - 2 else n
 ;;
