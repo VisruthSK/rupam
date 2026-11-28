@@ -1,6 +1,6 @@
-let fields path =
+let fields ?chunk path =
   In_channel.with_open_bin path (fun channel ->
-    let s = Talon.Scan.make ~batch:4096 ~sep:',' ~quote:'"' channel in
+    let s = Talon.Scan.make ~batch:4096 ?chunk ~sep:',' ~quote:'"' channel in
     let rows = ref [] in
     while Talon.Scan.next s do
       for r = 0 to Talon.Scan.rows s - 1 do
@@ -22,7 +22,8 @@ let () =
   List.iter
     (fun f ->
        let path = Filename.concat dir f in
-       let ours = fields path in
+       let tiny = fields ~chunk:7 path
+       and ours = fields path in
        let _, theirs =
          Duckdb_oracle.query
            ("SELECT * FROM read_csv('"
@@ -32,7 +33,8 @@ let () =
        in
        let text = Option.value ~default:"" in
        let agree =
-         Array.length ours = Array.length theirs
+         tiny = ours
+         && Array.length ours = Array.length theirs
          && Array.for_all2
               (fun a b ->
                  Array.length a = Array.length b

@@ -27,6 +27,7 @@ let chunk = 1 lsl 16
 type t =
   { channel : In_channel.t
   ; batch : int
+  ; chunk : int
   ; sep : char
   ; quote : char
   ; mutable buf : Bytes.t
@@ -45,12 +46,13 @@ type t =
   ; mutable pending : exn option
   }
 
-let make ?(batch = batch_bytes) ~sep ~quote channel =
+let make ?(batch = batch_bytes) ?(chunk = chunk) ~sep ~quote channel =
   { channel
   ; batch
+  ; chunk
   ; sep
   ; quote
-  ; buf = Bytes.create chunk
+  ; buf = Bytes.create (max chunk 16)
   ; len = 0
   ; eod = false
   ; start = 0
@@ -68,12 +70,12 @@ let make ?(batch = batch_bytes) ~sep ~quote channel =
 ;;
 
 let refill s =
-  if s.len + chunk > Bytes.length s.buf
+  if s.len + s.chunk > Bytes.length s.buf
   then (
-    let buf = Bytes.create (max (s.len + chunk) (2 * Bytes.length s.buf)) in
+    let buf = Bytes.create (max (s.len + s.chunk) (2 * Bytes.length s.buf)) in
     Bytes.blit s.buf 0 buf 0 s.len;
     s.buf <- buf);
-  match In_channel.input s.channel s.buf s.len chunk with
+  match In_channel.input s.channel s.buf s.len s.chunk with
   | 0 -> s.eod <- true
   | n -> s.len <- s.len + n
 ;;

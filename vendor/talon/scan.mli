@@ -12,7 +12,7 @@ exception
 
 type t
 
-val make : ?batch:int -> sep:char -> quote:char -> In_channel.t -> t
+val make : ?batch:int -> ?chunk:int -> sep:char -> quote:char -> In_channel.t -> t
 val next : t -> bool
 val rows : t -> int
 val fields : t -> int -> int
