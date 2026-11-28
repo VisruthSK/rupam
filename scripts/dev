@@ -31,7 +31,7 @@ dune() {
   mkdir -p "$build"
   (
     flock 9
-    unprivileged dune "$@" --build-dir "$build"
+    unprivileged dune "$@" --root "$root" --build-dir "$build"
   ) 9>"$build/.dev.lock"
 }
 
