@@ -863,15 +863,6 @@ let step msg model =
     , Cmd.none )
   | Pasted text ->
     let input = Editor.insert text model.input in
-    let input =
-      match
-        if Rupam.Frontend.has_comment (Editor.text input)
-        then []
-        else Rupam.Frontend.read (Editor.text input)
-      with
-      | [ item ] -> Editor.of_string (Rupam.Format.program [ item ])
-      | _ | (exception _) -> input
-    in
     ( change_draft { model with input; menu = None } (fun v ->
         Viewer.edit v (Editor.text input))
     , Cmd.none )
@@ -1001,11 +992,7 @@ let step msg model =
            Sys.remove file;
            Edited (String.trim edited)) ))
   | Edited text ->
-    let input =
-      match if Rupam.Frontend.has_comment text then [] else Rupam.Frontend.read text with
-      | [ item ] -> Editor.of_string (String.trim (Rupam.Format.program [ item ]))
-      | _ | (exception _) -> Editor.of_string text
-    in
+    let input = Editor.of_string text in
     ( change_draft { model with input; menu = None } (fun v ->
         Viewer.edit v (Editor.text input))
     , Cmd.none )
@@ -1090,7 +1077,7 @@ let step msg model =
       request_summary (finish_viewer_work { model with viewer }))
 ;;
 
-let paste_formatting =
+let paste_input =
   Sub.on_paste ~phase:Capture (fun event ->
     Event.Paste.prevent_default event;
     let lines =
@@ -1176,7 +1163,7 @@ let subscriptions model =
     Sub.batch
       [ resize
       ; (if model.editing && model.naming = None then editing_keys else Sub.none)
-      ; (if model.editing && model.naming = None then paste_formatting else Sub.none)
+      ; (if model.editing && model.naming = None then paste_input else Sub.none)
       ; (if model.working <> None || v.generation = v.settled
          then Sub.none
          else Sub.every ~id:"viewer-preview" 0.05 (fun elapsed -> Draft_tick elapsed))
@@ -1237,7 +1224,7 @@ let subscriptions model =
     Sub.batch
       [ resize
       ; (if model.search <> None then searching else editing_keys)
-      ; paste_formatting
+      ; paste_input
       ; Sub.on_keys
           ~phase:Capture
           ((if model.menu = None
