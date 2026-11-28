@@ -544,38 +544,6 @@ let floats t column =
   values
 ;;
 
-let distinct_floats (values : float array) =
-  let n = Array.length values in
-  let capacity =
-    let rec grow c = if c < 2 * n then grow (2 * c) else c in
-    grow 16
-  in
-  let mask = capacity - 1 in
-  let slots = Bigarray.Array1.create Bigarray.int64 Bigarray.c_layout capacity
-  and used = Bytes.make capacity '\000' in
-  let distinct = ref 0 in
-  for i = 0 to n - 1 do
-    let x = Array.unsafe_get values i in
-    let bits = Int64.bits_of_float (if x = 0. then 0. else x) in
-    let h = Int64.mul bits 0x9E3779B97F4A7C15L in
-    let s =
-      ref (Int64.to_int (Int64.logxor h (Int64.shift_right_logical h 32)) land mask)
-    in
-    while
-      Bytes.unsafe_get used !s <> '\000'
-      && not (Int64.equal (Bigarray.Array1.unsafe_get slots !s) bits)
-    do
-      s := (!s + 1) land mask
-    done;
-    if Bytes.unsafe_get used !s = '\000'
-    then (
-      Bytes.unsafe_set used !s '\001';
-      Bigarray.Array1.unsafe_set slots !s bits;
-      incr distinct)
-  done;
-  !distinct
-;;
-
 type histogram =
   { low : float
   ; high : float
@@ -631,60 +599,78 @@ type summary =
   ; distinct : int
   }
 
-let swap (a : float array) i j =
-  let x = a.(i) in
-  a.(i) <- a.(j);
-  a.(j) <- x
+type keys = (int64, Bigarray.int64_elt, Bigarray.c_layout) Bigarray.Array1.t
+
+let[@inline] key x =
+  let bits = Int64.bits_of_float (if x = 0. then 0. else x) in
+  if Int64.compare bits 0L < 0 then Int64.lognot bits else Int64.logxor bits Int64.min_int
 ;;
 
-let rec select random (a : float array) lo hi k =
-  if lo < hi
-  then (
-    let pivot = a.(lo + Random.State.int random (hi - lo + 1)) in
-    let i = ref lo
-    and j = ref hi in
-    while !i <= !j do
-      while a.(!i) < pivot do
-        incr i
-      done;
-      while a.(!j) > pivot do
-        decr j
-      done;
-      if !i <= !j
-      then (
-        swap a !i !j;
-        incr i;
-        decr j)
-    done;
-    if k <= !j then select random a lo !j k else if k >= !i then select random a !i hi k)
+let[@inline] value_of k =
+  Int64.float_of_bits
+    (if Int64.compare k 0L < 0 then Int64.logxor k Int64.min_int else Int64.lognot k)
 ;;
 
-let quartiles (values : float array) =
+let[@inline] digit k shift = Int64.to_int (Int64.shift_right_logical k shift) land 0xFFFF
+
+let sorted (values : float array) : keys =
   let n = Array.length values in
-  if n = 0
-  then None, None, None
-  else (
-    let random = Random.State.make [| n |] in
-    let position p =
-      let k = float_of_int (n - 1) *. p in
-      let i = int_of_float k in
-      i, k -. float_of_int i
-    in
-    let value (i, weight) =
-      let next = ref values.(min (i + 1) (n - 1)) in
-      for j = i + 2 to n - 1 do
-        if values.(j) < !next then next := values.(j)
+  let create () = Bigarray.Array1.create Bigarray.int64 Bigarray.c_layout (max 1 n) in
+  let source = ref (create ())
+  and target = ref (create ()) in
+  for i = 0 to n - 1 do
+    Bigarray.Array1.unsafe_set !source i (key (Array.unsafe_get values i))
+  done;
+  let counts = Array.make 65537 0 in
+  for pass = 0 to 3 do
+    let shift = 16 * pass in
+    Array.fill counts 0 65537 0;
+    let src = !source in
+    for i = 0 to n - 1 do
+      let d = digit (Bigarray.Array1.unsafe_get src i) shift in
+      counts.(d + 1) <- counts.(d + 1) + 1
+    done;
+    if n > 0 && counts.(digit (Bigarray.Array1.unsafe_get src 0) shift + 1) < n
+    then (
+      for d = 1 to 65536 do
+        counts.(d) <- counts.(d) + counts.(d - 1)
       done;
-      Some (((1. -. weight) *. values.(i)) +. (weight *. !next))
-    in
-    let lower = position 0.25
-    and middle = position 0.5
-    and upper = position 0.75 in
-    let m = fst middle in
-    select random values 0 (n - 1) m;
-    if fst lower < m then select random values 0 (m - 1) (fst lower);
-    if fst upper > m then select random values (m + 1) (n - 1) (fst upper);
-    value lower, value middle, value upper)
+      let dst = !target in
+      for i = 0 to n - 1 do
+        let k = Bigarray.Array1.unsafe_get src i in
+        let d = digit k shift in
+        Bigarray.Array1.unsafe_set dst counts.(d) k;
+        counts.(d) <- counts.(d) + 1
+      done;
+      target := src;
+      source := dst)
+  done;
+  !source
+;;
+
+let distinct (keys : keys) n =
+  let count = ref (if n > 0 then 1 else 0) in
+  for i = 1 to n - 1 do
+    if
+      not
+        (Int64.equal
+           (Bigarray.Array1.unsafe_get keys i)
+           (Bigarray.Array1.unsafe_get keys (i - 1)))
+    then incr count
+  done;
+  !count
+;;
+
+let quantile (keys : keys) n p =
+  if n = 0
+  then None
+  else (
+    let k = float_of_int (n - 1) *. p in
+    let i = int_of_float k in
+    let weight = k -. float_of_int i in
+    let low = value_of (Bigarray.Array1.unsafe_get keys i)
+    and high = value_of (Bigarray.Array1.unsafe_get keys (min (i + 1) (n - 1))) in
+    Some (((1. -. weight) *. low) +. (weight *. high)))
 ;;
 
 let moments (values : float array) ~midpoint ~scale =
@@ -715,7 +701,8 @@ let summary t ~column =
   let values = floats t column in
   let n = Array.length values in
   let histogram = histogram_of values ~missing:(rows t - n) ~bins:20 in
-  let distinct = distinct_floats values in
+  let order = sorted values in
+  let distinct = distinct order n in
   let mean, sd, skewness =
     if n = 0
     then None, None, None
@@ -741,7 +728,9 @@ let summary t ~column =
         in
         Some mean, (if n > 1 && Float.is_finite sd then Some sd else None), skewness))
   in
-  let q1, median, q3 = quartiles values in
+  let q1 = quantile order n 0.25
+  and median = quantile order n 0.5
+  and q3 = quantile order n 0.75 in
   { histogram; q1; median; q3; mean; sd; skewness; distinct }
 ;;
 
