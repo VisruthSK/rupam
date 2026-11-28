@@ -37,9 +37,6 @@ type t =
   ; mutable stop : int
   ; mutable line : int
   ; mutable lines : int
-  ; mutable ends : int
-  ; mutable scanned : int
-  ; mutable in_quotes : bool
   ; mutable bounds : int array
   ; mutable records : int array
   ; mutable rows : int
@@ -59,9 +56,6 @@ let make ?(batch = batch_bytes) ?(chunk = chunk) ~sep ~quote channel =
   ; stop = 0
   ; line = 0
   ; lines = 0
-  ; ends = 0
-  ; scanned = 0
-  ; in_quotes = false
   ; bounds = Array.make 64 0
   ; records = [||]
   ; rows = 0
@@ -86,58 +80,14 @@ let compact s =
   then (
     Bytes.blit s.buf k s.buf 0 (s.len - k);
     s.len <- s.len - k;
-    s.start <- 0;
-    s.scanned <- s.scanned - k)
+    s.start <- 0)
 ;;
 
 let skip_bom s =
   while (not s.eod) && s.len < 3 do
     refill s
   done;
-  if s.len >= 3 && Bytes.sub_string s.buf 0 3 = "\xEF\xBB\xBF"
-  then (
-    s.start <- 3;
-    s.scanned <- 3)
-;;
-
-let rec batch_end s =
-  let b = s.buf
-  and q = s.quote
-  and last = s.start + s.batch - 1 in
-  let i = ref s.scanned
-  and in_quotes = ref s.in_quotes
-  and found = ref (-1) in
-  let quotes = spread q
-  and lines = spread '\n' in
-  while !found < 0 && !i < s.len do
-    if
-      !i + 8 <= s.len
-      &&
-      let w = get64 b !i in
-      not (holds w quotes || holds w lines)
-    then i := !i + 8
-    else (
-      let c = Bytes.unsafe_get b !i in
-      if c = q
-      then in_quotes := not !in_quotes
-      else if c = '\n'
-      then (
-        s.lines <- s.lines + 1;
-        if not !in_quotes
-        then (
-          s.ends <- s.ends + 1;
-          if !i >= last then found := !i + 1));
-      incr i)
-  done;
-  s.scanned <- !i;
-  s.in_quotes <- !in_quotes;
-  if !found >= 0
-  then !found
-  else if s.eod
-  then s.len
-  else (
-    refill s;
-    batch_end s)
+  if s.len >= 3 && Bytes.sub_string s.buf 0 3 = "\xEF\xBB\xBF" then s.start <- 3
 ;;
 
 let locate s i =
@@ -153,6 +103,7 @@ let locate s i =
 ;;
 
 exception Syntax of int * string
+exception Short
 
 let grow_bounds s n ~keep =
   let a = Array.make n 0 in
@@ -167,114 +118,150 @@ let[@inline] push_field s nf first stop =
   Array.unsafe_set s.bounds ((2 * nf) + 1) stop
 ;;
 
-let reserve_bounds s nf bytes =
-  let n = 2 * min (nf * (s.ends + 1)) (bytes + 1) in
-  if n > Array.length s.bounds then grow_bounds s n ~keep:(2 * nf)
+let end_record s rows nf =
+  if rows + 2 > Array.length s.records
+  then (
+    let a = Array.make (2 * (rows + 2)) 0 in
+    Array.blit s.records 0 a 0 (rows + 1);
+    s.records <- a);
+  s.records.(rows + 1) <- nf
 ;;
 
-let split s stop =
-  let b = s.buf
-  and sep = s.sep
+let split s =
+  let sep = s.sep
   and q = s.quote in
   let seps = spread sep
   and lines = spread '\n'
   and returns = spread '\r'
   and quotes = spread q in
+  let target = s.start + s.batch in
   let nf = ref 0
   and rows = ref 0
   and i = ref s.start in
-  if s.ends + 2 > Array.length s.records then s.records <- Array.make (s.ends + 2) 0;
+  if Array.length s.records < 2 then s.records <- Array.make 1024 0;
   s.records.(0) <- 0;
+  s.lines <- 0;
+  let more () = if not s.eod then raise Short in
+  let record () =
+    let b = s.buf
+    and limit = s.len in
+    let quoted_lines = ref 0 in
+    let c = Bytes.unsafe_get b !i in
+    if c = '\r' && !i + 1 = limit then more ();
+    if c = '\n' || (c = '\r' && !i + 1 < limit && Bytes.unsafe_get b (!i + 1) = '\n')
+    then (
+      push_field s !nf !i !i;
+      incr nf;
+      i := !i + if c = '\n' then 1 else 2)
+    else (
+      let record_ends = ref false in
+      while not !record_ends do
+        let first = !i in
+        let j = ref first in
+        if first < limit && Bytes.unsafe_get b first = q
+        then (
+          let closed = ref false in
+          incr j;
+          while not !closed do
+            if !j >= limit
+            then (
+              more ();
+              raise (Syntax (first, "a quoted field does not end")));
+            let c = Bytes.unsafe_get b !j in
+            if c <> q
+            then (
+              if c = '\n' then incr quoted_lines;
+              incr j)
+            else if !j + 1 = limit && not s.eod
+            then raise Short
+            else if !j + 1 < limit && Bytes.unsafe_get b (!j + 1) = q
+            then j := !j + 2
+            else (
+              closed := true;
+              incr j)
+          done)
+        else (
+          while
+            !j + 8 <= limit
+            &&
+            let w = get64 b !j in
+            not (holds w seps || holds w lines || holds w returns || holds w quotes)
+          do
+            j := !j + 8
+          done;
+          while
+            !j < limit
+            &&
+            let c = Bytes.unsafe_get b !j in
+            c <> sep && c <> '\n' && c <> '\r' && c <> q
+          do
+            incr j
+          done;
+          if !j < limit && Bytes.unsafe_get b !j = q
+          then raise (Syntax (!j, "a quote in a field that does not start with one")));
+        let j = !j in
+        if j = limit then more ();
+        if j < limit && Bytes.unsafe_get b j = '\r' && j + 1 = limit then more ();
+        push_field s !nf first j;
+        incr nf;
+        if j = limit
+        then (
+          i := limit;
+          record_ends := true)
+        else (
+          let c = Bytes.unsafe_get b j in
+          if c = sep
+          then i := j + 1
+          else if c = '\n'
+          then (
+            i := j + 1;
+            record_ends := true)
+          else if c = '\r' && j + 1 < limit && Bytes.unsafe_get b (j + 1) = '\n'
+          then (
+            i := j + 2;
+            record_ends := true)
+          else if c = '\r'
+          then raise (Syntax (j, "a carriage return that no line feed follows"))
+          else
+            raise
+              (Syntax
+                 ( j
+                 , "a quoted field's closing quote is followed by a byte other than a \
+                    separator or a line break" )))
+      done);
+    end_record s !rows !nf;
+    incr rows;
+    s.lines <- s.lines + 1 + !quoted_lines
+  in
   (try
-     while !i < stop do
-       let c = Bytes.unsafe_get b !i in
-       if c = '\n' || (c = '\r' && !i + 1 < stop && Bytes.unsafe_get b (!i + 1) = '\n')
+     let rec go () =
+       if (!rows > 0 && !i >= target) || (!i >= s.len && s.eod)
+       then ()
+       else if !i >= s.len
        then (
-         push_field s !nf !i !i;
-         incr nf;
-         i := !i + if c = '\n' then 1 else 2;
-         s.records.(!rows + 1) <- !nf;
-         incr rows;
-         if !rows = 1 then reserve_bounds s !nf (stop - s.start))
+         refill s;
+         go ())
        else (
-         let record_ends = ref false in
-         while not !record_ends do
-           let first = !i in
-           let j = ref first in
-           if first < stop && Bytes.unsafe_get b first = q
-           then (
-             let closed = ref false in
-             incr j;
-             while not !closed do
-               if !j >= stop then raise (Syntax (first, "a quoted field does not end"));
-               let c = Bytes.unsafe_get b !j in
-               if c <> q
-               then incr j
-               else if !j + 1 < stop && Bytes.unsafe_get b (!j + 1) = q
-               then j := !j + 2
-               else (
-                 closed := true;
-                 incr j)
-             done)
-           else (
-             while
-               !j + 8 <= stop
-               &&
-               let w = get64 b !j in
-               not (holds w seps || holds w lines || holds w returns || holds w quotes)
-             do
-               j := !j + 8
-             done;
-             while
-               !j < stop
-               &&
-               let c = Bytes.unsafe_get b !j in
-               c <> sep && c <> '\n' && c <> '\r' && c <> q
-             do
-               incr j
-             done;
-             if !j < stop && Bytes.unsafe_get b !j = q
-             then raise (Syntax (!j, "a quote in a field that does not start with one")));
-           push_field s !nf first !j;
-           incr nf;
-           let j = !j in
-           if j = stop
-           then (
-             i := stop;
-             record_ends := true)
-           else (
-             let c = Bytes.unsafe_get b j in
-             if c = sep
-             then i := j + 1
-             else if c = '\n'
-             then (
-               i := j + 1;
-               record_ends := true)
-             else if c = '\r' && j + 1 < stop && Bytes.unsafe_get b (j + 1) = '\n'
-             then (
-               i := j + 2;
-               record_ends := true)
-             else if c = '\r'
-             then raise (Syntax (j, "a carriage return that no line feed follows"))
-             else
-               raise
-                 (Syntax
-                    ( j
-                    , "a quoted field's closing quote is followed by a byte other than a \
-                       separator or a line break" )))
-         done;
-         s.records.(!rows + 1) <- !nf;
-         incr rows;
-         if !rows = 1 then reserve_bounds s !nf (stop - s.start))
-     done
+         let field = !nf
+         and at = !i in
+         match record () with
+         | () -> go ()
+         | exception Short ->
+           nf := field;
+           i := at;
+           refill s;
+           go ())
+     in
+     go ()
    with
    | Syntax (at, msg) ->
      let line, column = locate s at in
      s.pending <- Some (Error { line; column; msg }));
+  s.stop <- !i;
   s.rows <- !rows
 ;;
 
-let rec next s =
+let next s =
   Option.iter raise s.pending;
   if s.line = 0
   then (
@@ -284,20 +271,13 @@ let rec next s =
     s.line <- s.line + s.lines;
     s.start <- s.stop;
     compact s);
-  s.lines <- 0;
-  s.ends <- 0;
-  let stop = batch_end s in
-  s.stop <- stop;
-  if stop = s.start
-  then false
+  split s;
+  if s.rows > 0
+  then true
   else (
-    split s stop;
-    if s.rows > 0
-    then true
-    else (
-      match s.pending with
-      | Some e -> raise e
-      | None -> next s))
+    match s.pending with
+    | Some e -> raise e
+    | None -> false)
 ;;
 
 let[@inline] rows s = s.rows
