@@ -759,10 +759,21 @@ let counter () =
   }
 ;;
 
+external bytes_word : Bytes.t -> int -> int64 = "%caml_bytes_get64u"
+external string_word : string -> int -> int64 = "%caml_string_get64u"
+
+let[@inline] mix h = h * 0x9E3779B97F4A7C1 lxor (h lsr 29)
+
 let hash (data : Bytes.t) start stop =
-  let h = ref 0x0bf29ce484222325 in
-  for i = start to stop - 1 do
-    h := !h lxor Char.code (Bytes.unsafe_get data i) * 0x100000001b3
+  let h = ref (stop - start)
+  and i = ref start in
+  while !i + 8 <= stop do
+    h := mix (!h lxor Int64.to_int (bytes_word data !i));
+    i := !i + 8
+  done;
+  while !i < stop do
+    h := mix (!h lxor Char.code (Bytes.unsafe_get data !i));
+    incr i
   done;
   !h land max_int
 ;;
@@ -770,11 +781,16 @@ let hash (data : Bytes.t) start stop =
 let matches key (data : Bytes.t) start length =
   String.length key = length
   &&
-  let rec go i =
-    i = length
-    || (String.unsafe_get key i = Bytes.unsafe_get data (start + i) && go (i + 1))
-  in
-  go 0
+  let i = ref 0 in
+  while
+    !i + 8 <= length && Int64.equal (string_word key !i) (bytes_word data (start + !i))
+  do
+    i := !i + 8
+  done;
+  while !i < length && String.unsafe_get key !i = Bytes.unsafe_get data (start + !i) do
+    incr i
+  done;
+  !i = length
 ;;
 
 let rec grow c =
