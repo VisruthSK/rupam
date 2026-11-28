@@ -86,6 +86,30 @@ least 1 GB/s so that 16 cores clear 5 GB/s with room for imperfect scaling.
   be `String`, and fold counts and bounds as integers.
 - No C++; plain C only, as for BLAKE3 and the lz codecs.
 
+### Dependencies to evaluate before writing kernels
+
+Prefer a small, statically linked, maintained C library to custom unsafe
+code, if it fits the semantics. Evaluate in this order, with a benchmark and
+the DuckDB differential before adopting anything:
+
+- **zsv** (C, MIT): SIMD CSV tokenizer with bounded memory and WebAssembly
+  support. Check that it exposes a low-level, per-range tokenizer we can drive
+  from our own slices, reports exact byte offsets for our diagnostics, and
+  accepts exactly our grammar (and rejects what we reject). Note: Ellmann and
+  Neumann excluded zsv 1.3.0 from their evaluation because its parallel mode
+  miscounted records on quoted input (26,834 rows for a 3,000-row file whose
+  sequential count was right), so use only its sequential tokenizer on our
+  exact slices, if at all.
+- **SIMDe** (header-only C, MIT): portable SIMD intrinsics for x86, ARM and
+  WebAssembly. The likely base for our own structural scanner if zsv does not
+  fit: one implementation instead of one per architecture.
+- **ocaml_intrinsics_kernel** is already in the lock: popcount and
+  count-trailing-zeros from OCaml for bitmask walking without a C call.
+- **Not simdutf**: its C interface wraps C++, and the option to drop the C++
+  standard library is experimental and unavailable under Visual Studio. Write
+  vectorized UTF-8 validation on SIMDe instead, after simdjson's algorithm.
+- **Not ocaml_simd**: it needs OxCaml.
+
 ### Parquet
 
 Footer statistics settle what they can. Otherwise the same windowed reader
