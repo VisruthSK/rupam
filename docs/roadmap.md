@@ -6,13 +6,18 @@ or Python/Polars. The [specification](spec/README.md) defines semantics and
 [conformance](spec/conformance.md) pins them; this page lists only what is
 not yet built.
 
-## 1. Alpha release
+Rupam is complete when every conformance case is active and passes on both
+targets, sections 1 to 5 are built, and the public MVP ships. Today 77 of 156
+cases are active; sections 2 and 3 unlock most of the rest.
 
-- Native, stripped `0.0.0-alpha.1` binaries for Linux, macOS and Windows,
-  built only from a commit whose CI and Format runs passed.
-- Every suite green on all three operating systems, including the
-  in-process terminal tests.
-- A minimum supported OCaml of 5.4 (issue 3), with releases built on 5.5.
+## 1. Self-contained readers
+
+`0.0.0-alpha.1` shipped for Linux (x86-64, arm64), macOS (arm64, x86-64) and
+Windows. What remains:
+
+- Merge the Talon readers (pull request 5): CSV, Parquet and Arrow IPC read
+  in OCaml and C, BLAKE3 hashing at 85% of the drive's ceiling, and DuckDB
+  kept only as a development oracle.
 - The demo recorded again at 1080p30 with the current error rendering.
 
 ## 2. Semantic foundations
@@ -26,8 +31,8 @@ not yet built.
   `center` inferring `(Number) -> Float?`.
 - Fused ingestion: one read per locked input computing its BLAKE3 digest,
   schema and the evidence its obligations demand, recorded in the lock as
-  discharged obligations ([Projects](spec/projects.md#locks)). Target: 5 GB/s
-  cold on NVMe.
+  discharged obligations ([Projects](spec/projects.md#locks)), at the
+  storage's throughput.
 - Presence from evidence: `mean(x, missing = skip)` is `Float?` because a
   group can be empty or all missing; a locked snapshot proving every group
   has a present value refines it to `Float`, and `x ?? mean(x, …)` with it.
@@ -75,10 +80,13 @@ In order of conformance cases unlocked:
   revision, the external effect and worker recovery as separate facts.
 - `:probe`, `??term` search, comment-preserving `:save`.
 - A TextMate grammar; LSP completion and hover from the shared checker.
-- Viewer speed on large data: sort online (publish the visible top-k
-  first, finish the order in the background, buffer pages only when paging
-  outruns it) and compute summary statistics in one vectorised pass per
-  column, cached per result and shown progressively.
+- Interactive performance ([brief](briefs/interactive-performance.md)):
+  REPL start-up and first result, online viewer sort that publishes the
+  visible top-k first, progressive summaries, and an antipattern audit, each
+  measured before and after.
+- Detached sessions ([brief](briefs/detached-session.md)): check, complete
+  and inspect types with no execution engine installed, then attach a target
+  without losing checked facts.
 - Save and export by backward slicing: `:save result` and `:export result`
   keep only the chosen bindings and their dependencies (C164).
 
