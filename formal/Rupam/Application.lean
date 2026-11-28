@@ -346,6 +346,43 @@ def CheckedCall.run (call : CheckedCall actuals parameters result) (body : Scala
   let values ← sources.evaluate
   call.runValues body values demanded
 
+def CheckedCall.runScoped (call : CheckedCall actuals parameters scope.shape)
+    (body : ScalarBody parameters t) (sources : ArgumentSources actuals)
+    (demanded : List scope.Member) : Outcome (List t.denote) := do
+  let values ← sources.evaluate
+  ValuesAt.toList <$> (call.asCalculation body values).run demanded
+
+theorem CheckedCall.runScoped_eq (call : CheckedCall actuals parameters scope.shape)
+    (body : ScalarBody parameters t) (sources : ArgumentSources actuals)
+    (demanded : List scope.Member) :
+    call.runScoped body sources demanded = call.run body sources (demanded.map Subtype.val) := by
+  unfold runScoped run asCalculation ScopedCalculation.ofCore runValues
+  simp only [ScopedCalculation.pointwise_toList, List.mapM_map]
+  rfl
+
+-- The enclosing guard can skip the entire call. Once demanded, ordinary
+-- arguments materialize before any position of the lifted body runs.
+def CheckedCall.scopedCall (call : CheckedCall actuals parameters scope.shape)
+    (body : ScalarBody parameters t) (sources : ArgumentSources actuals) :
+    ScopedCalculation scope t.denote :=
+  ⟨fun first rest => do
+    let values ← sources.evaluate
+    (call.asCalculation body values).run (first :: rest)⟩
+
+theorem CheckedCall.scopedCall_toList (call : CheckedCall actuals parameters scope.shape)
+    (body : ScalarBody parameters t) (sources : ArgumentSources actuals)
+    (demanded : List scope.Member) :
+    (ValuesAt.toList <$> (call.scopedCall body sources).run demanded) =
+      match demanded with
+      | [] => .ok []
+      | _ :: _ => call.run body sources (demanded.map Subtype.val) := by
+  cases demanded with
+  | nil => rfl
+  | cons first rest =>
+    rw [← call.runScoped_eq]
+    cases evaluated : sources.evaluate <;>
+      simp [ScopedCalculation.run, scopedCall, runScoped, evaluated, bind, Except.bind] <;> rfl
+
 -- Both executions materialise arguments in source order, even with no demand.
 -- The scalar reference reads whole values or aligned elements at each demanded position.
 theorem CheckedCall.run_eq (call : CheckedCall actuals parameters result)

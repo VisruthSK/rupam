@@ -178,7 +178,15 @@ The full source rules must fix the passing role or establish observational
 equivalence of the two placements, including demand and failure. A checked
 negative example squares `[1, intMax]`. Demanding only the first cell
 succeeds, while evaluating the whole result before selection reports
-overflow. A proof that changes the placement must preserve demand.
+overflow. `CheckedCall.runScoped_eq` establishes equivalence for a placement
+that carries the lifted result as a scoped computation and forwards the
+consumer's demand. It compares the complete outcomes for any ordered demand
+list, including repeated positions and empty demand. Choosing or translating
+the lifting placement for arbitrary source closures remains open.
+`CheckedCall.scopedCall_toList` handles a call inside an enclosing guard.
+An empty mask skips the call and its ordinary arguments. A nonempty mask
+runs the ordinary arguments eagerly, then observes the lifted body in
+the demanded order.
 
 The proofs start after name resolution and take contextual primitive types
 and their role information from checked terms. Contextual role inference,
